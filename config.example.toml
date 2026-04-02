@@ -6,6 +6,17 @@
 # config file is found.
 
 # ---------------------------------------------------------------
+# Genre multiplier ceiling
+#
+# All multiplier values in [genres.*] blocks must be > 0.0 and
+# ≤ max_multiplier. Raise this if you need more aggressive genre
+# bias than 2.0 allows. Use --weight for one-off per-session
+# adjustments instead of changing this globally.
+# ---------------------------------------------------------------
+
+max_multiplier = 2.0
+
+# ---------------------------------------------------------------
 # Dimensions
 #
 # Each key is the internal identifier used in genre blocks and output.

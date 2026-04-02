@@ -20,6 +20,11 @@ const DefaultConfigPath = "~/.config/kansou/config.toml"
 // DefaultPort is the default REST server port.
 const DefaultPort = 8080
 
+// DefaultMaxMultiplier is the default ceiling for genre bias multipliers.
+// Any multiplier in a [genres.*] block must be > 0.0 and ≤ this value.
+// Raise it in config if you need more aggressive genre bias adjustment.
+const DefaultMaxMultiplier = 2.0
+
 // weightSumTolerance is the allowed deviation from 1.0 for dimension weight sums.
 const weightSumTolerance = 0.001
 
@@ -57,6 +62,10 @@ type Config struct {
 	// Genres maps lowercase genre names to per-dimension multipliers.
 	// Keys are lowercased at load time for case-insensitive matching.
 	Genres map[string]map[string]float64
+	// MaxMultiplier is the upper bound for any genre bias multiplier.
+	// All values in [genres.*] blocks must be > 0.0 and ≤ MaxMultiplier.
+	// Default: 2.0.
+	MaxMultiplier float64
 	// Server holds REST server configuration.
 	Server ServerConfig
 	// DimensionsHash is the SHA256 hex digest of the serialised dimensions
@@ -67,9 +76,10 @@ type Config struct {
 // rawConfig mirrors the TOML structure for parsing.
 // Dimensions and Genres use maps because TOML table keys are dynamic.
 type rawConfig struct {
-	Dimensions map[string]DimensionDef     `toml:"dimensions"`
-	Genres     map[string]map[string]float64 `toml:"genres"`
-	Server     ServerConfig                  `toml:"server"`
+	Dimensions    map[string]DimensionDef       `toml:"dimensions"`
+	Genres        map[string]map[string]float64 `toml:"genres"`
+	MaxMultiplier float64                        `toml:"max_multiplier"`
+	Server        ServerConfig                   `toml:"server"`
 }
 
 // Load reads the config file at path, validates it, and returns a Config.
@@ -147,6 +157,17 @@ func build(raw *rawConfig) (*Config, error) {
 		return nil, err
 	}
 
+	// Resolve max_multiplier — default if not set.
+	maxMult := raw.MaxMultiplier
+	if maxMult == 0 {
+		maxMult = DefaultMaxMultiplier
+	}
+
+	// Validate all genre multiplier values.
+	if err := validateMultipliers(raw.Genres, maxMult); err != nil {
+		return nil, err
+	}
+
 	// Validate server port range.
 	port := raw.Server.Port
 	if port == 0 {
@@ -168,6 +189,7 @@ func build(raw *rawConfig) (*Config, error) {
 		DimensionOrder: order,
 		Dimensions:     raw.Dimensions,
 		Genres:         genres,
+		MaxMultiplier:  maxMult,
 		Server: ServerConfig{
 			Port:               port,
 			CORSAllowedOrigins: raw.Server.CORSAllowedOrigins,
@@ -196,6 +218,27 @@ func validateGenreKeys(genres map[string]map[string]float64, dims map[string]Dim
 			if _, ok := dims[key]; !ok {
 				return fmt.Errorf("genre %q references unknown dimension %q — not present in [dimensions]", genre, key)
 			}
+		}
+	}
+	return nil
+}
+
+// validateMultipliers checks that every multiplier in every genre block is valid.
+func validateMultipliers(genres map[string]map[string]float64, maxMult float64) error {
+	for genre, multipliers := range genres {
+		if err := validateGenreMultipliers(genre, multipliers, maxMult); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateGenreMultipliers checks that each multiplier in a single genre block
+// is > 0.0 and ≤ maxMult.
+func validateGenreMultipliers(genre string, multipliers map[string]float64, maxMult float64) error {
+	for dim, val := range multipliers {
+		if val <= 0.0 || val > maxMult {
+			return fmt.Errorf("genre %q dimension %q: multiplier %.4f must be > 0.0 and ≤ %.4f", genre, dim, val, maxMult)
 		}
 	}
 	return nil

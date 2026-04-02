@@ -1,0 +1,17 @@
+# Binary
+kansou
+
+# Config (never commit personal config)
+config.toml
+
+# Environment
+.env
+
+# Go
+vendor/
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo

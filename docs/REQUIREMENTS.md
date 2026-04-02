@@ -199,9 +199,11 @@ genre adjustment, and its weighted contribution to the total.
 ### FR-04 — Publishing
 
 **FR-04a — Explicit publish step**
-Calculation and publishing are separate steps. The user must explicitly invoke
-`score publish` (CLI) or `POST /score/publish` (API) to write to AniList.
-A calculated score is never automatically published.
+Publishing requires explicit user confirmation. In the CLI, `score add` displays
+the final score and then prompts `Publish to AniList? [y/N]`. Only a `y` response
+triggers the publish. Entering anything else (including pressing Enter) skips
+publishing silently. Via the API, the caller must send `POST /score/publish`
+explicitly. A calculated score is never automatically published.
 
 **FR-04b — What is published**
 Only the final numeric score is written to AniList. The breakdown and
@@ -303,9 +305,8 @@ Full command reference is in `docs/CLI.md`. Summary:
 |---------|-------------|
 | `kansou serve` | Start the REST server |
 | `kansou media find <query>` | Search for media and display info |
-| `kansou score add <query>` | Start a scoring session by search |
-| `kansou score add --url <url>` | Start a scoring session by AniList URL |
-| `kansou score publish` | Publish the last calculated score to AniList |
+| `kansou score add <query>` | Start a scoring session by search (includes publish prompt) |
+| `kansou score add --url <url>` | Start a scoring session by AniList URL (includes publish prompt) |
 
 ---
 

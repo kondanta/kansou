@@ -20,8 +20,7 @@ kansou
 ├── media
 │   └── find <query>             # Search for media on AniList
 └── score
-    ├── add <query>              # Start a scoring session
-    └── publish                  # Publish last calculated score to AniList
+    └── add <query>              # Start a scoring session (includes publish prompt)
 ```
 
 ---
@@ -133,10 +132,7 @@ kansou media find --url https://anilist.co/anime/154587
 
 Start an interactive scoring session for a media entry. Prompts for a score
 (1–10) for each configured dimension in order. Calculates and displays the
-final weighted score on completion.
-
-The calculated score is held in memory. Use `score publish` to write it to
-AniList.
+final weighted score, then asks whether to publish it to AniList.
 
 ```
 kansou score add <query> [flags]
@@ -222,8 +218,12 @@ Enter 's' or 'skip' to mark a dimension as not applicable.
   Final Score   9.22 / 10
 ──────────────────────────────
 
-Run `kansou score publish` to save this to AniList.
+Publish to AniList? [y/N]: y
+✓ Score published to AniList
+  Mushishi — 9.22
 ```
+
+Entering anything other than `y` (including pressing Enter) skips publishing.
 
 **With --breakdown flag:**
 
@@ -288,7 +288,7 @@ The breakdown table shows:
   ```
   error: all dimensions were skipped — at least one dimension must be scored
   ```
-- `Ctrl+C` during a session cancels without publishing:
+- `Ctrl+C` or EOF during a session cancels without publishing:
   ```
   session cancelled — no score was published
   ```
@@ -304,43 +304,6 @@ kansou score add "Mushishi" --weight pacing=0.05 --breakdown
 
 ---
 
-## kansou score publish
-
-Publish the score calculated in the current session to AniList. Must be called
-after `score add` within the same session. There is no cross-session persistence
-— if you close your terminal after `score add`, the score is gone.
-
-```
-kansou score publish
-```
-
-**No flags.**
-
-**Behaviour:**
-- Reads the calculated score and media ID from the in-memory session state
-- Sends the `SaveMediaListEntry` mutation to AniList
-- Sets list status to `COMPLETED` if the entry is not already on the user's list
-- Prints confirmation on success
-- Prints the calculated score on failure so it is not silently lost
-
-**Output on success:**
-```
-✓ Score published to AniList
-  Frieren: Beyond Journey's End — 8.79
-```
-
-**Output on failure:**
-```
-error: failed to publish score to AniList: Not Found.
-       your calculated score was 8.79 — re-run score add to recalculate
-```
-
-**If called with no session active:**
-```
-error: no score to publish — run `kansou score add` first
-```
-
----
 
 ## Exit Codes
 
@@ -356,24 +319,18 @@ error: no score to publish — run `kansou score add` first
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ANILIST_TOKEN` | Yes (for publish) | AniList user token for write operations |
+| `ANILIST_TOKEN` | Yes (to publish) | AniList user token for write operations |
 
-`ANILIST_TOKEN` is required for `score publish`. It is not required for
-`media find` or the fetch step of `score add` (both are read-only AniList
-operations that do not require authentication).
+`ANILIST_TOKEN` is required when answering `y` to the publish prompt in `score add`.
+It is not required for `media find` or for scoring without publishing (both are
+read-only AniList operations that do not require authentication).
 
 ---
 
 ## Session Model
 
-`kansou` CLI operates as a single-session tool. The session lifecycle is:
-
-```
-score add   →   (interactive scoring)   →   score publish
-```
-
-There is exactly one active score in memory at a time. Running `score add`
-a second time within the same process replaces the previous session's score.
-There is no queuing, batching, or history within a session.
+`kansou` CLI is stateless between invocations. Each `score add` run is a
+complete session: search → score → optional publish. There is no cross-invocation
+state and no queuing or history.
 
 This is a v1 constraint. See `ADR-002` for context.

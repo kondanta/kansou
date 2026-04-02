@@ -23,7 +23,7 @@ Both modes share identical business logic. The binary entry point branches into 
 │  │                  │         │                      │   │
 │  │  score add       │         │  POST /score         │   │
 │  │  media find      │         │  GET  /media/search  │   │
-│  │  score publish   │         │  POST /score/publish │   │
+│  │                  │         │  POST /score/publish │   │
 │  └────────┬─────────┘         └──────────┬──────────┘   │
 │           │                              │               │
 │           └──────────────┬───────────────┘               │
@@ -69,7 +69,7 @@ Both modes share identical business logic. The binary entry point branches into 
 ## Layer Responsibilities
 
 ### Entry Point — `cmd/kansou/main.go`
-Parses the top-level invocation and delegates to either the CLI layer or the server layer. Contains no business logic. Loads config and wires dependencies before handing off.
+Parses the top-level invocation and delegates to either the CLI layer or the server layer. Contains no business logic. Constructs an `App` with nil deps early (so commands can be registered), then wires config and all dependencies in `PersistentPreRunE` after flag parsing — ensuring `--config` is honoured.
 
 ### CLI Layer — `internal/cli/`
 Built on `cobra`. Handles user input, calls core logic, and renders output to stdout. The only layer allowed to write to stdout. Does not contain business logic — it orchestrates calls to the scoring engine and AniList client.
@@ -115,10 +115,11 @@ Scoring Engine: applies base weights + genre multipliers + renormalization
 CLI: prints score (and breakdown if --breakdown flag is set)
         │
         ▼
-User confirms: kansou score publish
+CLI: prompts "Publish to AniList? [y/N]"
         │
-        ▼
-AniList Client: mutation → writes score to user's AniList account
+        ├── y → AniList Client: mutation → writes score to user's AniList account
+        │
+        └── N / Enter → session ends, score is not published
 ```
 
 ### Self-Insert URL Flow
@@ -154,10 +155,9 @@ POST /score/publish       { "media_id": 154587, "score": 8.4 }
 kansou serve              # starts REST server on default port (8080)
 kansou serve --port 3000
 
-kansou score add "..."    # CLI: score by search
+kansou score add "..."    # CLI: score by search (publish prompt included)
 kansou score add --url "https://anilist.co/anime/154587"
 kansou media find "..."   # CLI: search and display media info only
-kansou score publish      # CLI: write last calculated score to AniList
 ```
 
 ---

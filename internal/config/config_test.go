@@ -268,6 +268,95 @@ func TestLoad_DefaultConfig_HasDimensionsHash(t *testing.T) {
 	}
 }
 
+func TestLoad_MaxMultiplier_Default(t *testing.T) {
+	// No max_multiplier in config — should default to 2.0.
+	content := "[dimensions.story]\nlabel = \"S\"\nweight = 1.0\n"
+	cfg, err := Load(writeTOML(t, content))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.MaxMultiplier != DefaultMaxMultiplier {
+		t.Errorf("expected default max_multiplier %.1f, got %.1f", DefaultMaxMultiplier, cfg.MaxMultiplier)
+	}
+}
+
+func TestLoad_MaxMultiplier_Configurable(t *testing.T) {
+	content := "max_multiplier = 3.0\n[dimensions.story]\nlabel = \"S\"\nweight = 1.0\n[genres.action]\nstory = 2.5\n"
+	cfg, err := Load(writeTOML(t, content))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.MaxMultiplier != 3.0 {
+		t.Errorf("expected max_multiplier 3.0, got %.1f", cfg.MaxMultiplier)
+	}
+}
+
+func TestLoad_MultiplierValidation(t *testing.T) {
+	base := "[dimensions.story]\nlabel = \"S\"\nweight = 1.0\n"
+	cases := []struct {
+		name    string
+		content string
+		wantErr bool
+	}{
+		{
+			name:    "valid: within default ceiling",
+			content: base + "[genres.action]\nstory = 1.5\n",
+			wantErr: false,
+		},
+		{
+			name:    "valid: at default ceiling",
+			content: base + "[genres.action]\nstory = 2.0\n",
+			wantErr: false,
+		},
+		{
+			name:    "invalid: exceeds default ceiling",
+			content: base + "[genres.action]\nstory = 2.1\n",
+			wantErr: true,
+		},
+		{
+			name:    "invalid: zero multiplier",
+			content: base + "[genres.action]\nstory = 0.0\n",
+			wantErr: true,
+		},
+		{
+			name:    "invalid: negative multiplier",
+			content: base + "[genres.action]\nstory = -0.5\n",
+			wantErr: true,
+		},
+		{
+			name:    "valid: raised ceiling allows higher value",
+			content: "max_multiplier = 3.0\n" + base + "[genres.action]\nstory = 2.5\n",
+			wantErr: false,
+		},
+		{
+			name:    "invalid: exceeds raised ceiling",
+			content: "max_multiplier = 3.0\n" + base + "[genres.action]\nstory = 3.1\n",
+			wantErr: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Load(writeTOML(t, tc.content))
+			if tc.wantErr && err == nil {
+				t.Error("expected error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestLoad_DefaultConfig_MaxMultiplier(t *testing.T) {
+	cfg, err := Load(filepath.Join(t.TempDir(), "none.toml"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.MaxMultiplier != DefaultMaxMultiplier {
+		t.Errorf("default config: expected max_multiplier %.1f, got %.1f", DefaultMaxMultiplier, cfg.MaxMultiplier)
+	}
+}
+
 // itoa converts an int to its decimal string representation without importing strconv.
 func itoa(n int) string {
 	if n == 0 {

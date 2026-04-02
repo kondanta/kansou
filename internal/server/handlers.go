@@ -277,8 +277,8 @@ func (s *Server) handleScorePublish(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "media_id is required")
 		return
 	}
-	if req.Score <= 0 || req.Score > 10 {
-		writeError(w, http.StatusBadRequest, "score must be between 0 and 10")
+	if req.Score < 1 || req.Score > 10 {
+		writeError(w, http.StatusBadRequest, "score must be between 1 and 10")
 		return
 	}
 

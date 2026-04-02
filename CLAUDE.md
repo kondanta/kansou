@@ -66,32 +66,22 @@ If you think a new dependency is justified, stop and ask. Do not `go get` anythi
 ## CLI Application Structure
 
 The CLI layer uses an `App` struct defined in `internal/cli/` to own all shared
-dependencies and session state. This is the only sanctioned pattern for sharing
-state between cobra commands. Do not use package-level variables for this purpose.
+dependencies. This is the only sanctioned pattern for sharing state between cobra
+commands. Do not use package-level variables for this purpose.
 
 ```go
 // internal/cli/app.go
 
-// SessionState holds the result of a completed score add session.
-// It is nil until score add runs successfully.
-// It contains both the scoring result and the AniList media ID,
-// kept together because score publish needs both.
-type SessionState struct {
-    MediaID int
-    Result  scoring.Result
-}
-
-// App owns all shared CLI dependencies and session state.
-// It is constructed once in main.go and never modified after construction,
-// except for Session which is set by score add and read by score publish.
+// App owns all shared CLI dependencies.
+// Config, AniList, and Engine are set by PersistentPreRunE after flag parsing.
 type App struct {
     Config  *config.Config
     AniList *anilist.Client
     Engine  *scoring.Engine
-    Session *SessionState // nil until score add runs
 }
 
-// NewApp constructs an App with all dependencies wired.
+// NewApp constructs an App. Called with nil deps before Execute(); deps are
+// populated by PersistentPreRunE so --config is honoured.
 func NewApp(cfg *config.Config, al *anilist.Client, eng *scoring.Engine) *App
 
 // MediaCmd returns the `media` cobra command and its subcommands.
@@ -105,20 +95,20 @@ func (a *App) ScoreCmd() *cobra.Command
 
 ```go
 // cmd/kansou/main.go
-app := cli.NewApp(cfg, anilistClient, scoringEngine)
+app := cli.NewApp(nil, nil, nil)  // deps set by PersistentPreRunE
+rootCmd.PersistentPreRunE = func(...) { /* load config, set app.Config/AniList/Engine */ }
 rootCmd.AddCommand(app.MediaCmd())
 rootCmd.AddCommand(app.ScoreCmd())
-rootCmd.AddCommand(server.NewServeCmd(cfg))  // server has no session state
+rootCmd.AddCommand(newServeCmd(app))
 ```
 
-`server.NewServeCmd` does not use `App` — the server is stateless by design.
-Each HTTP request receives all necessary data in the request body.
+The server command uses `app.Config`, `app.AniList`, and `app.Engine` which are
+populated by `PersistentPreRunE` before any `RunE` fires. The server is stateless
+by design — each HTTP request receives all necessary data in the request body.
 
-**Session nil check:** `score publish` must check `a.Session == nil` before
-proceeding and exit with a clear error if no session is active:
-```
-error: no score to publish — run `kansou score add` first
-```
+**`score add` flow:** search → interactive scoring → display result → `Publish to AniList? [y/N]`
+prompt. Publishing happens inline. There is no separate `score publish` command —
+the CLI is stateless between invocations (v1 constraint, see ADR-002).
 
 ---
 

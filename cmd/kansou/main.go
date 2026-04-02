@@ -12,8 +12,7 @@
 //
 // Usage:
 //
-//	kansou score add "Frieren"         # start a scoring session
-//	kansou score publish               # publish the last score to AniList
+//	kansou score add "Frieren"         # start a scoring session (includes publish prompt)
 //	kansou media find "Mushishi"       # look up media without scoring
 //	kansou serve                       # start the REST server
 package main
@@ -69,21 +68,27 @@ scoring session, and publishes the final weighted score back to AniList.`,
 		return cmd.Help()
 	}
 
-	// Load config and wire dependencies. Config loading failures are fatal.
-	cfg, err := config.Load(configPath)
-	if err != nil {
-		slog.Error("loading config", "err", err)
-		os.Exit(1)
-	}
-	slog.Debug("config loaded", "dimensions", len(cfg.Dimensions))
+	// app is created with nil deps so its commands can be registered before
+	// config is loaded. PersistentPreRunE fills in the deps after flag parsing,
+	// so --config is honoured. Commands close over the *App pointer and will
+	// see the populated fields when their RunE fires.
+	app := cli.NewApp(nil, nil, nil)
 
-	al := anilist.NewClient()
-	eng := newEngine(cfg)
-	app := cli.NewApp(cfg, al, eng)
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		cfg, err := config.Load(configPath)
+		if err != nil {
+			return fmt.Errorf("loading config: %w", err)
+		}
+		slog.Debug("config loaded", "dimensions", len(cfg.Dimensions))
+		app.Config = cfg
+		app.AniList = anilist.NewClient()
+		app.Engine = newEngine(cfg)
+		return nil
+	}
 
 	rootCmd.AddCommand(app.MediaCmd())
 	rootCmd.AddCommand(app.ScoreCmd())
-	rootCmd.AddCommand(newServeCmd(cfg, al, eng))
+	rootCmd.AddCommand(newServeCmd(app))
 
 	if err := rootCmd.Execute(); err != nil {
 		slog.Error("command failed", "err", err)
@@ -106,7 +111,9 @@ func newEngine(cfg *config.Config) *scoring.Engine {
 }
 
 // newServeCmd constructs the `kansou serve` cobra command.
-func newServeCmd(cfg *config.Config, al *anilist.Client, eng *scoring.Engine) *cobra.Command {
+// It closes over app so that PersistentPreRunE has already populated the deps
+// by the time RunE fires.
+func newServeCmd(app *cli.App) *cobra.Command {
 	var port int
 
 	cmd := &cobra.Command{
@@ -119,7 +126,7 @@ Swagger UI is available at /swagger/index.html.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Switch to JSON logging for server mode.
 			logger.Setup(true)
-			srv := server.New(cfg, al, eng)
+			srv := server.New(app.Config, app.AniList, app.Engine)
 			if err := srv.ListenAndServe(port); err != nil {
 				slog.Error("server error", "err", err)
 				os.Exit(1)

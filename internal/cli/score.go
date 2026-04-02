@@ -42,21 +42,6 @@ The calculated score is held in memory. Use 'score publish' to write it to AniLi
 	return cmd
 }
 
-// scorePublishCmd returns the `score publish` cobra command.
-func (a *App) scorePublishCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "publish",
-		Short: "Publish the last calculated score to AniList",
-		Long: `Publish the score calculated in the current session to AniList.
-Must be called after 'score add' within the same session.
-There is no cross-session persistence — if you close your terminal after
-'score add', the score is gone.`,
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return a.runScorePublish()
-		},
-	}
-}
 
 // runScoreAdd fetches the media entry, runs the interactive prompt loop,
 // calculates the score, and stores the result in a.Session.
@@ -197,13 +182,6 @@ func (a *App) runScoreAdd(args []string, urlFlag, typeFlag string, breakdown boo
 		os.Exit(1)
 	}
 
-	// Store session state for score publish.
-	a.Session = &SessionState{
-		MediaID: media.ID,
-		Title:   media.TitleRomaji,
-		Result:  result,
-	}
-
 	// Print final score.
 	fmt.Println("──────────────────────────────")
 	fmt.Printf("  Final Score   %.2f / 10\n", result.FinalScore)
@@ -214,24 +192,19 @@ func (a *App) runScoreAdd(args []string, urlFlag, typeFlag string, breakdown boo
 		printBreakdown(result)
 	}
 
-	fmt.Println("Run `kansou score publish` to save this to AniList.")
-	return nil
-}
-
-// runScorePublish publishes the session score to AniList.
-func (a *App) runScorePublish() error {
-	if a.Session == nil {
-		fmt.Fprintf(os.Stderr, "error: no score to publish — run `kansou score add` first\n")
-		os.Exit(1)
+	// Prompt to publish.
+	fmt.Print("Publish to AniList? [y/N]: ")
+	line, err := reader.ReadString('\n')
+	if err != nil || strings.ToLower(strings.TrimSpace(line)) != "y" {
+		return nil
 	}
 
-	pub, err := a.AniList.PublishScore(a.Session.MediaID, a.Session.Result.FinalScore)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: failed to publish score to AniList: %v\n", err)
-		fmt.Fprintf(os.Stderr, "       your calculated score was %.2f — re-run score add to recalculate\n", a.Session.Result.FinalScore)
+	pub, pubErr := a.AniList.PublishScore(media.ID, result.FinalScore)
+	if pubErr != nil {
+		fmt.Fprintf(os.Stderr, "error: failed to publish score to AniList: %v\n", pubErr)
+		fmt.Fprintf(os.Stderr, "       your calculated score was %.2f\n", result.FinalScore)
 		os.Exit(1)
 	}
-
 	fmt.Printf("✓ Score published to AniList\n")
 	fmt.Printf("  %s — %.2f\n", pub.TitleRomaji, pub.Score)
 	return nil

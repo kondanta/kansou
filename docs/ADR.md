@@ -630,3 +630,107 @@ unambiguous queries.
 - `--url` bypasses search entirely and is unaffected by this change.
 - `docs/ANILIST_INTEGRATION.md`, `docs/CLI.md`, and `docs/REQUIREMENTS.md`
   updated to reflect the new behaviour.
+
+---
+
+## ADR-017 — Configurable genre multiplier ceiling (max_multiplier)
+
+**Status:** Accepted
+
+**Date:** 2026
+
+**Context:**
+Genre bias multipliers in `[genres.*]` config blocks were unconstrained. A typo
+such as `20` instead of `2.0` would silently produce a massively distorted score
+with no feedback. There was also no way to raise the ceiling for users who
+legitimately want stronger genre bias without resorting to per-session `--weight`
+overrides every time.
+
+**Decision:**
+Introduce a `max_multiplier` top-level config field (default `2.0`). On startup,
+the config loader validates that every value in every `[genres.*]` block is
+`> 0.0` and `≤ max_multiplier`. Any violation causes an immediate exit with a
+descriptive error message. The ceiling is configurable so users can raise it
+in their `config.toml` when they want more aggressive genre bias.
+
+**Reasoning:**
+`2.0` is a generous but sane default — doubling a dimension's weight is already
+a strong signal. Typos (e.g. `20`) are caught immediately at startup rather than
+silently corrupting scores. Making the ceiling configurable avoids hard-coding a
+value that informed users may legitimately need to exceed.
+
+Zero and negative multipliers are also rejected unconditionally regardless of
+`max_multiplier`, because a zero multiplier would silently drop a dimension from
+the scoring formula (equivalent to setting its weight to zero), and a negative
+multiplier has no meaningful interpretation in the scoring engine.
+
+**Alternatives considered:**
+- Hard-code the ceiling at 2.0 — rejected. Too restrictive for users with strong
+  genre bias preferences; provides no escape valve without a code change.
+- No ceiling at all — rejected. The whole point is to catch typos and accidental
+  extreme values at load time rather than at score review time.
+- Clamp silently to `max_multiplier` instead of rejecting — rejected. `kansou`
+  never silently corrects invalid config. If a value is out of range, it must
+  be an error the user is asked to fix.
+
+**Consequences:**
+- `rawConfig` and `Config` both gain a `MaxMultiplier float64` field
+  (`max_multiplier` in TOML).
+- `config.DefaultMaxMultiplier = 2.0` is the package-level constant for the
+  default; tests and built-in defaults reference it.
+- `validateMultipliers` (outer, iterates genres) and `validateGenreMultipliers`
+  (inner, iterates per-genre dimensions) enforce the bounds. Two separate
+  functions rather than a nested double-loop keep each function focused on one
+  responsibility.
+- `docs/CONFIG.md`, `config.example.toml`, and `docs/REQUIREMENTS.md`
+  updated to document the new field and its validation rule.
+
+---
+
+## ADR-018 — Remove `score publish` CLI command; fold publish into `score add`
+
+**Status:** Accepted
+
+**Date:** 2026
+
+**Context:**
+`score publish` was designed as a separate CLI command that reads the calculated
+score from in-memory `App.Session` state and writes it to AniList. This worked
+on paper but was fundamentally broken in practice: each CLI invocation is a
+separate process. `App.Session` is always nil at the start of a new process,
+so `score publish` could never succeed when called as a separate invocation
+after `score add`. There is no cross-session persistence in v1 (see ADR-002).
+
+**Decision:**
+Remove `score publish` as a standalone CLI command. `score add` now ends with
+a `Publish to AniList? [y/N]` prompt. Publishing happens inline within the same
+process if the user answers `y`. `SessionState` is removed from `App` entirely.
+`POST /score/publish` on the REST API is unaffected — the server is already
+stateless and receives all data in the request body.
+
+**Reasoning:**
+The two-command CLI flow requires either cross-invocation persistence (explicitly
+out of scope in v1) or both commands running in the same process (not how a
+shell user invokes a CLI). An inline prompt is the natural UX: the user just
+finished scoring, the context is fresh, and a single session handles the complete
+flow. The REST API already covers programmatic publishing — a `score publish
+--media-id X --score Y` command would just be a worse version of a direct API call.
+
+**Alternatives considered:**
+- Keep `score publish` with required `--media-id` and `--score` flags (stateless)
+  — rejected. Redundant with `POST /score/publish`. Adds surface area with no
+  CLI-native benefit; a curl call is more ergonomic for scripting.
+- Write a temp file between `score add` and `score publish` — rejected. Introduces
+  persistence, which is explicitly deferred to a future version per ADR-002.
+- Keep `score publish` unchanged and document the limitation — rejected. A command
+  that always fails is worse than no command.
+
+**Consequences:**
+- `scorePublishCmd`, `runScorePublish`, and `SessionState` removed from
+  `internal/cli/`.
+- `App.Session` field removed. `App` now holds only `Config`, `AniList`, and
+  `Engine`.
+- `score add` prompts for publish confirmation after displaying the final score.
+  The `bufio.Reader` used for dimension scoring is reused for the prompt.
+- `ARCHITECTURE.md`, `docs/CLI.md`, `docs/REQUIREMENTS.md`, and `CLAUDE.md`
+  updated to reflect the new flow.

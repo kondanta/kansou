@@ -143,6 +143,7 @@ func defaults() *Config {
 		DimensionOrder: order,
 		Dimensions:     dims,
 		Genres:         genres,
+		MaxMultiplier:  DefaultMaxMultiplier,
 		Server: ServerConfig{
 			Port:               DefaultPort,
 			CORSAllowedOrigins: []string{"http://localhost:3000", "http://localhost:5173", "http://localhost:8080"},

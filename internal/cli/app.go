@@ -12,22 +12,9 @@ import (
 	"github.com/kondanta/kansou/internal/scoring"
 )
 
-// SessionState holds the result of a completed score add session.
-// It is nil until score add runs successfully.
-// It contains both the scoring result and the AniList media identity,
-// kept together because score publish needs both.
-type SessionState struct {
-	// MediaID is the AniList media ID from the scored entry.
-	MediaID int
-	// Title is the romanised title, printed on publish confirmation.
-	Title string
-	// Result is the full scoring result including the breakdown.
-	Result scoring.Result
-}
-
-// App owns all shared CLI dependencies and session state.
-// It is constructed once in main.go and never modified after construction,
-// except for Session which is set by score add and read by score publish.
+// App owns all shared CLI dependencies.
+// It is constructed once in main.go. Config, AniList, and Engine are set by
+// PersistentPreRunE after flag parsing and are available to all subcommands.
 type App struct {
 	// Config is the loaded and validated application config.
 	Config *config.Config
@@ -35,8 +22,6 @@ type App struct {
 	AniList *anilist.Client
 	// Engine is the scoring engine wired with the current config.
 	Engine *scoring.Engine
-	// Session is nil until score add completes successfully.
-	Session *SessionState
 }
 
 // NewApp constructs an App with all dependencies wired.
@@ -67,6 +52,5 @@ func (a *App) ScoreCmd() *cobra.Command {
 		Long:  "Commands for scoring anime and manga and publishing scores to AniList.",
 	}
 	cmd.AddCommand(a.scoreAddCmd())
-	cmd.AddCommand(a.scorePublishCmd())
 	return cmd
 }

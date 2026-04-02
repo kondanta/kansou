@@ -23,6 +23,7 @@ causes an immediate exit with a descriptive error message.
 
 - All dimension weights must sum to 1.0 (±0.001 tolerance for float rounding)
 - All dimension keys referenced in `[genres.*]` blocks must exist in `[dimensions]`
+- All genre multiplier values must be > 0.0 and ≤ `max_multiplier` (default 2.0)
 - Server port must be an integer in the range 1024–65535
 - Every dimension must have a non-empty `label`
 - Every dimension `weight` must be > 0.0 and ≤ 1.0
@@ -36,6 +37,17 @@ involved and what the current sum is.
 ## Full Annotated Example
 
 ```toml
+# ---------------------------------------------------------------
+# max_multiplier
+#
+# Upper bound for all genre bias multiplier values.
+# Any value in a [genres.*] block must be > 0.0 and ≤ this.
+# Default: 2.0. Raise it if you need more aggressive genre bias.
+# Use --weight for one-off per-session adjustments instead.
+# ---------------------------------------------------------------
+
+max_multiplier = 2.0
+
 # ---------------------------------------------------------------
 # [dimensions]
 #
