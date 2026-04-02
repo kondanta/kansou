@@ -1,0 +1,131 @@
+// Package scoring implements the weighted, genre-adjusted scoring engine for kansou.
+// It is a pure-function package with no I/O or side effects. All inputs are passed
+// explicitly; all results are returned as values.
+package scoring
+
+// MediaType distinguishes anime from manga. The engine itself does not branch on
+// this value — it is carried through for provenance purposes and used by the
+// caller (CLI/server) to adapt dimension prompt labels.
+type MediaType string
+
+const (
+	// Anime covers TV, TV_SHORT, MOVIE, SPECIAL, OVA, ONA, MUSIC formats.
+	Anime MediaType = "ANIME"
+	// Manga covers all non-anime formats (MANGA, ONE_SHOT, NOVEL, etc.).
+	Manga MediaType = "MANGA"
+)
+
+// DimensionKey is the snake_case config key identifying a scoring dimension
+// (e.g. "story", "world_building"). It is a string — the engine never
+// references dimensions by name, it iterates over whatever config provides.
+type DimensionKey = string
+
+// DimensionDef defines a single scoring dimension as loaded from config.
+type DimensionDef struct {
+	// Label is the human-readable display name shown in CLI prompts.
+	Label string
+	// Description is the hint shown during a scoring session.
+	Description string
+	// Weight is the base weight for this dimension. All weights in a config
+	// must sum to 1.0 (±0.001 tolerance). Validated by the config loader.
+	Weight float64
+	// BiasResistant, when true, causes the engine to always apply a multiplier
+	// of exactly 1.0 to this dimension regardless of genre config.
+	// See ADR-007.
+	BiasResistant bool
+}
+
+// Entry is the full input to a scoring session. It is constructed by the
+// CLI or server layer and passed to Engine.Score().
+type Entry struct {
+	// Scores maps each DimensionKey to a user-provided score (1.0–10.0).
+	// Dimensions present in config but absent here are treated as skipped
+	// if also present in SkippedDimensions, otherwise the engine returns an error.
+	Scores map[DimensionKey]float64
+
+	// SkippedDimensions holds the keys of dimensions the user marked as N/A.
+	// Skipped dimensions are excluded from the weight pool before renormalization.
+	// See ADR-013.
+	SkippedDimensions map[DimensionKey]bool
+
+	// WeightOverrides holds per-session weight overrides supplied via --weight.
+	// Overridden dimensions are fixed at the given value; remaining dimensions
+	// are rescaled proportionally. Applied after genre renormalization.
+	// See ADR-008.
+	WeightOverrides map[DimensionKey]float64
+
+	// Genres is the list of genre strings returned by AniList for this entry.
+	// Used to look up multipliers in the config genre map.
+	Genres []string
+
+	// Meta carries session-level provenance data (media identity, config hash).
+	// Constructed by the caller before invoking Engine.Score().
+	Meta SessionMeta
+}
+
+// SessionMeta carries session-level provenance — who was scored, with what config.
+// Included verbatim in Result regardless of whether --breakdown is requested.
+// See ADR-012.
+type SessionMeta struct {
+	// MediaID is the AniList media ID — the canonical identifier for the entry.
+	MediaID int
+	// TitleRomaji is the romanised title of the media entry.
+	TitleRomaji string
+	// TitleEnglish is the English title (may be empty).
+	TitleEnglish string
+	// MediaType is Anime or Manga, derived from the AniList format field.
+	MediaType MediaType
+	// AniListURL is the canonical AniList URL for this entry.
+	AniListURL string
+	// AllGenres is the full genre list returned by AniList.
+	AllGenres []string
+	// MatchedGenres is the subset of AllGenres that matched a config genre block.
+	MatchedGenres []string
+	// ConfigHash is a SHA256 hex digest of the serialised dimensions config
+	// at time of scoring. Allows detection of config drift for stored scores.
+	ConfigHash string
+}
+
+// BreakdownRow is the full audit trail for a single dimension's contribution
+// to the final score. Always populated regardless of --breakdown flag.
+// See ADR-012.
+type BreakdownRow struct {
+	// Key is the dimension's config key.
+	Key DimensionKey
+	// Label is the display name for this dimension.
+	Label string
+	// Score is the user-provided score (0 if skipped).
+	Score float64
+	// BaseWeight is the configured weight before any genre adjustment.
+	BaseWeight float64
+	// GenreMultipliers maps each matched genre name to the multiplier it
+	// contributed for this dimension. Empty for bias-resistant or unmatched dimensions.
+	GenreMultipliers map[string]float64
+	// AppliedMultiplier is the averaged multiplier actually used
+	// (1.0 for bias-resistant dimensions or when no genres matched).
+	AppliedMultiplier float64
+	// FinalWeight is the weight after genre adjustment and renormalization.
+	// Zero if skipped.
+	FinalWeight float64
+	// Contribution is Score × FinalWeight. Zero if skipped.
+	Contribution float64
+	// BiasResistant indicates this dimension's multiplier is always 1.0.
+	BiasResistant bool
+	// WeightOverride indicates the final weight was set by a --weight flag
+	// rather than derived from base weight and genre multipliers.
+	WeightOverride bool
+	// Skipped indicates the user marked this dimension as not applicable.
+	// Skipped dimensions have FinalWeight=0 and Contribution=0.
+	Skipped bool
+}
+
+// Result is the output of Engine.Score(). The Breakdown is always fully
+// populated — the caller decides whether to display it. See ADR-012.
+type Result struct {
+	// FinalScore is the weighted sum, rounded to two decimal places.
+	FinalScore float64
+	// Breakdown is the per-dimension audit trail. Always populated.
+	Breakdown []BreakdownRow
+	// Meta is the session-level provenance carried through from Entry.Meta.
+	Meta SessionMeta
+}

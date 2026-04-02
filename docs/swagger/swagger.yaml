@@ -1,0 +1,302 @@
+basePath: /
+definitions:
+  internal_server.breakdownRowResponse:
+    properties:
+      applied_multiplier:
+        type: number
+      base_weight:
+        type: number
+      bias_resistant:
+        type: boolean
+      contribution:
+        type: number
+      final_weight:
+        type: number
+      genre_multipliers:
+        additionalProperties:
+          format: float64
+          type: number
+        type: object
+      key:
+        type: string
+      label:
+        type: string
+      score:
+        type: number
+      skipped:
+        type: boolean
+      weight_override:
+        type: boolean
+    type: object
+  internal_server.errorResponse:
+    properties:
+      error:
+        description: Error is a human-readable description of what went wrong.
+        type: string
+    type: object
+  internal_server.mediaResponse:
+    properties:
+      anilist_url:
+        type: string
+      average_score:
+        type: integer
+      chapters:
+        type: integer
+      cover_image:
+        type: string
+      episodes:
+        type: integer
+      format:
+        type: string
+      genres:
+        items:
+          type: string
+        type: array
+      id:
+        type: integer
+      mean_score:
+        type: integer
+      media_type:
+        type: string
+      status:
+        type: string
+      title_english:
+        type: string
+      title_native:
+        type: string
+      title_romaji:
+        type: string
+    type: object
+  internal_server.publishRequest:
+    properties:
+      media_id:
+        description: MediaID is the AniList media ID to publish the score for.
+        type: integer
+      score:
+        description: Score is the final score to publish (e.g. 8.79).
+        type: number
+    type: object
+  internal_server.publishResponse:
+    properties:
+      message:
+        description: Message is a human-readable confirmation.
+        type: string
+      score:
+        description: Score is the score that was written.
+        type: number
+      title:
+        description: Title is the media title as confirmed by AniList.
+        type: string
+    type: object
+  internal_server.scoreRequest:
+    properties:
+      media_id:
+        description: MediaID is the AniList media ID of the entry being scored.
+        type: integer
+      scores:
+        additionalProperties:
+          format: float64
+          type: number
+        description: Scores maps dimension keys to user scores (1.0–10.0).
+        type: object
+      skipped_dimensions:
+        description: SkippedDimensions lists dimension keys the user has marked as
+          N/A.
+        items:
+          type: string
+        type: array
+      weight_overrides:
+        additionalProperties:
+          format: float64
+          type: number
+        description: WeightOverrides maps dimension keys to per-session weight overrides.
+        type: object
+    type: object
+  internal_server.scoreResponse:
+    properties:
+      breakdown:
+        description: Breakdown is the per-dimension audit trail.
+        items:
+          $ref: '#/definitions/internal_server.breakdownRowResponse'
+        type: array
+      final_score:
+        description: FinalScore is the computed weighted score (rounded to 2 decimal
+          places).
+        type: number
+      meta:
+        allOf:
+        - $ref: '#/definitions/internal_server.sessionMetaResponse'
+        description: Meta carries session-level provenance.
+    type: object
+  internal_server.sessionMetaResponse:
+    properties:
+      all_genres:
+        items:
+          type: string
+        type: array
+      anilist_url:
+        type: string
+      config_hash:
+        type: string
+      matched_genres:
+        items:
+          type: string
+        type: array
+      media_id:
+        type: integer
+      media_type:
+        type: string
+      title_english:
+        type: string
+      title_romaji:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    name: kansou
+  description: Personal anime/manga scoring tool with AniList integration.
+  license:
+    name: MIT
+  title: kansou API
+  version: "1.0"
+paths:
+  /health:
+    get:
+      description: Returns 200 OK if the server is running.
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+      summary: Health check
+      tags:
+      - system
+  /media/{id}:
+    get:
+      description: Fetch an anime or manga entry by its AniList media ID.
+      parameters:
+      - description: AniList media ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server.mediaResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_server.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_server.errorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/internal_server.errorResponse'
+      summary: Fetch media by ID
+      tags:
+      - media
+  /media/search:
+    get:
+      description: Search AniList for anime or manga by name. Returns the best match.
+      parameters:
+      - description: Search query
+        in: query
+        name: q
+        required: true
+        type: string
+      - description: 'Media type: ANIME or MANGA'
+        in: query
+        name: type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server.mediaResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_server.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_server.errorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/internal_server.errorResponse'
+      summary: Search media
+      tags:
+      - media
+  /score:
+    post:
+      consumes:
+      - application/json
+      description: Calculate a weighted, genre-adjusted score for a media entry.
+      parameters:
+      - description: Scoring input
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_server.scoreRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server.scoreResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_server.errorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/internal_server.errorResponse'
+      summary: Calculate score
+      tags:
+      - score
+  /score/publish:
+    post:
+      consumes:
+      - application/json
+      description: Write a score to the user's AniList account. Requires ANILIST_TOKEN
+        env var.
+      parameters:
+      - description: Publish input
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_server.publishRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_server.publishResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_server.errorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/internal_server.errorResponse'
+      summary: Publish score
+      tags:
+      - score
+swagger: "2.0"

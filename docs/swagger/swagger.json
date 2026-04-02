@@ -1,0 +1,451 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "Personal anime/manga scoring tool with AniList integration.",
+        "title": "kansou API",
+        "contact": {
+            "name": "kansou"
+        },
+        "license": {
+            "name": "MIT"
+        },
+        "version": "1.0"
+    },
+    "host": "localhost:8080",
+    "basePath": "/",
+    "paths": {
+        "/health": {
+            "get": {
+                "description": "Returns 200 OK if the server is running.",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Health check",
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        },
+        "/media/search": {
+            "get": {
+                "description": "Search AniList for anime or manga by name. Returns the best match.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "media"
+                ],
+                "summary": "Search media",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Search query",
+                        "name": "q",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Media type: ANIME or MANGA",
+                        "name": "type",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.mediaResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.errorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/media/{id}": {
+            "get": {
+                "description": "Fetch an anime or manga entry by its AniList media ID.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "media"
+                ],
+                "summary": "Fetch media by ID",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "AniList media ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.mediaResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.errorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/score": {
+            "post": {
+                "description": "Calculate a weighted, genre-adjusted score for a media entry.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "score"
+                ],
+                "summary": "Calculate score",
+                "parameters": [
+                    {
+                        "description": "Scoring input",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.scoreRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.scoreResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.errorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/score/publish": {
+            "post": {
+                "description": "Write a score to the user's AniList account. Requires ANILIST_TOKEN env var.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "score"
+                ],
+                "summary": "Publish score",
+                "parameters": [
+                    {
+                        "description": "Publish input",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.publishRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.publishResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.errorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/internal_server.errorResponse"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "internal_server.breakdownRowResponse": {
+            "type": "object",
+            "properties": {
+                "applied_multiplier": {
+                    "type": "number"
+                },
+                "base_weight": {
+                    "type": "number"
+                },
+                "bias_resistant": {
+                    "type": "boolean"
+                },
+                "contribution": {
+                    "type": "number"
+                },
+                "final_weight": {
+                    "type": "number"
+                },
+                "genre_multipliers": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number",
+                        "format": "float64"
+                    }
+                },
+                "key": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "score": {
+                    "type": "number"
+                },
+                "skipped": {
+                    "type": "boolean"
+                },
+                "weight_override": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "internal_server.errorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "description": "Error is a human-readable description of what went wrong.",
+                    "type": "string"
+                }
+            }
+        },
+        "internal_server.mediaResponse": {
+            "type": "object",
+            "properties": {
+                "anilist_url": {
+                    "type": "string"
+                },
+                "average_score": {
+                    "type": "integer"
+                },
+                "chapters": {
+                    "type": "integer"
+                },
+                "cover_image": {
+                    "type": "string"
+                },
+                "episodes": {
+                    "type": "integer"
+                },
+                "format": {
+                    "type": "string"
+                },
+                "genres": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "mean_score": {
+                    "type": "integer"
+                },
+                "media_type": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "title_english": {
+                    "type": "string"
+                },
+                "title_native": {
+                    "type": "string"
+                },
+                "title_romaji": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_server.publishRequest": {
+            "type": "object",
+            "properties": {
+                "media_id": {
+                    "description": "MediaID is the AniList media ID to publish the score for.",
+                    "type": "integer"
+                },
+                "score": {
+                    "description": "Score is the final score to publish (e.g. 8.79).",
+                    "type": "number"
+                }
+            }
+        },
+        "internal_server.publishResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "description": "Message is a human-readable confirmation.",
+                    "type": "string"
+                },
+                "score": {
+                    "description": "Score is the score that was written.",
+                    "type": "number"
+                },
+                "title": {
+                    "description": "Title is the media title as confirmed by AniList.",
+                    "type": "string"
+                }
+            }
+        },
+        "internal_server.scoreRequest": {
+            "type": "object",
+            "properties": {
+                "media_id": {
+                    "description": "MediaID is the AniList media ID of the entry being scored.",
+                    "type": "integer"
+                },
+                "scores": {
+                    "description": "Scores maps dimension keys to user scores (1.0–10.0).",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number",
+                        "format": "float64"
+                    }
+                },
+                "skipped_dimensions": {
+                    "description": "SkippedDimensions lists dimension keys the user has marked as N/A.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "weight_overrides": {
+                    "description": "WeightOverrides maps dimension keys to per-session weight overrides.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number",
+                        "format": "float64"
+                    }
+                }
+            }
+        },
+        "internal_server.scoreResponse": {
+            "type": "object",
+            "properties": {
+                "breakdown": {
+                    "description": "Breakdown is the per-dimension audit trail.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_server.breakdownRowResponse"
+                    }
+                },
+                "final_score": {
+                    "description": "FinalScore is the computed weighted score (rounded to 2 decimal places).",
+                    "type": "number"
+                },
+                "meta": {
+                    "description": "Meta carries session-level provenance.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/internal_server.sessionMetaResponse"
+                        }
+                    ]
+                }
+            }
+        },
+        "internal_server.sessionMetaResponse": {
+            "type": "object",
+            "properties": {
+                "all_genres": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "anilist_url": {
+                    "type": "string"
+                },
+                "config_hash": {
+                    "type": "string"
+                },
+                "matched_genres": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "media_id": {
+                    "type": "integer"
+                },
+                "media_type": {
+                    "type": "string"
+                },
+                "title_english": {
+                    "type": "string"
+                },
+                "title_romaji": {
+                    "type": "string"
+                }
+            }
+        }
+    }
+}
