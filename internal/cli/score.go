@@ -17,6 +17,7 @@ import (
 // scoreAddCmd returns the `score add` cobra command.
 func (a *App) scoreAddCmd() *cobra.Command {
 	var urlFlag string
+	var typeFlag string
 	var breakdownFlag bool
 	var weightFlag string
 
@@ -30,11 +31,12 @@ Enter 's' or 'skip' to mark a dimension as not applicable.
 The calculated score is held in memory. Use 'score publish' to write it to AniList.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return a.runScoreAdd(args, urlFlag, breakdownFlag, weightFlag)
+			return a.runScoreAdd(args, urlFlag, typeFlag, breakdownFlag, weightFlag)
 		},
 	}
 
 	cmd.Flags().StringVar(&urlFlag, "url", "", "Fetch by direct AniList URL instead of searching")
+	cmd.Flags().StringVar(&typeFlag, "type", "", "Media type filter: anime or manga")
 	cmd.Flags().BoolVar(&breakdownFlag, "breakdown", false, "Show weighted contribution table after scoring")
 	cmd.Flags().StringVar(&weightFlag, "weight", "", "Override dimension weights for this session (e.g. pacing=0.05,world_building=0.20)")
 	return cmd
@@ -58,8 +60,14 @@ There is no cross-session persistence — if you close your terminal after
 
 // runScoreAdd fetches the media entry, runs the interactive prompt loop,
 // calculates the score, and stores the result in a.Session.
-func (a *App) runScoreAdd(args []string, urlFlag string, breakdown bool, weightFlag string) error {
-	// Parse --weight overrides before doing any network I/O.
+func (a *App) runScoreAdd(args []string, urlFlag, typeFlag string, breakdown bool, weightFlag string) error {
+	// Parse --type and --weight before any network I/O.
+	mediaType, err := resolveMediaType(typeFlag)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
 	overrides, err := parseWeightFlag(weightFlag, a.Config.Dimensions)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -76,14 +84,23 @@ func (a *App) runScoreAdd(args []string, urlFlag string, breakdown bool, weightF
 			os.Exit(1)
 		}
 		media, err = a.AniList.FetchByID(id)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
 	case len(args) > 0:
-		media, err = a.AniList.SearchByName(args[0], "")
+		results, searchErr := a.AniList.SearchByNameMulti(args[0], mediaType)
+		if searchErr != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", searchErr)
+			os.Exit(1)
+		}
+		media, err = pickMedia(results)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
 	default:
 		fmt.Fprintf(os.Stderr, "error: provide a search query or --url\n")
-		os.Exit(1)
-	}
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
 

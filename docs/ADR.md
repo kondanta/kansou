@@ -579,3 +579,54 @@ anywhere in the codebase without importing or passing a logger instance.
   remains restricted to `main.go` per the existing convention.
 - The custom CLI handler implements `slog.Handler` fully, including
   `WithAttrs` and `WithGroup`, so it is compatible with all slog usage patterns.
+
+---
+
+## ADR-016 — Multi-result media search via Page query
+
+**Status:** Accepted
+
+**Date:** 2026
+
+**Context:**
+The original search implementation used AniList's `Media` query, which returns
+a single best match. This caused problems when a series has multiple seasons or
+related entries — searching "Frieren" would silently return the manga instead of
+the anime, with no way for the user to see or choose among the alternatives.
+The only workaround was `--url`, which requires the user to look up the AniList
+ID manually.
+
+**Decision:**
+Replace the `Media` query with a `Page` query returning up to 5 results sorted
+by `SEARCH_MATCH`. `SearchByNameMulti` in `internal/anilist/` returns `[]Media`.
+The CLI presents a numbered picker when more than one result is returned; a single
+result is selected automatically without prompting. `GET /media/search` now returns
+`[]mediaResponse` instead of a single object.
+
+**Reasoning:**
+The `Page` query is a drop-in replacement with no additional API surface and the
+same field set. Five results covers virtually all real-world disambiguation cases
+(sequels, cours, specials) without overwhelming the picker. Returning an array
+from `GET /media/search` is correct REST semantics for a search endpoint and is a
+breaking change we can absorb now, before any frontend depends on the old shape.
+The single-result auto-select path preserves the zero-friction experience for
+unambiguous queries.
+
+**Alternatives considered:**
+- Keep `Media` query, add `--type` flag only — rejected. `--type` reduces the
+  problem but does not solve it; a series can still have multiple anime entries
+  (cours, specials) that `--type anime` does not disambiguate.
+- Interactive confirmation after single result — rejected. Adds a prompt for the
+  common case (unambiguous query) with no benefit.
+- Relations API to navigate sequels after picking — deferred. Useful for series
+  browsing but out of scope for the scoring flow; `--url` covers the edge case.
+
+**Consequences:**
+- `SearchByName` removed; `SearchByNameMulti` is the only search entry point.
+- `GET /media/search` response shape changed from `{object}` to `{array}`.
+  Swagger annotations and generated docs updated accordingly.
+- The CLI picker is shared between `media find` and `score add` via `pickMedia`
+  in `internal/cli/media.go`.
+- `--url` bypasses search entirely and is unaffected by this change.
+- `docs/ANILIST_INTEGRATION.md`, `docs/CLI.md`, and `docs/REQUIREMENTS.md`
+  updated to reflect the new behaviour.

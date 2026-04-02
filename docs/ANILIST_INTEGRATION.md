@@ -63,32 +63,38 @@ only sent for the publish mutation.
 
 **Triggered by:** `kansou media find <query>` and `kansou score add <query>`
 
+Returns up to 5 results sorted by AniList's `SEARCH_MATCH` relevance ranking,
+allowing the user to pick the correct entry when multiple seasons or related
+entries exist (e.g. a series split across cours).
+
 **GraphQL query:**
 
 ```graphql
-query ($search: String, $type: MediaType) {
-  Media(search: $search, type: $type) {
-    id
-    title {
-      romaji
-      english
-      native
+query ($search: String, $type: MediaType, $perPage: Int) {
+  Page(perPage: $perPage) {
+    media(search: $search, type: $type, sort: SEARCH_MATCH) {
+      id
+      title {
+        romaji
+        english
+        native
+      }
+      format
+      status
+      episodes
+      chapters
+      genres
+      tags {
+        name
+        rank
+        isMediaSpoiler
+      }
+      coverImage {
+        medium
+      }
+      averageScore
+      meanScore
     }
-    format
-    status
-    episodes
-    chapters
-    genres
-    tags {
-      name
-      rank
-      isMediaSpoiler
-    }
-    coverImage {
-      medium
-    }
-    averageScore
-    meanScore
   }
 }
 ```
@@ -96,25 +102,25 @@ query ($search: String, $type: MediaType) {
 **Variables:**
 ```json
 {
-  "search": "Frieren: Beyond Journey's End",
-  "type": "ANIME"
+  "search": "Frieren",
+  "type": "ANIME",
+  "perPage": 5
 }
 ```
 
-The `type` variable is inferred from context where possible. For `score add`,
-the user is asked to confirm the media type if it cannot be determined from
-the result's `format` field. `format` values that map to Anime: `TV`, `TV_SHORT`,
-`MOVIE`, `SPECIAL`, `OVA`, `ONA`, `MUSIC`. All others are treated as Manga.
+The `type` variable is supplied via the `--type` flag (`anime` or `manga`).
+If omitted, AniList searches across all media types.
+
+**On a single result:** returned immediately without prompting.
+
+**On multiple results:** the CLI presents a numbered picker; the REST API
+returns the full array and the client selects.
 
 **On no results:**
 ```
 error: no results found for "your search query"
        try a different search term or use --url to provide a direct AniList link
 ```
-
-**On multiple ambiguous results** (v1 behaviour):
-AniList returns the single best match for a `Media` query. If the match looks
-wrong, the user should use `--url` with the correct AniList link.
 
 ---
 

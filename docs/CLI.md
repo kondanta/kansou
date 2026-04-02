@@ -81,8 +81,9 @@ kansou media find <query> [flags]
 | Flag | Description |
 |------|-------------|
 | `--url <url>` | Fetch by direct AniList URL instead of searching |
+| `--type <type>` | Filter results by media type: `anime` or `manga` |
 
-**Output:**
+**Output — single result:**
 ```
 ┌─────────────────────────────────────────────────┐
 │  Frieren: Beyond Journey's End                  │
@@ -99,17 +100,32 @@ kansou media find <query> [flags]
 └─────────────────────────────────────────────────┘
 ```
 
+**Output — multiple results (picker):**
+```
+  1. Frieren: Beyond Journey's End         (TV · 28 eps · FINISHED)
+  2. Frieren: Beyond Journey's End Part 2  (TV · 16 eps · FINISHED)
+  3. Frieren: Beyond Journey's End — Abschied (SPECIAL · 1 ep · FINISHED)
+
+Pick a result [1–3]:
+> 1
+```
+
+After picking, the selected entry's full card is displayed.
+When `--url` is provided the picker is skipped entirely.
+
 **Examples:**
 ```bash
 kansou media find "Frieren"
-kansou media find "frieren beyond journey"
+kansou media find "Frieren" --type anime
+kansou media find "Frieren" --type manga
 kansou media find --url https://anilist.co/anime/154587
 ```
 
 **Error cases:**
 - No results found → suggests using `--url`
 - AniList unreachable → exits with error
-- Invalid URL format → exits with error before network request
+- Invalid `--type` value → exits before network request
+- Invalid URL format → exits before network request
 
 ---
 
@@ -138,6 +154,7 @@ kansou score add --url <url> [flags]
 | Flag | Description |
 |------|-------------|
 | `--url <url>` | Fetch by direct AniList URL instead of searching |
+| `--type <type>` | Filter results by media type: `anime` or `manga` |
 | `--breakdown` | Show weighted contribution table after scoring |
 | `--weight <overrides>` | Override dimension weights for this session only |
 
@@ -165,6 +182,13 @@ Validation errors for `--weight`:
 
 ```
 $ kansou score add "Mushishi"
+
+  1. Mushishi                    (TV · 26 eps · FINISHED)
+  2. Mushishi Zoku Shou          (TV · 10 eps · FINISHED)
+  3. Mushishi Zoku Shou 2nd Season (TV · 10 eps · FINISHED)
+
+Pick a result [1–3]:
+> 1
 
 Found: Mushishi (Anime · TV · 26 episodes)
 Genres: Mystery, Slice of Life, Supernatural

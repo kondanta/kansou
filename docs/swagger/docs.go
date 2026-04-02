@@ -39,7 +39,7 @@ const docTemplate = `{
         },
         "/media/search": {
             "get": {
-                "description": "Search AniList for anime or manga by name. Returns the best match.",
+                "description": "Search AniList for anime or manga by name. Returns up to 5 results sorted by relevance.",
                 "produces": [
                     "application/json"
                 ],
@@ -66,7 +66,10 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_server.mediaResponse"
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/internal_server.mediaResponse"
+                            }
                         }
                     },
                     "400": {

@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"bufio"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -13,6 +15,7 @@ import (
 // mediaFindCmd returns the `media find` cobra command.
 func (a *App) mediaFindCmd() *cobra.Command {
 	var urlFlag string
+	var typeFlag string
 
 	cmd := &cobra.Command{
 		Use:   "find [query]",
@@ -21,18 +24,25 @@ func (a *App) mediaFindCmd() *cobra.Command {
 Does not start a scoring session. Useful for verifying the correct entry before scoring.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return a.runMediaFind(args, urlFlag)
+			return a.runMediaFind(args, urlFlag, typeFlag)
 		},
 	}
 
 	cmd.Flags().StringVar(&urlFlag, "url", "", "Fetch by direct AniList URL instead of searching")
+	cmd.Flags().StringVar(&typeFlag, "type", "", "Media type filter: anime or manga")
 	return cmd
 }
 
 // runMediaFind fetches media by search query or URL and prints a summary table.
-func (a *App) runMediaFind(args []string, urlFlag string) error {
+func (a *App) runMediaFind(args []string, urlFlag, typeFlag string) error {
 	var media *anilist.Media
 	var err error
+
+	mediaType, err := resolveMediaType(typeFlag)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
 
 	switch {
 	case urlFlag != "":
@@ -42,20 +52,75 @@ func (a *App) runMediaFind(args []string, urlFlag string) error {
 			os.Exit(1)
 		}
 		media, err = a.AniList.FetchByID(id)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
 	case len(args) > 0:
-		media, err = a.AniList.SearchByName(args[0], "")
+		results, searchErr := a.AniList.SearchByNameMulti(args[0], mediaType)
+		if searchErr != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", searchErr)
+			os.Exit(1)
+		}
+		media, err = pickMedia(results)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
 	default:
 		fmt.Fprintf(os.Stderr, "error: provide a search query or --url\n")
 		os.Exit(1)
 	}
 
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
-
 	printMediaCard(media)
 	return nil
+}
+
+// pickMedia presents a numbered list of results and returns the one the user
+// selects. If there is only one result it is returned immediately without prompting.
+func pickMedia(results []anilist.Media) (*anilist.Media, error) {
+	if len(results) == 1 {
+		return &results[0], nil
+	}
+
+	fmt.Println()
+	for i, m := range results {
+		title := m.TitleRomaji
+		if m.TitleEnglish != "" && m.TitleEnglish != m.TitleRomaji {
+			title = m.TitleEnglish
+		}
+		extra := ""
+		if m.Episodes > 0 {
+			extra = fmt.Sprintf(" · %d eps", m.Episodes)
+		} else if m.Chapters > 0 {
+			extra = fmt.Sprintf(" · %d ch", m.Chapters)
+		}
+		fmt.Printf("  %d. %-45s (%s%s · %s)\n",
+			i+1,
+			truncate(title, 45),
+			m.Format,
+			extra,
+			m.Status,
+		)
+	}
+	fmt.Println()
+
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Printf("Pick a result [1–%d]: ", len(results))
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "\ncancelled\n")
+			os.Exit(0)
+		}
+		n, parseErr := strconv.Atoi(strings.TrimSpace(line))
+		if parseErr != nil || n < 1 || n > len(results) {
+			fmt.Printf("  invalid: enter a number between 1 and %d\n", len(results))
+			continue
+		}
+		fmt.Println()
+		return &results[n-1], nil
+	}
 }
 
 // printMediaCard renders a media entry as a bordered table to stdout.
@@ -99,6 +164,22 @@ func printMediaCard(m *anilist.Media) {
 	fmt.Printf("│  %-12s│  %-*s│\n", "Community", width-18, truncate(community, width-18))
 
 	fmt.Printf("└%s┘\n", line)
+}
+
+// resolveMediaType normalises a --type flag value to an AniList MediaType string.
+// Accepts "anime", "manga" (case-insensitive) or "" (no filter).
+// Returns an error for any other value.
+func resolveMediaType(s string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "anime":
+		return "ANIME", nil
+	case "manga":
+		return "MANGA", nil
+	case "":
+		return "", nil
+	default:
+		return "", fmt.Errorf("invalid --type %q — must be anime or manga", s)
+	}
 }
 
 // truncate shortens s to at most max runes, appending "…" if truncated.

@@ -38,20 +38,23 @@ func NewClient() *Client {
 	}
 }
 
-// SearchByName fetches the best-matching AniList media entry for the given
-// search string. mediaType may be "ANIME", "MANGA", or "" to search all types.
+// SearchByNameMulti searches AniList for media matching the given string and
+// returns up to searchPageSize results sorted by relevance. This allows the
+// caller to present a picker when multiple seasons or related entries exist.
+// mediaType may be "ANIME", "MANGA", or "" to search all types.
 // Returns an error if the network is unreachable, AniList returns an error,
 // or no results are found.
-func (c *Client) SearchByName(search, mediaType string) (*Media, error) {
+func (c *Client) SearchByNameMulti(search, mediaType string) ([]Media, error) {
 	vars := map[string]interface{}{ // interface{} required: GraphQL variables are heterogeneous
-		"search": search,
+		"search":  search,
+		"perPage": searchPageSize,
 	}
 	if mediaType != "" {
 		vars["type"] = mediaType
 	}
 
 	slog.Debug("anilist: search", "query", search, "type", mediaType)
-	resp, err := c.do(searchQuery, vars, false)
+	resp, err := c.do(searchPageQuery, vars, false)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +62,9 @@ func (c *Client) SearchByName(search, mediaType string) (*Media, error) {
 
 	var result struct {
 		Data struct {
-			Media *gqlMedia `json:"Media"`
+			Page struct {
+				Media []*gqlMedia `json:"media"`
+			} `json:"Page"`
 		} `json:"data"`
 		Errors []gqlError `json:"errors"`
 	}
@@ -69,11 +74,15 @@ func (c *Client) SearchByName(search, mediaType string) (*Media, error) {
 	if err := checkErrors(result.Errors); err != nil {
 		return nil, err
 	}
-	if result.Data.Media == nil {
+	if len(result.Data.Page.Media) == 0 {
 		return nil, fmt.Errorf("no results found for %q — try a different search term or use --url to provide a direct AniList link", search)
 	}
-	media := result.Data.Media.toMedia()
-	slog.Debug("anilist: search result", "id", media.ID, "title", media.TitleRomaji)
+
+	media := make([]Media, len(result.Data.Page.Media))
+	for i, m := range result.Data.Page.Media {
+		media[i] = *m.toMedia()
+	}
+	slog.Debug("anilist: search results", "count", len(media), "query", search)
 	return media, nil
 }
 

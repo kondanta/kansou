@@ -52,12 +52,12 @@ type mediaResponse struct {
 // handleMediaSearch searches AniList for media by name.
 //
 //	@Summary		Search media
-//	@Description	Search AniList for anime or manga by name. Returns the best match.
+//	@Description	Search AniList for anime or manga by name. Returns up to 5 results sorted by relevance.
 //	@Tags			media
 //	@Produce		json
 //	@Param			q		query	string	true	"Search query"
 //	@Param			type	query	string	false	"Media type: ANIME or MANGA"
-//	@Success		200	{object}	mediaResponse
+//	@Success		200	{array}		mediaResponse
 //	@Failure		400	{object}	errorResponse
 //	@Failure		404	{object}	errorResponse
 //	@Failure		502	{object}	errorResponse
@@ -70,12 +70,17 @@ func (s *Server) handleMediaSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	mediaType := r.URL.Query().Get("type")
 
-	media, err := s.al.SearchByName(q, mediaType)
+	results, err := s.al.SearchByNameMulti(q, mediaType)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, toMediaResponse(media))
+
+	responses := make([]mediaResponse, len(results))
+	for i := range results {
+		responses[i] = toMediaResponse(&results[i])
+	}
+	writeJSON(w, http.StatusOK, responses)
 }
 
 // handleMediaFetch fetches a specific media entry by its AniList ID.

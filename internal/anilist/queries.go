@@ -1,33 +1,40 @@
 package anilist
 
-// searchQuery is the GraphQL query used for searching media by name.
-// Returns the best single match from AniList.
-const searchQuery = `
-query ($search: String, $type: MediaType) {
-  Media(search: $search, type: $type) {
-    id
-    title {
-      romaji
-      english
-      native
+// searchPageQuery is the GraphQL query used for searching media by name.
+// Returns up to searchPageSize results via the Page API, sorted by search
+// relevance, so the user can pick the correct entry when multiple seasons
+// or related entries exist.
+const searchPageQuery = `
+query ($search: String, $type: MediaType, $perPage: Int) {
+  Page(perPage: $perPage) {
+    media(search: $search, type: $type, sort: SEARCH_MATCH) {
+      id
+      title {
+        romaji
+        english
+        native
+      }
+      format
+      status
+      episodes
+      chapters
+      genres
+      tags {
+        name
+        rank
+        isMediaSpoiler
+      }
+      coverImage {
+        medium
+      }
+      averageScore
+      meanScore
     }
-    format
-    status
-    episodes
-    chapters
-    genres
-    tags {
-      name
-      rank
-      isMediaSpoiler
-    }
-    coverImage {
-      medium
-    }
-    averageScore
-    meanScore
   }
 }`
+
+// searchPageSize is the maximum number of results returned by SearchByNameMulti.
+const searchPageSize = 5
 
 // fetchByIDQuery is the GraphQL query used to fetch media by AniList ID.
 // Identical field set to searchQuery; only the variable differs.

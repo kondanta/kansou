@@ -47,7 +47,8 @@ It is a personal tool. There is no concept of accounts, roles, or shared state.
 
 **FR-01a — Search by name**
 The user provides a search string. `kansou` queries the AniList API and returns
-the best matching media entry, including its title, format, genres, tags, and episode count.
+up to 5 results sorted by relevance. If only one result is found it is selected
+automatically. If multiple results are found, the user picks from a numbered list.
 If no match is found, the user is informed and the session ends.
 
 **FR-01b — Fetch by URL**
