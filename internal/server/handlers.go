@@ -234,30 +234,34 @@ type scoreResponse struct {
 // breakdownRowResponse is the JSON representation of a single BreakdownRow.
 // swagger:model breakdownRowResponse
 type breakdownRowResponse struct {
-	Key               string             `json:"key"`
-	Label             string             `json:"label"`
-	Score             float64            `json:"score"`
-	BaseWeight        float64            `json:"base_weight"`
-	AppliedMultiplier float64            `json:"applied_multiplier"`
-	FinalWeight       float64            `json:"final_weight"`
-	Contribution      float64            `json:"contribution"`
-	GenreMultipliers  map[string]float64 `json:"genre_multipliers,omitempty"`
-	BiasResistant     bool               `json:"bias_resistant"`
-	WeightOverride    bool               `json:"weight_override"`
-	Skipped           bool               `json:"skipped"`
+	Key                    string             `json:"key"`
+	Label                  string             `json:"label"`
+	Score                  float64            `json:"score"`
+	BaseWeight             float64            `json:"base_weight"`
+	AppliedMultiplier      float64            `json:"applied_multiplier"`
+	FinalWeight            float64            `json:"final_weight"`
+	Contribution           float64            `json:"contribution"`
+	GenreMultipliers       map[string]float64 `json:"genre_multipliers,omitempty"`
+	BiasResistant          bool               `json:"bias_resistant"`
+	WeightOverride         bool               `json:"weight_override"`
+	Skipped                bool               `json:"skipped"`
+	PrimaryGenre           string             `json:"primary_genre,omitempty"`
+	PrimaryGenreMultiplier float64            `json:"primary_genre_multiplier,omitempty"`
 }
 
 // sessionMetaResponse is the JSON representation of SessionMeta.
 // swagger:model sessionMetaResponse
 type sessionMetaResponse struct {
-	MediaID       int      `json:"media_id"`
-	TitleRomaji   string   `json:"title_romaji"`
-	TitleEnglish  string   `json:"title_english,omitempty"`
-	MediaType     string   `json:"media_type"`
-	AniListURL    string   `json:"anilist_url"`
-	AllGenres     []string `json:"all_genres"`
-	MatchedGenres []string `json:"matched_genres"`
-	ConfigHash    string   `json:"config_hash"`
+	MediaID            int      `json:"media_id"`
+	TitleRomaji        string   `json:"title_romaji"`
+	TitleEnglish       string   `json:"title_english,omitempty"`
+	MediaType          string   `json:"media_type"`
+	AniListURL         string   `json:"anilist_url"`
+	AllGenres          []string `json:"all_genres"`
+	MatchedGenres      []string `json:"matched_genres"`
+	ConfigHash         string   `json:"config_hash"`
+	PrimaryGenre       string   `json:"primary_genre,omitempty"`
+	PrimaryGenreWeight float64  `json:"primary_genre_weight"`
 }
 
 // handleScore calculates a weighted score for the given media entry.
@@ -315,14 +319,16 @@ func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 		Genres:            media.Genres,
 		PrimaryGenre:      req.PrimaryGenre,
 		Meta: scoring.SessionMeta{
-			MediaID:       media.ID,
-			TitleRomaji:   media.TitleRomaji,
-			TitleEnglish:  media.TitleEnglish,
-			MediaType:     media.MediaType,
-			AniListURL:    aniListURL(media),
-			AllGenres:     media.Genres,
-			MatchedGenres: matchedGenres,
-			ConfigHash:    s.cfg.DimensionsHash,
+			MediaID:            media.ID,
+			TitleRomaji:        media.TitleRomaji,
+			TitleEnglish:       media.TitleEnglish,
+			MediaType:          media.MediaType,
+			AniListURL:         aniListURL(media),
+			AllGenres:          media.Genres,
+			MatchedGenres:      matchedGenres,
+			ConfigHash:         s.cfg.DimensionsHash,
+			PrimaryGenre:       req.PrimaryGenre,
+			PrimaryGenreWeight: s.cfg.PrimaryGenreWeight,
 		},
 	}
 
@@ -434,31 +440,35 @@ func toScoreResponse(r scoring.Result) scoreResponse {
 	rows := make([]breakdownRowResponse, len(r.Breakdown))
 	for i, row := range r.Breakdown {
 		rows[i] = breakdownRowResponse{
-			Key:               row.Key,
-			Label:             row.Label,
-			Score:             row.Score,
-			BaseWeight:        row.BaseWeight,
-			AppliedMultiplier: row.AppliedMultiplier,
-			FinalWeight:       row.FinalWeight,
-			Contribution:      row.Contribution,
-			GenreMultipliers:  row.GenreMultipliers,
-			BiasResistant:     row.BiasResistant,
-			WeightOverride:    row.WeightOverride,
-			Skipped:           row.Skipped,
+			Key:                    row.Key,
+			Label:                  row.Label,
+			Score:                  row.Score,
+			BaseWeight:             row.BaseWeight,
+			AppliedMultiplier:      row.AppliedMultiplier,
+			FinalWeight:            row.FinalWeight,
+			Contribution:           row.Contribution,
+			GenreMultipliers:       row.GenreMultipliers,
+			BiasResistant:          row.BiasResistant,
+			WeightOverride:         row.WeightOverride,
+			Skipped:                row.Skipped,
+			PrimaryGenre:           row.PrimaryGenre,
+			PrimaryGenreMultiplier: row.PrimaryGenreMultiplier,
 		}
 	}
 	return scoreResponse{
 		FinalScore: r.FinalScore,
 		Breakdown:  rows,
 		Meta: sessionMetaResponse{
-			MediaID:       r.Meta.MediaID,
-			TitleRomaji:   r.Meta.TitleRomaji,
-			TitleEnglish:  r.Meta.TitleEnglish,
-			MediaType:     string(r.Meta.MediaType),
-			AniListURL:    r.Meta.AniListURL,
-			AllGenres:     r.Meta.AllGenres,
-			MatchedGenres: r.Meta.MatchedGenres,
-			ConfigHash:    r.Meta.ConfigHash,
+			MediaID:            r.Meta.MediaID,
+			TitleRomaji:        r.Meta.TitleRomaji,
+			TitleEnglish:       r.Meta.TitleEnglish,
+			MediaType:          string(r.Meta.MediaType),
+			AniListURL:         r.Meta.AniListURL,
+			AllGenres:          r.Meta.AllGenres,
+			MatchedGenres:      r.Meta.MatchedGenres,
+			ConfigHash:         r.Meta.ConfigHash,
+			PrimaryGenre:       r.Meta.PrimaryGenre,
+			PrimaryGenreWeight: r.Meta.PrimaryGenreWeight,
 		},
 	}
 }

@@ -140,12 +140,20 @@ also excluded from the average for that dimension — they do not contribute a
 diluting neutral 1.0. If no matched genre has an opinion on a dimension, the
 multiplier is 1.0 (neutral).
 
-**Optional — Primary genre blend (ADR-022):** When `--primary-genre` is specified,
-one genre is designated as constitutive. Its raw multiplier is blended with the
-contributing-only average across remaining matched genres at a configurable ratio
-`primary_genre_weight` (default 0.6):
+**Optional — Primary genre blend (ADR-022):** One genre may be designated as
+constitutive. Its raw multiplier is blended with the contributing-only average
+across remaining matched genres at a configurable ratio `primary_genre_weight`
+(default 0.6):
 `final_multiplier = (primary_mult × blend) + (secondary_avg × (1 − blend))`
 Setting `primary_genre_weight = 0.0` in config disables the feature.
+
+**Primary genre designation — session flow:**
+After displaying the media header and genre list, `score add` interactively
+prompts for a primary genre before the first dimension prompt. Empty input skips
+designation. The `--primary-genre` flag bypasses the prompt entirely for
+non-interactive use. Invalid input (genre not in the media's list) re-prompts
+with the valid genre list. A genre accepted but absent from config is allowed —
+it defaults to a 1.0 primary multiplier.
 
 Dimensions marked `bias_resistant = true` in config always receive a multiplier
 of exactly 1.0, regardless of what any genre block defines. By default, Enjoyment

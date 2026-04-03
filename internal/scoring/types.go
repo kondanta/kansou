@@ -88,6 +88,12 @@ type SessionMeta struct {
 	// ConfigHash is a SHA256 hex digest of the serialised dimensions config
 	// at time of scoring. Allows detection of config drift for stored scores.
 	ConfigHash string
+	// PrimaryGenre is the genre designated as primary for this session.
+	// Empty when no primary genre was specified. See ADR-022.
+	PrimaryGenre string
+	// PrimaryGenreWeight is the configured blend ratio that was active during
+	// this session (copied from config at score time for provenance).
+	PrimaryGenreWeight float64
 }
 
 // BreakdownRow is the full audit trail for a single dimension's contribution

@@ -21,8 +21,11 @@ Both modes share identical business logic. The binary entry point branches into 
 │  │   CLI Layer      │         │   Server Layer       │   │
 │  │  (cobra)         │         │  (chi router)        │   │
 │  │                  │         │                      │   │
-│  │  score add       │         │  POST /score         │   │
-│  │  media find      │         │  GET  /media/search  │   │
+│  │  score add       │         │  GET  /dimensions    │   │
+│  │  media find      │         │  GET  /genres        │   │
+│  │                  │         │  GET  /media/search  │   │
+│  │                  │         │  GET  /media/{id}    │   │
+│  │                  │         │  POST /score         │   │
 │  │                  │         │  POST /score/publish │   │
 │  └────────┬─────────┘         └──────────┬──────────┘   │
 │           │                              │               │
@@ -105,10 +108,10 @@ CLI: calls AniList client → search by name
 AniList: returns Media{ID, Title, Genres, Tags, Format, Episodes}
         │
         ▼
-CLI: displays media info, prompts user for 7 section scores (1–10)
+CLI: displays media info, prompts for optional primary genre, then prompts for section scores (1–10)
         │
         ▼
-Scoring Engine: applies base weights + genre multipliers + renormalization
+Scoring Engine: applies base weights + genre multipliers (contributing-only avg or primary blend) + renormalization
               → returns FinalScore + optional Breakdown
         │
         ▼
@@ -137,14 +140,36 @@ AniList: fetch by ID → same flow as above from this point
 ### Server Mode — Same Flow Over HTTP
 
 ```
+GET  /dimensions              # list configured scoring dimensions + config_hash
+  → returns ordered dimension list for frontend to build score form
+
+GET  /genres                  # list configured genre multiplier blocks
+  → returns genres + primary_genre_weight for frontend to build primary genre picker
+
 GET  /media/search?q={query}  # search AniList by name
   → returns Media object
 
-POST /score               { "media_id": 154587, "scores": { ... } }
-  → returns FinalScore + Breakdown
+GET  /media/{id}              # fetch media by AniList ID
+  → returns Media object
+
+POST /score               { "media_id": 154587, "scores": { ... }, "primary_genre": "Mystery" }
+  → returns FinalScore + Breakdown (primary_genre is optional)
 
 POST /score/publish       { "media_id": 154587, "score": 8.4 }
   → writes to AniList, returns confirmation
+```
+
+**Web UI initialisation sequence** (embedded `index.html`):
+
+```
+Browser loads /
+  → GET /dimensions  ┐  (parallel)
+  → GET /genres      ┘
+  → user selects media
+  → GET /media/search?q=... or GET /media/{id}
+  → user fills score form (dimensions from /dimensions, primary genre picker from /genres)
+  → POST /score
+  → POST /score/publish  (optional)
 ```
 
 ---

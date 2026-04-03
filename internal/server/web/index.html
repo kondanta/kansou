@@ -174,6 +174,12 @@
   <div class="card">
     <h2>Score</h2>
     <p id="scoring-media" style="font-size:0.85rem;color:#aaa;margin-bottom:1rem;"></p>
+    <div id="primary-genre-row" class="row" style="margin-bottom:1.25rem;">
+      <div>
+        <label>Primary genre <span style="color:#444;">(optional — blend ratio applied to this genre's multipliers)</span></label>
+        <select id="primary-genre"></select>
+      </div>
+    </div>
     <p style="font-size:0.75rem;color:#555;margin-bottom:1rem;">
       Enter 1–10 for each dimension. Leave blank to skip (mark as N/A).
     </p>
@@ -228,7 +234,7 @@
 <script>
   const API = '';  // same origin — served by kansou itself
 
-  let state = { media: null, dimensions: [], result: null };
+  let state = { media: null, dimensions: [], genreWeight: 0.6, result: null };
 
   function show(name) {
     document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
@@ -285,11 +291,17 @@
     err('pick-error', '');
     state.media = media;
     try {
-      const res = await fetch(`${API}/dimensions`);
-      const data = await res.json();
-      if (!res.ok) { err('pick-error', data.error || 'Could not load dimensions.'); return; }
-      state.dimensions = data.dimensions;
-      renderScoreForm(media, data.dimensions);
+      const [dimRes, genreRes] = await Promise.all([
+        fetch(`${API}/dimensions`),
+        fetch(`${API}/genres`),
+      ]);
+      const dimData = await dimRes.json();
+      const genreData = await genreRes.json();
+      if (!dimRes.ok) { err('pick-error', dimData.error || 'Could not load dimensions.'); return; }
+      if (!genreRes.ok) { err('pick-error', genreData.error || 'Could not load genres.'); return; }
+      state.dimensions = dimData.dimensions;
+      state.genreWeight = genreData.primary_genre_weight ?? 0.6;
+      renderScoreForm(media, dimData.dimensions);
       show('score');
     } catch (e) {
       err('pick-error', 'Could not reach the server.');
@@ -303,6 +315,23 @@
       ? media.title_english : media.title_romaji;
     document.getElementById('scoring-media').textContent =
       `${title} · ${media.media_type} · ${media.format}`;
+
+    // Primary genre selector — populated from the media's genre list.
+    const primaryEl = document.getElementById('primary-genre-row');
+    const primarySel = document.getElementById('primary-genre');
+    primarySel.innerHTML = '<option value="">None (contributing-only averaging)</option>';
+    if (media.genres?.length) {
+      media.genres.forEach(g => {
+        const opt = document.createElement('option');
+        opt.value = g;
+        opt.textContent = g;
+        primarySel.appendChild(opt);
+      });
+      primaryEl.style.display = '';
+    } else {
+      primaryEl.style.display = 'none';
+    }
+
     const container = document.getElementById('dim-list');
     container.innerHTML = '';
     dims.forEach(d => {
@@ -339,11 +368,15 @@
       err('score-error', 'Score at least one dimension.');
       return;
     }
+    const primaryGenre = document.getElementById('primary-genre').value;
+    const body = { media_id: state.media.id, scores };
+    if (primaryGenre) body.primary_genre = primaryGenre;
+
     try {
       const res = await fetch(`${API}/score`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ media_id: state.media.id, scores }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) { err('score-error', data.error || 'Scoring failed.'); return; }
@@ -373,9 +406,10 @@
     data.breakdown.forEach(row => {
       const tr = document.createElement('tr');
       let tag = '';
-      if (row.skipped)                      tag = '<span class="tag skipped">skipped</span>';
-      else if (row.weight_override)         tag = '<span class="tag override">overridden</span>';
-      else if (row.applied_multiplier!==1.0) tag = '<span class="tag">genre</span>';
+      if (row.skipped)                                          tag = '<span class="tag skipped">skipped</span>';
+      else if (row.weight_override)                             tag = '<span class="tag override">overridden</span>';
+      else if (row.primary_genre && !row.bias_resistant)        tag = '<span class="tag">primary</span>';
+      else if (row.applied_multiplier !== 1.0)                  tag = '<span class="tag">genre</span>';
       tr.innerHTML = `
         <td>${row.label}${tag}</td>
         <td>${row.skipped ? '—' : row.score.toFixed(1)}</td>
@@ -390,10 +424,19 @@
     const meta = data.meta;
     const info = document.getElementById('genre-info');
     info.innerHTML = '';
+    if (meta.primary_genre) {
+      const blendPct = Math.round((meta.primary_genre_weight ?? 0.6) * 100);
+      info.innerHTML += `<div>Primary genre: <span>${meta.primary_genre} [primary] (blend ${blendPct}/${100-blendPct})</span></div>`;
+    }
     if (meta.all_genres?.length)
-      info.innerHTML += `<div>AniList genres: <span>${meta.all_genres.join(', ')}</span></div>`;
-    if (meta.matched_genres?.length)
-      info.innerHTML += `<div>Matched in config: <span>${meta.matched_genres.join(', ')}</span></div>`;
+      info.innerHTML += `<div>Genres returned: <span>${meta.all_genres.join(', ')}</span></div>`;
+    if (meta.matched_genres?.length) {
+      const lowerPrimary = (meta.primary_genre || '').toLowerCase();
+      const annotated = meta.matched_genres.map(g =>
+        g.toLowerCase() === lowerPrimary ? `${g} [primary]` : g
+      ).join(', ');
+      info.innerHTML += `<div>Genres matched config: <span>${annotated}</span></div>`;
+    }
 
     document.getElementById('notes-text').value = buildNotes(title, data);
   }
@@ -438,6 +481,10 @@
 
     lines.push('');
     const meta = data.meta;
+    if (meta.primary_genre) {
+      const blendPct = Math.round((meta.primary_genre_weight ?? 0.6) * 100);
+      lines.push(`Primary: ${meta.primary_genre} (blend ${blendPct}/${100-blendPct})`);
+    }
     if (meta.all_genres?.length)     lines.push(`Genres:  ${meta.all_genres.join(', ')}`);
     if (meta.matched_genres?.length) lines.push(`Matched: ${meta.matched_genres.join(', ')}`);
     lines.push(`Config:  ${meta.config_hash.slice(0, 8)}`);

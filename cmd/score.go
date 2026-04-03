@@ -98,24 +98,6 @@ func (a *App) runScoreAdd(args []string, urlFlag, typeFlag string, breakdown boo
 		return fmt.Errorf("provide a search query or --url")
 	}
 
-	// Validate --primary-genre if provided: must appear in the media's genre list.
-	primaryGenre := ""
-	if primaryGenreFlag != "" {
-		lowerFlag := strings.ToLower(primaryGenreFlag)
-		found := false
-		for _, g := range media.Genres {
-			if strings.ToLower(g) == lowerFlag {
-				primaryGenre = g // use the canonical casing from AniList
-				found = true
-				break
-			}
-		}
-		if !found {
-			return fmt.Errorf("primary genre %q is not in the media's genre list: %s",
-				primaryGenreFlag, strings.Join(media.Genres, ", "))
-		}
-	}
-
 	// Display media header.
 	episodes := ""
 	if media.Episodes > 0 {
@@ -128,12 +110,28 @@ func (a *App) runScoreAdd(args []string, urlFlag, typeFlag string, breakdown boo
 		fmt.Printf("Genres: %s\n\n", strings.Join(media.Genres, ", "))
 	}
 
+	// Reader is shared across the primary genre prompt and the scoring loop.
+	reader := bufio.NewReader(os.Stdin)
+
+	// Resolve primary genre — from flag (bypasses prompt) or interactively.
+	primaryGenre, err := resolvePrimaryGenre(primaryGenreFlag, media.Genres, reader)
+	if errors.Is(err, errUserCancelled) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	// When the user designated a primary genre interactively, confirm it with the blend ratio.
+	if primaryGenre != "" && primaryGenreFlag == "" {
+		blendPct := int(a.Config.PrimaryGenreWeight * 100)
+		fmt.Printf("Primary genre set: %s (blend %d/%d)\n\n", primaryGenre, blendPct, 100-blendPct)
+	}
+
 	fmt.Println("Score each dimension from 1 to 10. Decimals accepted (e.g. 7.5).")
 	fmt.Println("Enter 's' or 'skip' to mark a dimension as not applicable.")
 	fmt.Println()
 
-	// Interactive prompt loop.
-	reader := bufio.NewReader(os.Stdin)
+	// Interactive scoring loop.
 	scores := make(map[string]float64, len(a.Config.DimensionOrder))
 	skipped := make(map[string]bool)
 
@@ -190,14 +188,16 @@ func (a *App) runScoreAdd(args []string, urlFlag, typeFlag string, breakdown boo
 		Genres:            media.Genres,
 		PrimaryGenre:      primaryGenre,
 		Meta: scoring.SessionMeta{
-			MediaID:       media.ID,
-			TitleRomaji:   media.TitleRomaji,
-			TitleEnglish:  media.TitleEnglish,
-			MediaType:     media.MediaType,
-			AniListURL:    fmt.Sprintf("https://anilist.co/%s/%d", strings.ToLower(string(media.MediaType)), media.ID),
-			AllGenres:     media.Genres,
-			MatchedGenres: matchedGenreList,
-			ConfigHash:    a.Config.DimensionsHash,
+			MediaID:            media.ID,
+			TitleRomaji:        media.TitleRomaji,
+			TitleEnglish:       media.TitleEnglish,
+			MediaType:          media.MediaType,
+			AniListURL:         fmt.Sprintf("https://anilist.co/%s/%d", strings.ToLower(string(media.MediaType)), media.ID),
+			AllGenres:          media.Genres,
+			MatchedGenres:      matchedGenreList,
+			ConfigHash:         a.Config.DimensionsHash,
+			PrimaryGenre:       primaryGenre,
+			PrimaryGenreWeight: a.Config.PrimaryGenreWeight,
 		},
 	}
 
@@ -292,7 +292,7 @@ func printBreakdown(result scoring.Result) {
 			annotations = " [skipped]"
 		} else if row.WeightOverride {
 			annotations = " [overridden]"
-		} else if row.PrimaryGenre != "" && row.PrimaryGenreMultiplier != 0 {
+		} else if row.PrimaryGenre != "" && !row.BiasResistant {
 			annotations = " [primary blended]"
 		} else if row.AppliedMultiplier != 1.0 {
 			annotations = " [genre adjusted]"
@@ -315,16 +315,23 @@ func printBreakdown(result scoring.Result) {
 		fmt.Println("  * bias-resistant — genre multipliers not applied")
 	}
 
+	// Primary genre annotation.
+	if result.Meta.PrimaryGenre != "" {
+		blendPct := int(result.Meta.PrimaryGenreWeight * 100)
+		fmt.Printf("  Primary genre          : %s [primary] (blend %d/%d)\n",
+			result.Meta.PrimaryGenre, blendPct, 100-blendPct)
+	}
+
 	// Genre match detail.
 	if len(result.Meta.AllGenres) > 0 {
-		fmt.Printf("  Genres returned by AniList : %s\n", strings.Join(result.Meta.AllGenres, ", "))
+		fmt.Printf("  Genres returned        : %s\n", strings.Join(result.Meta.AllGenres, ", "))
 	}
 	if len(result.Meta.MatchedGenres) > 0 {
-		fmt.Printf("  Genres matched in config   : %s\n", strings.Join(result.Meta.MatchedGenres, ", "))
+		fmt.Printf("  Genres matched config  : %s\n", annotateMatchedGenres(result.Meta.MatchedGenres, result.Meta.PrimaryGenre))
 	}
 	unmatched := unmatchedGenres(result.Meta.AllGenres, result.Meta.MatchedGenres)
 	if len(unmatched) > 0 {
-		fmt.Printf("  Genres unmatched           : %s\n", strings.Join(unmatched, ", "))
+		fmt.Printf("  Genres unmatched       : %s\n", strings.Join(unmatched, ", "))
 	}
 	fmt.Println()
 }
@@ -342,6 +349,70 @@ func unmatchedGenres(all, matched []string) []string {
 		}
 	}
 	return out
+}
+
+// resolvePrimaryGenre returns the canonical primary genre string (as returned by AniList).
+// If flagVal is non-empty, it is validated against mediaGenres and returned immediately —
+// the interactive prompt is bypassed entirely.
+// If flagVal is empty and mediaGenres is non-empty, the user is prompted interactively.
+// Empty input (Enter) skips designation. Returns errUserCancelled on EOF.
+func resolvePrimaryGenre(flagVal string, mediaGenres []string, reader *bufio.Reader) (string, error) {
+	if flagVal != "" {
+		// --primary-genre flag: validate and return without prompting.
+		lower := strings.ToLower(flagVal)
+		for _, g := range mediaGenres {
+			if strings.ToLower(g) == lower {
+				return g, nil
+			}
+		}
+		return "", fmt.Errorf("primary genre %q is not in the media's genre list: %s",
+			flagVal, strings.Join(mediaGenres, ", "))
+	}
+
+	if len(mediaGenres) == 0 {
+		return "", nil
+	}
+
+	fmt.Println("Designate a primary genre? (enter genre name or press Enter to skip):")
+	for {
+		fmt.Print("  > ")
+		line, readErr := reader.ReadString('\n')
+		if readErr != nil {
+			fmt.Fprintln(os.Stderr, "\nsession cancelled — no score was published")
+			return "", errUserCancelled
+		}
+		input := strings.TrimSpace(line)
+		if input == "" {
+			fmt.Println()
+			return "", nil
+		}
+		lower := strings.ToLower(input)
+		for _, g := range mediaGenres {
+			if strings.ToLower(g) == lower {
+				return g, nil
+			}
+		}
+		fmt.Printf("  %q is not a genre of this show. Choose from: %s (or press Enter to skip):\n",
+			input, strings.Join(mediaGenres, ", "))
+	}
+}
+
+// annotateMatchedGenres renders the matched genre list with the primary genre
+// annotated as "[primary]". Returns the plain joined string when no primary is set.
+func annotateMatchedGenres(matched []string, primaryGenre string) string {
+	if primaryGenre == "" {
+		return strings.Join(matched, ", ")
+	}
+	lowerPrimary := strings.ToLower(primaryGenre)
+	parts := make([]string, len(matched))
+	for i, g := range matched {
+		if strings.ToLower(g) == lowerPrimary {
+			parts[i] = g + " [primary]"
+		} else {
+			parts[i] = g
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 // matchedGenres returns the subset of genres that have a config entry (case-insensitive).

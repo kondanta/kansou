@@ -166,12 +166,31 @@ All values must be > 0.0. The sum of all overridden values must be < 1.0
 --weight story=0.30
 ```
 
-**--primary-genre flag:**
+**--primary-genre flag and inline prompt:**
 
-Designates one of the media's AniList genres as the constitutive genre for
-blended multiplier calculation (ADR-022). The value must match one of the genres
-returned by AniList for this entry (case-insensitive). If it does not match,
-the session exits before prompting.
+After displaying the media header and genre list, `score add` interactively
+prompts for a primary genre before starting the dimension scoring loop:
+
+```
+Designate a primary genre? (enter genre name or press Enter to skip):
+  > Mystery
+
+Primary genre set: Mystery (blend 60/40)
+```
+
+- Input is matched case-insensitively against the media's genre list.
+- If the input does not match, the prompt re-displays with the valid genre list:
+  ```
+  "xyz" is not a genre of this show. Choose from: Mystery, Slice of Life, Supernatural (or press Enter to skip):
+    >
+  ```
+- Empty input (Enter) skips designation — contributing-only averaging applies with no primary.
+- Ctrl+D / EOF during the prompt cancels the session with no score published.
+- A genre accepted here but absent from config still works — it records in provenance
+  but uses a neutral `1.0` primary multiplier since no config entry exists.
+
+Passing `--primary-genre` **bypasses the inline prompt entirely** — the flag value is
+validated and applied without interaction. Useful for scripted or non-interactive use.
 
 ```bash
 --primary-genre Mystery
@@ -254,28 +273,48 @@ Publish to AniList? [y/N]: y
 
 Entering anything other than `y` (including pressing Enter) skips publishing.
 
-**With --breakdown flag:**
+**With --breakdown flag (no primary genre):**
 
 ```
 ──────────────────────────────────────────────────────────────────────────────
   Dimension       Score   Base W   Multiplier   Final W   Contribution
 ──────────────────────────────────────────────────────────────────────────────
   Story             9.0   25.00%     ×1.23      26.10%       2.35
-  Enjoyment        10.0   20.00%     ×1.00  *   21.37%       2.14   [bias-resistant]
-  Characters        8.5   15.00%     ×1.00      16.03%       1.36
-  Production        9.0   15.00%     ×1.00      16.03%       1.44
-  Pacing            8.0   10.00%     ×1.30      11.11%       0.89   [genre adjusted]
-  World Building    9.5   10.00%     ×1.23      10.53%       1.00   [genre adjusted]
+  Enjoyment        10.0   15.00%     ×1.00  *   17.05%       1.71   [bias-resistant]
+  Characters        8.5   20.00%     ×1.00      22.73%       1.93
+  Production        9.0   15.00%     ×1.00      17.05%       1.53
+  Pacing            8.0   10.00%     ×1.30      14.77%       1.18   [genre adjusted]
+  World Building    9.5   10.00%     ×1.23      13.98%       1.33   [genre adjusted]
   Value             —     5.00%       —          —            —     [skipped]
+──────────────────────────────────────────────────────────────────────────────
+  Final Score                                               9.03 / 10
+──────────────────────────────────────────────────────────────────────────────
+  * bias-resistant — genre multipliers not applied
+  Genres returned        : Mystery, Slice of Life, Supernatural
+  Genres matched config  : Mystery, Slice of Life
+  Genres unmatched       : Supernatural
+```
+
+**With --breakdown and a primary genre active:**
+
+```
+──────────────────────────────────────────────────────────────────────────────
+  ...
+  Story             9.0   25.00%     ×1.38      ...          ...   [primary blended]
+  ...
 ──────────────────────────────────────────────────────────────────────────────
   Final Score                                               9.18 / 10
 ──────────────────────────────────────────────────────────────────────────────
   * bias-resistant — genre multipliers not applied
-  Genres returned by AniList : Mystery, Slice of Life, Supernatural
-  Genres matched in config   : Mystery (story×1.5, pacing×1.3, world_building×1.2)
-                               Slice of Life (characters×1.4, pacing×0.8)
-  Genres unmatched           : Supernatural
+  Primary genre          : Mystery [primary] (blend 60/40)
+  Genres returned        : Mystery, Slice of Life, Supernatural
+  Genres matched config  : Mystery [primary], Slice of Life
+  Genres unmatched       : Supernatural
 ```
+
+When a primary genre is active, non-bias-resistant rows are annotated `[primary blended]`.
+The footer shows the designated primary genre, its blend ratio, and marks it in the matched
+genre list. When no primary genre is set, the "Primary genre" line is omitted entirely.
 
 The breakdown table shows:
 - Base weight before genre adjustment

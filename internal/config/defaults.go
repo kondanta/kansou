@@ -18,13 +18,13 @@ func defaults() *Config {
 		"enjoyment": {
 			Label:         "Enjoyment",
 			Description:   "Gut feeling. How much fun did you have? Did you look forward to the next entry?",
-			Weight:        0.20,
+			Weight:        0.15,
 			BiasResistant: true,
 		},
 		"characters": {
 			Label:         "Characters",
 			Description:   "Relatability, growth arcs, and chemistry between the cast",
-			Weight:        0.15,
+			Weight:        0.20,
 			BiasResistant: false,
 		},
 		"production": {

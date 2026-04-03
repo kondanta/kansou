@@ -299,6 +299,48 @@ attempting to parse `data`.
 
 ---
 
+## REST Endpoints — Genre and Score
+
+### GET /genres
+
+Returns all configured genre multiplier blocks and the primary genre blend ratio.
+Used by web clients to populate the primary genre picker.
+
+**Response shape:**
+```json
+{
+  "primary_genre_weight": 0.6,
+  "genres": [
+    { "genre": "action",  "multipliers": { "production": 1.4, "pacing": 1.3, "story": 0.8 } },
+    { "genre": "mystery", "multipliers": { "story": 1.5, "pacing": 1.3, "world_building": 1.2 } }
+  ]
+}
+```
+
+- `primary_genre_weight` — the configured blend ratio (mirrors `primary_genre_weight` in config.toml).
+- `genres` — alphabetically sorted list of configured genre blocks.
+- `multipliers` — only dimensions explicitly configured for that genre; dimensions absent here
+  are excluded from the contributing-only average (not treated as 1.0).
+
+### POST /score — primary_genre field
+
+The `POST /score` request body accepts an optional `primary_genre` string:
+
+```json
+{
+  "media_id": 154587,
+  "scores": { "story": 9, "characters": 8.5 },
+  "primary_genre": "Mystery"
+}
+```
+
+- Value is passed through to the engine as `Entry.PrimaryGenre`.
+- Case-insensitive matching is applied by the engine against the media's genre list.
+- If omitted or empty, plain contributing-only averaging applies.
+- The response `meta` object includes `primary_genre` and `primary_genre_weight` for provenance.
+
+---
+
 ## Rate Limiting
 
 AniList enforces a rate limit of 90 requests per minute. `kansou` makes at

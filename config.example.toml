@@ -58,13 +58,13 @@ bias_resistant = false
 [dimensions.enjoyment]
 label = "Enjoyment"
 description = "Gut feeling. How much fun did you have? Did you look forward to the next entry?"
-weight = 0.20
+weight = 0.15
 bias_resistant = true
 
 [dimensions.characters]
 label = "Characters"
 description = "Relatability, growth arcs, and chemistry between the cast"
-weight = 0.15
+weight = 0.20
 bias_resistant = false
 
 [dimensions.production]
