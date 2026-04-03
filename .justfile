@@ -49,3 +49,4 @@ run *args:
 # Start the REST server in development mode
 serve:
     go run {{main}} serve
+

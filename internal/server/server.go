@@ -6,6 +6,7 @@ package server
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -22,6 +23,9 @@ import (
 	"github.com/kondanta/kansou/internal/config"
 	"github.com/kondanta/kansou/internal/scoring"
 )
+
+//go:embed web/index.html
+var indexHTML []byte
 
 // Server holds the dependencies for the REST server.
 type Server struct {
@@ -49,6 +53,12 @@ func (s *Server) buildRouter() *chi.Mux {
 	r.Use(middleware.Recoverer)
 	r.Use(corsMiddleware(s.cfg.Server.CORSAllowedOrigins))
 	r.Use(requestLogger)
+
+	// Test UI — served at root.
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(indexHTML) //nolint:errcheck
+	})
 
 	r.Get("/health", s.handleHealth)
 	r.Get("/dimensions", s.handleDimensions)

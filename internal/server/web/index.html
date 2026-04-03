@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>kansou</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: ui-monospace, "Cascadia Code", "Source Code Pro", monospace;
+      background: #0f0f0f;
+      color: #e0e0e0;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    h1 { font-size: 1.4rem; color: #fff; margin-bottom: 0.25rem; }
+    .subtitle { color: #666; font-size: 0.8rem; margin-bottom: 2rem; }
+
+    section { display: none; }
+    section.active { display: block; }
+
+    .card {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      padding: 1.5rem;
+      max-width: 680px;
+    }
+
+    .card h2 { font-size: 0.9rem; color: #888; text-transform: uppercase;
+                letter-spacing: 0.08em; margin-bottom: 1.25rem; }
+
+    label { display: block; font-size: 0.8rem; color: #888; margin-bottom: 0.3rem; }
+
+    input[type="text"], input[type="number"], select, textarea {
+      width: 100%;
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 4px;
+      color: #e0e0e0;
+      padding: 0.5rem 0.75rem;
+      font-family: inherit;
+      font-size: 0.875rem;
+      outline: none;
+    }
+    input:focus, select:focus, textarea:focus { border-color: #555; }
+    textarea { resize: vertical; line-height: 1.6; color: #aaa; }
+
+    .row { display: flex; gap: 0.75rem; margin-bottom: 1rem; }
+    .row > * { flex: 1; }
+    .row > .shrink { flex: 0 0 140px; }
+
+    button {
+      background: #2a2a2a;
+      border: 1px solid #3a3a3a;
+      border-radius: 4px;
+      color: #e0e0e0;
+      padding: 0.5rem 1.25rem;
+      font-family: inherit;
+      font-size: 0.875rem;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    button:hover { background: #333; border-color: #555; }
+    button.primary { background: #1d4ed8; border-color: #2563eb; color: #fff; }
+    button.primary:hover { background: #2563eb; }
+    button.success { background: #15803d; border-color: #16a34a; color: #fff; }
+    button.success:hover { background: #16a34a; }
+    button.ghost { background: transparent; border-color: #2a2a2a; color: #666;
+                   font-size: 0.78rem; padding: 0.35rem 0.75rem; }
+    button.ghost:hover { color: #aaa; border-color: #444; background: transparent; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .actions { display: flex; gap: 0.75rem; margin-top: 1.25rem; align-items: center; }
+
+    .media-list { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
+    .media-item {
+      background: #111;
+      border: 1px solid #2a2a2a;
+      border-radius: 4px;
+      padding: 0.75rem 1rem;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .media-item:hover { background: #1e1e1e; border-color: #444; }
+    .media-item .title { font-size: 0.9rem; color: #e0e0e0; }
+    .media-item .meta  { font-size: 0.75rem; color: #555; margin-top: 0.2rem; }
+
+    .dim-row {
+      display: grid;
+      grid-template-columns: 140px 1fr 90px;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.6rem 0;
+      border-bottom: 1px solid #1e1e1e;
+    }
+    .dim-row:last-child { border-bottom: none; }
+    .dim-label { font-size: 0.85rem; color: #ccc; }
+    .dim-desc  { font-size: 0.75rem; color: #555; }
+    .dim-input { text-align: center; }
+
+    .final-score { font-size: 2.5rem; font-weight: 700; color: #fff;
+                   margin: 0.5rem 0 0.25rem; }
+    .score-label { font-size: 0.8rem; color: #666; margin-bottom: 1.5rem; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin-top: 1rem; }
+    th { text-align: left; color: #555; font-weight: normal; padding: 0.3rem 0.5rem;
+         border-bottom: 1px solid #222; }
+    td { padding: 0.4rem 0.5rem; border-bottom: 1px solid #1a1a1a; }
+    tr:last-child td { border-bottom: none; }
+    .tag { display: inline-block; font-size: 0.7rem; padding: 0.1rem 0.4rem;
+           border-radius: 3px; background: #1e2a1e; color: #4ade80; margin-left: 0.3rem; }
+    .tag.skipped  { background: #1e1e2a; color: #818cf8; }
+    .tag.override { background: #2a1e1e; color: #f87171; }
+
+    .genre-row { margin-top: 1rem; font-size: 0.78rem; color: #555; line-height: 1.8; }
+    .genre-row span { color: #888; }
+
+    .copy-section { margin-top: 1.5rem; }
+    .copy-header { display: flex; justify-content: space-between; align-items: center;
+                   margin-bottom: 0.5rem; }
+    .copy-header label { margin: 0; font-size: 0.78rem; color: #555; }
+    .copied-flash { font-size: 0.75rem; color: #4ade80; opacity: 0;
+                    transition: opacity 0.3s; pointer-events: none; }
+    .copied-flash.show { opacity: 1; }
+
+    .error { color: #f87171; font-size: 0.82rem; margin-top: 0.75rem; }
+  </style>
+</head>
+<body>
+
+<h1>kansou</h1>
+<p class="subtitle">感想 — anime &amp; manga scoring</p>
+
+<!-- 1. Search -->
+<section id="sec-search" class="active">
+  <div class="card">
+    <h2>Search</h2>
+    <div class="row">
+      <div>
+        <label>Title</label>
+        <input id="q" type="text" placeholder="Frieren, Mushishi, …" />
+      </div>
+      <div class="shrink">
+        <label>Type</label>
+        <select id="type">
+          <option value="">Any</option>
+          <option value="ANIME">Anime</option>
+          <option value="MANGA">Manga</option>
+        </select>
+      </div>
+    </div>
+    <button class="primary" onclick="search()">Search</button>
+    <p id="search-error" class="error"></p>
+  </div>
+</section>
+
+<!-- 2. Pick media -->
+<section id="sec-pick">
+  <div class="card">
+    <h2>Select</h2>
+    <ul id="media-list" class="media-list"></ul>
+    <p id="pick-error" class="error"></p>
+    <div class="actions">
+      <button onclick="show('search')">← Back</button>
+    </div>
+  </div>
+</section>
+
+<!-- 3. Score -->
+<section id="sec-score">
+  <div class="card">
+    <h2>Score</h2>
+    <p id="scoring-media" style="font-size:0.85rem;color:#aaa;margin-bottom:1rem;"></p>
+    <p style="font-size:0.75rem;color:#555;margin-bottom:1rem;">
+      Enter 1–10 for each dimension. Leave blank to skip (mark as N/A).
+    </p>
+    <div id="dim-list"></div>
+    <p id="score-error" class="error"></p>
+    <div class="actions">
+      <button onclick="show('pick')">← Back</button>
+      <button class="primary" onclick="submitScore()">Calculate Score</button>
+    </div>
+  </div>
+</section>
+
+<!-- 4. Result -->
+<section id="sec-result">
+  <div class="card">
+    <h2>Result</h2>
+    <p id="result-media" style="font-size:0.85rem;color:#aaa;margin-bottom:0.5rem;"></p>
+    <div class="final-score" id="final-score"></div>
+    <p class="score-label">weighted final score</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Dimension</th><th>Score</th><th>Base W</th>
+          <th>Multiplier</th><th>Final W</th><th>Contribution</th>
+        </tr>
+      </thead>
+      <tbody id="breakdown-body"></tbody>
+    </table>
+
+    <div id="genre-info" class="genre-row"></div>
+
+    <div class="copy-section">
+      <div class="copy-header">
+        <label>Notes — paste into AniList</label>
+        <div style="display:flex;gap:0.5rem;align-items:center;">
+          <span id="copied-flash" class="copied-flash">Copied!</span>
+          <button class="ghost" onclick="copyNotes()">Copy</button>
+        </div>
+      </div>
+      <textarea id="notes-text" rows="12" readonly></textarea>
+    </div>
+
+    <p id="publish-error" class="error"></p>
+    <div class="actions">
+      <button onclick="show('search')">← New Search</button>
+      <button class="success" id="publish-btn" onclick="publish()">Publish to AniList</button>
+    </div>
+  </div>
+</section>
+
+<script>
+  const API = '';  // same origin — served by kansou itself
+
+  let state = { media: null, dimensions: [], result: null };
+
+  function show(name) {
+    document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
+    document.getElementById('sec-' + name).classList.add('active');
+  }
+
+  function err(id, msg) { document.getElementById(id).textContent = msg; }
+
+  // --- search ---
+  document.getElementById('q').addEventListener('keydown', e => {
+    if (e.key === 'Enter') search();
+  });
+
+  async function search() {
+    err('search-error', '');
+    const q = document.getElementById('q').value.trim();
+    if (!q) { err('search-error', 'Enter a title to search.'); return; }
+    const type = document.getElementById('type').value;
+    let url = `${API}/media/search?q=${encodeURIComponent(q)}`;
+    if (type) url += `&type=${type}`;
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!res.ok) { err('search-error', data.error || 'Search failed.'); return; }
+      if (!data || data.length === 0) { err('search-error', 'No results found.'); return; }
+      renderPicker(data);
+      show('pick');
+    } catch (e) {
+      err('search-error', 'Could not reach the server.');
+    }
+  }
+
+  // --- picker ---
+  function renderPicker(results) {
+    err('pick-error', '');
+    const list = document.getElementById('media-list');
+    list.innerHTML = '';
+    results.forEach(m => {
+      const li = document.createElement('li');
+      li.className = 'media-item';
+      const title = (m.title_english && m.title_english !== m.title_romaji)
+        ? m.title_english : m.title_romaji;
+      const extra = m.episodes ? `${m.episodes} eps` : m.chapters ? `${m.chapters} ch` : '';
+      li.innerHTML = `
+        <div class="title">${title}</div>
+        <div class="meta">${m.media_type} · ${m.format}${extra ? ' · ' + extra : ''} · ${m.status}</div>
+      `;
+      li.onclick = () => selectMedia(m);
+      list.appendChild(li);
+    });
+  }
+
+  async function selectMedia(media) {
+    err('pick-error', '');
+    state.media = media;
+    try {
+      const res = await fetch(`${API}/dimensions`);
+      const data = await res.json();
+      if (!res.ok) { err('pick-error', data.error || 'Could not load dimensions.'); return; }
+      state.dimensions = data.dimensions;
+      renderScoreForm(media, data.dimensions);
+      show('score');
+    } catch (e) {
+      err('pick-error', 'Could not reach the server.');
+    }
+  }
+
+  // --- scoring form ---
+  function renderScoreForm(media, dims) {
+    err('score-error', '');
+    const title = (media.title_english && media.title_english !== media.title_romaji)
+      ? media.title_english : media.title_romaji;
+    document.getElementById('scoring-media').textContent =
+      `${title} · ${media.media_type} · ${media.format}`;
+    const container = document.getElementById('dim-list');
+    container.innerHTML = '';
+    dims.forEach(d => {
+      const row = document.createElement('div');
+      row.className = 'dim-row';
+      row.innerHTML = `
+        <div>
+          <div class="dim-label">${d.label}</div>
+          <div style="font-size:0.7rem;color:#444;">${(d.weight*100).toFixed(0)}% base</div>
+        </div>
+        <div class="dim-desc">${d.description}</div>
+        <input class="dim-input" type="number" id="dim-${d.key}"
+               min="1" max="10" step="0.5" placeholder="skip" />
+      `;
+      container.appendChild(row);
+    });
+  }
+
+  // --- submit score ---
+  async function submitScore() {
+    err('score-error', '');
+    const scores = {};
+    for (const d of state.dimensions) {
+      const val = document.getElementById(`dim-${d.key}`).value.trim();
+      if (val === '') continue;
+      const n = parseFloat(val);
+      if (isNaN(n) || n < 1 || n > 10) {
+        err('score-error', `${d.label}: enter a number between 1 and 10, or leave blank to skip.`);
+        return;
+      }
+      scores[d.key] = n;
+    }
+    if (Object.keys(scores).length === 0) {
+      err('score-error', 'Score at least one dimension.');
+      return;
+    }
+    try {
+      const res = await fetch(`${API}/score`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ media_id: state.media.id, scores }),
+      });
+      const data = await res.json();
+      if (!res.ok) { err('score-error', data.error || 'Scoring failed.'); return; }
+      state.result = data;
+      renderResult(data);
+      show('result');
+    } catch (e) {
+      err('score-error', 'Could not reach the server.');
+    }
+  }
+
+  // --- result ---
+  function renderResult(data) {
+    err('publish-error', '');
+    const btn = document.getElementById('publish-btn');
+    btn.disabled = false;
+    btn.textContent = 'Publish to AniList';
+    btn.className = 'success';
+
+    const title = (state.media.title_english && state.media.title_english !== state.media.title_romaji)
+      ? state.media.title_english : state.media.title_romaji;
+    document.getElementById('result-media').textContent = title;
+    document.getElementById('final-score').textContent = data.final_score.toFixed(2) + ' / 10';
+
+    const tbody = document.getElementById('breakdown-body');
+    tbody.innerHTML = '';
+    data.breakdown.forEach(row => {
+      const tr = document.createElement('tr');
+      let tag = '';
+      if (row.skipped)                      tag = '<span class="tag skipped">skipped</span>';
+      else if (row.weight_override)         tag = '<span class="tag override">overridden</span>';
+      else if (row.applied_multiplier!==1.0) tag = '<span class="tag">genre</span>';
+      tr.innerHTML = `
+        <td>${row.label}${tag}</td>
+        <td>${row.skipped ? '—' : row.score.toFixed(1)}</td>
+        <td>${(row.base_weight*100).toFixed(1)}%</td>
+        <td>${row.skipped ? '—' : '×'+row.applied_multiplier.toFixed(2)}${row.bias_resistant&&!row.skipped?' *':''}</td>
+        <td>${row.skipped ? '—' : (row.final_weight*100).toFixed(1)+'%'}</td>
+        <td>${row.skipped ? '—' : row.contribution.toFixed(2)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    const meta = data.meta;
+    const info = document.getElementById('genre-info');
+    info.innerHTML = '';
+    if (meta.all_genres?.length)
+      info.innerHTML += `<div>AniList genres: <span>${meta.all_genres.join(', ')}</span></div>`;
+    if (meta.matched_genres?.length)
+      info.innerHTML += `<div>Matched in config: <span>${meta.matched_genres.join(', ')}</span></div>`;
+
+    document.getElementById('notes-text').value = buildNotes(title, data);
+  }
+
+  // --- copy/paste notes ---
+  function buildNotes(title, data) {
+    const lines = [];
+    lines.push(title);
+    lines.push(`Score: ${data.final_score.toFixed(2)} / 10  [kansou]`);
+    lines.push('');
+
+    const colW = Math.max(...data.breakdown.map(r => r.label.length)) + 2;
+    data.breakdown.forEach(row => {
+      const label = row.label.padEnd(colW);
+      if (row.skipped) {
+        lines.push(`${label}  —       [skipped]`);
+      } else {
+        const score   = row.score.toFixed(1).padStart(4);
+        const finalW  = ((row.final_weight * 100).toFixed(1) + '%').padStart(6);
+        const contrib = row.contribution.toFixed(2).padStart(5);
+        const flags = [
+          row.bias_resistant                ? '*'                                   : '',
+          row.applied_multiplier !== 1.0    ? `×${row.applied_multiplier.toFixed(2)}` : '',
+          row.weight_override               ? '[override]'                          : '',
+        ].filter(Boolean).join(' ');
+        lines.push(`${label}${score}  ${finalW}  ${contrib}${flags ? '  '+flags : ''}`);
+      }
+    });
+
+    lines.push('');
+    const meta = data.meta;
+    if (meta.all_genres?.length)     lines.push(`Genres:  ${meta.all_genres.join(', ')}`);
+    if (meta.matched_genres?.length) lines.push(`Matched: ${meta.matched_genres.join(', ')}`);
+    lines.push(`Config:  ${meta.config_hash.slice(0, 8)}`);
+
+    return lines.join('\n');
+  }
+
+  function copyNotes() {
+    navigator.clipboard.writeText(document.getElementById('notes-text').value).then(() => {
+      const flash = document.getElementById('copied-flash');
+      flash.classList.add('show');
+      setTimeout(() => flash.classList.remove('show'), 1500);
+    });
+  }
+
+  // --- publish ---
+  async function publish() {
+    err('publish-error', '');
+    const btn = document.getElementById('publish-btn');
+    btn.disabled = true;
+    try {
+      const res = await fetch(`${API}/score/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ media_id: state.media.id, score: state.result.final_score }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        err('publish-error', data.error || 'Publish failed.');
+        btn.disabled = false;
+        return;
+      }
+      btn.textContent = `✓ Published — ${data.score.toFixed(2)}`;
+    } catch (e) {
+      err('publish-error', 'Could not reach the server.');
+      btn.disabled = false;
+    }
+  }
+</script>
+</body>
+</html>
