@@ -795,3 +795,91 @@ the existing `--weight` CLI flag.
 - `GET /dimensions` added to the router. `handleDimensions`, `dimensionItem`,
   and `dimensionsResponse` added to `internal/server/handlers.go`.
 - `docs/REQUIREMENTS.md` and `docs/ANILIST_INTEGRATION.md` updated.
+
+---
+
+## ADR-020 — Tag-rank-weighted multipliers as a complement to genre bias
+
+**Status:** Proposed — filed as a pre-decision candidate before v1.0.0 tag.
+No code changes. To be revisited before or after the first stable release.
+
+**Date:** 2026
+
+**Context:**
+The current genre bias system (ADR-005) treats genre matching as binary: a
+genre either matches or it doesn't, and its configured multiplier applies at
+full strength. AniList also returns **media tags** on every entry — and unlike
+genres, tags carry a **rank** (0–100) representing the community's confidence
+that the tag applies to the entry. A tag ranked at 99 (e.g. "Tragedy" on a
+tragedy) is near-certain; one ranked at 10 is a loose, contested association.
+
+The current system ignores tags entirely. If tag data were used as a signal for
+dimension weighting, a tag's rank is a natural scaling factor for how strongly
+its associated multiplier should apply. A show that is deeply a tragedy should
+lean harder on Story/Emotional Impact than one that is only peripherally
+tragic.
+
+**Proposed decision:**
+Introduce a `[tags.*]` config section alongside the existing `[genres.*]`
+section. Each tag entry follows the same per-dimension multiplier structure as
+genres. When scoring, each matched tag's multiplier is **rank-scaled** before
+being included in the average:
+
+```
+effective_multiplier(tag, dim) = 1.0 + (configured_multiplier - 1.0) × (rank / 100)
+```
+
+At `rank = 100` this is the full configured multiplier. At `rank = 0` it
+collapses to a neutral `1.0`. At `rank = 50` it applies half the configured
+adjustment.
+
+The combined multiplier for a dimension would then average across all matched
+genres **and** all matched tags together:
+
+```
+m̄ᵢ = (Σ genre multipliers + Σ rank-scaled tag multipliers) / (|matched genres| + |matched tags|)
+```
+
+Bias-resistant dimensions continue to receive `1.0` regardless.
+
+**Why this is interesting:**
+The current system knows a show is "Action" — it does not know whether the
+action is incidental or wall-to-wall. The tag rank provides exactly that
+gradient. A `max_multiplier` ceiling (ADR-017) already exists to bound the
+output, so the scaled values cannot escape the configured ceiling even when
+multiple tags compound.
+
+**Open questions before accepting:**
+1. Should tags and genres pool into a single average, or should they be
+   computed as separate averages and then averaged together? Pooling dilutes
+   genres as more tags are added (AniList returns many tags per entry).
+   Separate averaging and then blending may be more stable.
+2. AniList tags include a `isMediaSpoiler` and `isGeneralSpoiler` flag.
+   Should spoiler tags be excluded from multiplier calculations by default,
+   since their presence leaks plot information the user may not want surfaced?
+3. Should there be a `min_tag_rank` threshold (e.g. ignore tags below rank 30)
+   to filter noise before rank-scaling is applied?
+4. The `[tags.*]` config section would substantially expand `config.toml` for
+   users who want full coverage. A sensible default (no tag rules) preserves
+   backward compatibility — tag bias is opt-in.
+
+**Alternatives to consider:**
+- Tags only, no genres — a cleaner single signal, but genres are simpler to
+  reason about in config and are coarser-grained by design.
+- Tag rank as a binary threshold (e.g. rank ≥ 50 = match, rank < 50 = ignore)
+  — simpler to configure but discards the gradient that makes tags interesting.
+- Use tag rank to pick which configured multiplier to apply from a tiered table
+  (high/medium/low) rather than continuous scaling — a middle ground worth
+  considering if continuous math proves hard to tune in practice.
+
+**Consequences if accepted:**
+- `internal/anilist/` must surface `tags` (key + rank) on the `Media` struct.
+  The GraphQL queries already fetch `tags` — only the Go struct mapping is missing.
+- `Entry` would gain a `Tags []TagEntry` field alongside `Genres []string`.
+- `combinedMultiplier` would need to accept both genre matches and rank-scaled
+  tag matches and pool them in the averaging step.
+- `config.go` and `config.example.toml` gain a `[tags.*]` section with the
+  same per-dimension multiplier structure as `[genres.*]`.
+- `BreakdownRow.GenreMultipliers` (currently genre-only) may need to become
+  `AppliedMultipliers map[string]float64` covering both genres and tags, to
+  preserve full provenance in the breakdown output.
