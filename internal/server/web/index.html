@@ -405,21 +405,34 @@
     lines.push(`Score: ${data.final_score.toFixed(2)} / 10  [kansou]`);
     lines.push('');
 
-    const colW = Math.max(...data.breakdown.map(r => r.label.length)) + 2;
+    const colW = Math.max(...data.breakdown.map(r => r.label.length), 9) + 2;
+
+    // header row — column widths match the data format below
+    const hDim    = 'Dimension'.padEnd(colW);
+    const hScore  = 'Scr'.padStart(4);
+    const hBaseW  = 'BaseW'.padStart(6);
+    const hMult   = '×Mult'.padStart(6);
+    const hFinalW = 'FinalW'.padStart(6);
+    const hContrib= 'Contrib'.padStart(7);
+    lines.push(`${hDim}${hScore}  ${hBaseW}  ${hMult}  ${hFinalW}  ${hContrib}`);
+    lines.push('─'.repeat(colW + 37));
+
     data.breakdown.forEach(row => {
       const label = row.label.padEnd(colW);
       if (row.skipped) {
-        lines.push(`${label}  —       [skipped]`);
+        const blank = '—'.padStart(4);
+        lines.push(`${label}${blank}  ${'—'.padStart(6)}  ${'—'.padStart(6)}  ${'—'.padStart(6)}  ${'—'.padStart(7)}  [skipped]`);
       } else {
         const score   = row.score.toFixed(1).padStart(4);
+        const baseW   = ((row.base_weight * 100).toFixed(1) + '%').padStart(6);
+        const mult    = ('×' + row.applied_multiplier.toFixed(2)).padStart(6);
         const finalW  = ((row.final_weight * 100).toFixed(1) + '%').padStart(6);
-        const contrib = row.contribution.toFixed(2).padStart(5);
+        const contrib = row.contribution.toFixed(2).padStart(7);
         const flags = [
-          row.bias_resistant                ? '*'                                   : '',
-          row.applied_multiplier !== 1.0    ? `×${row.applied_multiplier.toFixed(2)}` : '',
-          row.weight_override               ? '[override]'                          : '',
+          row.bias_resistant  ? '*'          : '',
+          row.weight_override ? '[override]' : '',
         ].filter(Boolean).join(' ');
-        lines.push(`${label}${score}  ${finalW}  ${contrib}${flags ? '  '+flags : ''}`);
+        lines.push(`${label}${score}  ${baseW}  ${mult}  ${finalW}  ${contrib}${flags ? '  ' + flags : ''}`);
       }
     });
 
