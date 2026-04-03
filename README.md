@@ -18,6 +18,64 @@ Fetches media metadata from [AniList](https://anilist.co), walks you through a s
 
 ---
 
+## How It Works
+
+kansou scores media through a four-step pipeline. The renormalization step is what makes it robust: skipping a dimension or applying a genre multiplier never silently distorts the other weights — the formula always rebalances.
+
+### Step 1 — Effective weight
+
+Each active dimension starts from its configured base weight. If the media's genres match any configured genre rules, the dimension's weight is nudged by a **genre multiplier**.
+
+The multiplier for dimension $i$ is the **average** across all matched genres (genres without a rule for this dimension contribute a neutral $1.0$):
+
+$$\bar{m}_i = \frac{1}{|G|} \sum_{g \in G} m_{g,i}$$
+
+The effective (pre-normalisation) weight is:
+
+$$w_{\text{eff},i} = w_{\text{base},i} \times \bar{m}_i$$
+
+Dimensions marked `bias_resistant` always use $\bar{m}_i = 1.0$ — genre rules never touch them.
+
+### Step 2 — Renormalization
+
+Skipped dimensions are removed from the pool entirely. The remaining effective weights are rescaled to sum exactly to $1.0$:
+
+$$w'_i = \frac{w_{\text{eff},i}}{\displaystyle\sum_{j \in \text{active}} w_{\text{eff},j}}$$
+
+This is the core of the formula. Whether you skip two dimensions or five, whether genres push weights up or down, the active dimensions always share the full $[0, 1]$ budget proportionally. Nothing leaks, nothing inflates.
+
+### Step 3 — Per-session overrides (optional)
+
+`--weight pacing=0.05` pins a dimension to an explicit value. Overridden dimensions are fixed; the remaining budget is distributed proportionally among the rest:
+
+$$w''_k = \frac{w'_k}{\displaystyle\sum_{j \notin \text{pinned}} w'_j} \times \left(1 - \sum_{i \in \text{pinned}} w^*_i\right) \quad \text{for } k \notin \text{pinned}$$
+
+### Step 4 — Final score
+
+$$\text{score} = \sum_i s_i \times w''_i \qquad s_i \in [1, 10]$$
+
+Each dimension's score is multiplied by its final renormalized weight. The result is a single number on the $[1, 10]$ scale.
+
+### Example
+
+Config has five dimensions with equal base weights of $0.20$. The media matches a genre that sets a $1.5\times$ multiplier on *Story* and a $0.8\times$ multiplier on *Pacing*. The user skips *Production*.
+
+| Dimension   | Base W | Multiplier | Effective W | Renormalized W |
+|-------------|--------|-----------|-------------|----------------|
+| Story       | 0.20   | ×1.50     | 0.300       | **0.294**      |
+| Characters  | 0.20   | ×1.00     | 0.200       | **0.196**      |
+| Pacing      | 0.20   | ×0.80     | 0.160       | **0.157**      |
+| Enjoyment   | 0.20   | ×1.00 *   | 0.200       | **0.196**      |
+| Production  | —      | skipped   | —           | —              |
+| World Build | 0.20   | ×1.00     | 0.200       | **0.196**      |
+| **Total**   |        |           | **1.020** ✗ | **1.000** ✓    |
+
+\* Enjoyment is `bias_resistant` — the genre multiplier is ignored.
+
+Without renormalization the weights would sum to $1.02$ and the score would be silently inflated. With renormalization, the active pool is always $1.0$ and the result is honest.
+
+---
+
 ## Installation
 
 ```bash
