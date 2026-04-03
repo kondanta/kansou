@@ -349,7 +349,7 @@ func (s *Server) handleScorePublish(w http.ResponseWriter, r *http.Request) {
 // --- helpers ---
 
 // writeJSON serialises v as JSON and writes it to w with the given status code.
-func writeJSON(w http.ResponseWriter, status int, v interface{}) { // interface{} required: generic JSON response helper
+func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v) //nolint:errcheck — write errors on closed connections are not actionable

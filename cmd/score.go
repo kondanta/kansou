@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -59,14 +60,12 @@ func (a *App) runScoreAdd(args []string, urlFlag, typeFlag string, breakdown boo
 	// Parse --type and --weight before any network I/O.
 	mediaType, err := resolveMediaType(typeFlag)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	overrides, err := parseWeightFlag(weightFlag, a.Config.Dimensions)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	// Fetch media.
@@ -75,28 +74,26 @@ func (a *App) runScoreAdd(args []string, urlFlag, typeFlag string, breakdown boo
 	case urlFlag != "":
 		id, parseErr := anilist.ParseMediaURL(urlFlag)
 		if parseErr != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", parseErr)
-			os.Exit(1)
+			return parseErr
 		}
 		media, err = a.AniList.FetchByID(id)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 	case len(args) > 0:
 		results, searchErr := a.AniList.SearchByNameMulti(args[0], mediaType)
 		if searchErr != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", searchErr)
-			os.Exit(1)
+			return searchErr
 		}
 		media, err = pickMedia(results)
+		if errors.Is(err, errUserCancelled) {
+			return nil
+		}
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 	default:
-		fmt.Fprintf(os.Stderr, "error: provide a search query or --url\n")
-		os.Exit(1)
+		return fmt.Errorf("provide a search query or --url")
 	}
 
 	// Display media header.
@@ -126,18 +123,17 @@ func (a *App) runScoreAdd(args []string, urlFlag, typeFlag string, breakdown boo
 
 		for {
 			fmt.Print("  > ")
-			line, err := reader.ReadString('\n')
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "\nsession cancelled — no score was published\n")
-				os.Exit(0)
+			line, readErr := reader.ReadString('\n')
+			if readErr != nil {
+				fmt.Fprintln(os.Stderr, "\nsession cancelled — no score was published")
+				return nil
 			}
 			input := strings.TrimSpace(line)
 
 			if input == "s" || input == "skip" {
-				// Check: can't skip an overridden dimension.
+				// Can't skip an overridden dimension.
 				if _, overridden := overrides[key]; overridden {
-					fmt.Fprintf(os.Stderr, "error: dimension %q was both weight-overridden and skipped — these are mutually exclusive\n", key)
-					os.Exit(1)
+					return fmt.Errorf("dimension %q was both weight-overridden and skipped — these are mutually exclusive", key)
 				}
 				skipped[key] = true
 				fmt.Printf("  ✓ %s marked as not applicable — excluded from score\n\n", def.Label)
@@ -160,10 +156,8 @@ func (a *App) runScoreAdd(args []string, urlFlag, typeFlag string, breakdown boo
 		}
 	}
 
-	// Check: all skipped?
 	if len(skipped) == len(a.Config.DimensionOrder) {
-		fmt.Fprintf(os.Stderr, "error: all dimensions were skipped — at least one dimension must be scored\n")
-		os.Exit(1)
+		return fmt.Errorf("all dimensions were skipped — at least one dimension must be scored")
 	}
 
 	// Determine matched genres for session meta.
@@ -188,8 +182,7 @@ func (a *App) runScoreAdd(args []string, urlFlag, typeFlag string, breakdown boo
 
 	result, err := a.Engine.Score(entry)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	// Print final score.
@@ -211,9 +204,7 @@ func (a *App) runScoreAdd(args []string, urlFlag, typeFlag string, breakdown boo
 
 	pub, pubErr := a.AniList.PublishScore(media.ID, result.FinalScore)
 	if pubErr != nil {
-		fmt.Fprintf(os.Stderr, "error: failed to publish score to AniList: %v\n", pubErr)
-		fmt.Fprintf(os.Stderr, "       your calculated score was %.2f\n", result.FinalScore)
-		os.Exit(1)
+		return fmt.Errorf("publishing score to AniList (your calculated score was %.2f): %w", result.FinalScore, pubErr)
 	}
 	fmt.Printf("✓ Score published to AniList\n")
 	fmt.Printf("  %s — %.2f\n", pub.TitleRomaji, pub.Score)
@@ -224,7 +215,7 @@ func (a *App) runScoreAdd(args []string, urlFlag, typeFlag string, breakdown boo
 // Validates that keys exist in dims, values are in (0,1], and sum < 1.0.
 func parseWeightFlag(flag string, dims map[string]config.DimensionDef) (map[string]float64, error) {
 	if flag == "" {
-		return map[string]float64{}, nil
+		return nil, nil
 	}
 	result := map[string]float64{}
 	pairs := strings.Split(flag, ",")
@@ -263,7 +254,6 @@ func printBreakdown(result scoring.Result) {
 	fmt.Println(sep)
 
 	biasNote := false
-	genreNote := false
 
 	for _, row := range result.Breakdown {
 		scoreStr := fmt.Sprintf("%.1f", row.Score)
@@ -283,7 +273,6 @@ func printBreakdown(result scoring.Result) {
 			annotations = " [overridden]"
 		} else if row.AppliedMultiplier != 1.0 {
 			annotations = " [genre adjusted]"
-			genreNote = true
 		}
 		if row.BiasResistant && !row.Skipped {
 			mult += "  *"
@@ -314,7 +303,6 @@ func printBreakdown(result scoring.Result) {
 	if len(unmatched) > 0 {
 		fmt.Printf("  Genres unmatched           : %s\n", strings.Join(unmatched, ", "))
 	}
-	_ = genreNote
 	fmt.Println()
 }
 
@@ -324,7 +312,7 @@ func unmatchedGenres(all, matched []string) []string {
 	for _, g := range matched {
 		matchedSet[strings.ToLower(g)] = true
 	}
-	out := make([]string, 0)
+	var out []string
 	for _, g := range all {
 		if !matchedSet[strings.ToLower(g)] {
 			out = append(out, g)

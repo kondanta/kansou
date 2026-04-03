@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -11,6 +12,9 @@ import (
 
 	"github.com/kondanta/kansou/internal/anilist"
 )
+
+// errUserCancelled is returned by interactive prompts when the user aborts with EOF (Ctrl+D).
+var errUserCancelled = errors.New("cancelled by user")
 
 // mediaCmd returns the `media` cobra command and its subcommands.
 func (a *App) mediaCmd() *cobra.Command {
@@ -51,36 +55,33 @@ func (a *App) runMediaFind(args []string, urlFlag, typeFlag string) error {
 
 	mediaType, err := resolveMediaType(typeFlag)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	switch {
 	case urlFlag != "":
 		id, parseErr := anilist.ParseMediaURL(urlFlag)
 		if parseErr != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", parseErr)
-			os.Exit(1)
+			return parseErr
 		}
 		media, err = a.AniList.FetchByID(id)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 	case len(args) > 0:
 		results, searchErr := a.AniList.SearchByNameMulti(args[0], mediaType)
 		if searchErr != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", searchErr)
-			os.Exit(1)
+			return searchErr
 		}
 		media, err = pickMedia(results)
+		if errors.Is(err, errUserCancelled) {
+			return nil
+		}
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 	default:
-		fmt.Fprintf(os.Stderr, "error: provide a search query or --url\n")
-		os.Exit(1)
+		return fmt.Errorf("provide a search query or --url")
 	}
 
 	printMediaCard(media)
@@ -89,6 +90,7 @@ func (a *App) runMediaFind(args []string, urlFlag, typeFlag string) error {
 
 // pickMedia presents a numbered list of results and returns the one the user
 // selects. If there is only one result it is returned immediately without prompting.
+// Returns errUserCancelled if the user aborts with EOF (Ctrl+D).
 func pickMedia(results []anilist.Media) (*anilist.Media, error) {
 	if len(results) == 1 {
 		return &results[0], nil
@@ -121,8 +123,8 @@ func pickMedia(results []anilist.Media) (*anilist.Media, error) {
 		fmt.Printf("Pick a result [1–%d]: ", len(results))
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "\ncancelled\n")
-			os.Exit(0)
+			fmt.Fprintln(os.Stderr, "\ncancelled")
+			return nil, errUserCancelled
 		}
 		n, parseErr := strconv.Atoi(strings.TrimSpace(line))
 		if parseErr != nil || n < 1 || n > len(results) {
@@ -158,10 +160,10 @@ func printMediaCard(m *anilist.Media) {
 	fmt.Printf("│  %-12s│  %-*s│\n", "Type", width-18, truncate(mediaTypeLabel+" ("+m.Format+")", width-18))
 	fmt.Printf("│  %-12s│  %-*s│\n", "Status", width-18, truncate(m.Status, width-18))
 	if m.Episodes > 0 {
-		fmt.Printf("│  %-12s│  %-*s│\n", "Episodes", width-18, fmt.Sprintf("%d", m.Episodes))
+		fmt.Printf("│  %-12s│  %-*s│\n", "Episodes", width-18, strconv.Itoa(m.Episodes))
 	}
 	if m.Chapters > 0 {
-		fmt.Printf("│  %-12s│  %-*s│\n", "Chapters", width-18, fmt.Sprintf("%d", m.Chapters))
+		fmt.Printf("│  %-12s│  %-*s│\n", "Chapters", width-18, strconv.Itoa(m.Chapters))
 	}
 
 	anilistURL := fmt.Sprintf("https://anilist.co/%s/%d", strings.ToLower(string(m.MediaType)), m.ID)

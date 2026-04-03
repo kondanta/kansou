@@ -81,8 +81,8 @@ scoring session, and publishes the final weighted score back to AniList.`,
 	rootCmd.AddCommand(app.serveCmd())
 
 	if err := rootCmd.Execute(); err != nil {
-		slog.Error("command failed", "err", err)
-		os.Exit(2)
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
 	}
 }
 
