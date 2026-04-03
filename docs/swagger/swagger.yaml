@@ -21,6 +21,10 @@ definitions:
         type: string
       label:
         type: string
+      primary_genre:
+        type: string
+      primary_genre_multiplier:
+        type: number
       score:
         type: number
       skipped:
@@ -63,6 +67,32 @@ definitions:
       error:
         description: Error is a human-readable description of what went wrong.
         type: string
+    type: object
+  server.genreMultiplierItem:
+    properties:
+      genre:
+        description: Genre is the AniList genre name (lowercased).
+        type: string
+      multipliers:
+        additionalProperties:
+          format: float64
+          type: number
+        description: Multipliers maps dimension keys to their configured multiplier
+          values.
+        type: object
+    type: object
+  server.genresResponse:
+    properties:
+      genres:
+        description: Genres is the list of configured genre multiplier blocks, sorted
+          alphabetically.
+        items:
+          $ref: '#/definitions/server.genreMultiplierItem'
+        type: array
+      primary_genre_weight:
+        description: PrimaryGenreWeight is the configured blend ratio for primary
+          genre support.
+        type: number
     type: object
   server.mediaResponse:
     properties:
@@ -123,6 +153,13 @@ definitions:
       media_id:
         description: MediaID is the AniList media ID of the entry being scored.
         type: integer
+      primary_genre:
+        description: |-
+          PrimaryGenre designates one of the media's genres as constitutive for
+          blended multiplier calculation. Must match one of the media's AniList genres
+          (case-insensitive). Optional — omit to use contributing-only averaging with no primary.
+        example: Mystery
+        type: string
       scores:
         additionalProperties:
           format: float64
@@ -174,6 +211,10 @@ definitions:
         type: integer
       media_type:
         type: string
+      primary_genre:
+        type: string
+      primary_genre_weight:
+        type: number
       title_english:
         type: string
       title_romaji:
@@ -201,6 +242,20 @@ paths:
           schema:
             $ref: '#/definitions/server.dimensionsResponse'
       summary: List scoring dimensions
+      tags:
+      - score
+  /genres:
+    get:
+      description: Returns all configured genre multiplier blocks and the primary
+        genre blend ratio.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.genresResponse'
+      summary: List genre multipliers
       tags:
       - score
   /health:

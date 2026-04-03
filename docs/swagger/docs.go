@@ -40,6 +40,26 @@ const docTemplate = `{
                 }
             }
         },
+        "/genres": {
+            "get": {
+                "description": "Returns all configured genre multiplier blocks and the primary genre blend ratio.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "score"
+                ],
+                "summary": "List genre multipliers",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.genresResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/health": {
             "get": {
                 "description": "Returns 200 OK if the server is running.",
@@ -285,6 +305,12 @@ const docTemplate = `{
                 "label": {
                     "type": "string"
                 },
+                "primary_genre": {
+                    "type": "string"
+                },
+                "primary_genre_multiplier": {
+                    "type": "number"
+                },
                 "score": {
                     "type": "number"
                 },
@@ -339,6 +365,39 @@ const docTemplate = `{
                 "error": {
                     "description": "Error is a human-readable description of what went wrong.",
                     "type": "string"
+                }
+            }
+        },
+        "server.genreMultiplierItem": {
+            "type": "object",
+            "properties": {
+                "genre": {
+                    "description": "Genre is the AniList genre name (lowercased).",
+                    "type": "string"
+                },
+                "multipliers": {
+                    "description": "Multipliers maps dimension keys to their configured multiplier values.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number",
+                        "format": "float64"
+                    }
+                }
+            }
+        },
+        "server.genresResponse": {
+            "type": "object",
+            "properties": {
+                "genres": {
+                    "description": "Genres is the list of configured genre multiplier blocks, sorted alphabetically.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/server.genreMultiplierItem"
+                    }
+                },
+                "primary_genre_weight": {
+                    "description": "PrimaryGenreWeight is the configured blend ratio for primary genre support.",
+                    "type": "number"
                 }
             }
         },
@@ -429,6 +488,11 @@ const docTemplate = `{
                     "description": "MediaID is the AniList media ID of the entry being scored.",
                     "type": "integer"
                 },
+                "primary_genre": {
+                    "description": "PrimaryGenre designates one of the media's genres as constitutive for\nblended multiplier calculation. Must match one of the media's AniList genres\n(case-insensitive). Optional — omit to use contributing-only averaging with no primary.",
+                    "type": "string",
+                    "example": "Mystery"
+                },
                 "scores": {
                     "description": "Scores maps dimension keys to user scores (1.0–10.0).\nAny configured dimension absent from this map is treated as skipped (N/A).",
                     "type": "object",
@@ -497,6 +561,12 @@ const docTemplate = `{
                 },
                 "media_type": {
                     "type": "string"
+                },
+                "primary_genre": {
+                    "type": "string"
+                },
+                "primary_genre_weight": {
+                    "type": "number"
                 },
                 "title_english": {
                     "type": "string"

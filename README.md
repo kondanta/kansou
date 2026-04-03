@@ -241,3 +241,16 @@ just clean          # remove built binary
 | [`docs/CLI.md`](docs/CLI.md) | CLI command reference |
 | [`docs/ANILIST_INTEGRATION.md`](docs/ANILIST_INTEGRATION.md) | AniList GraphQL integration details |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Package structure and data flow |
+
+---
+
+## License
+
+Licensed under either of:
+
+- [MIT License](LICENSE-MIT)
+- [Apache License, Version 2.0](LICENSE-APACHE)
+
+at your option.
+
+Copyright (c) 2026 Taylan Dogan

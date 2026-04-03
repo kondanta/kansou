@@ -217,7 +217,7 @@ type scoreRequest struct {
 	// PrimaryGenre designates one of the media's genres as constitutive for
 	// blended multiplier calculation. Must match one of the media's AniList genres
 	// (case-insensitive). Optional — omit to use contributing-only averaging with no primary.
-	PrimaryGenre string `json:"primary_genre,omitempty"`
+	PrimaryGenre string `json:"primary_genre,omitempty" example:"Mystery"`
 }
 
 // scoreResponse is the response body for POST /score.
