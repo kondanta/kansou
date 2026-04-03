@@ -51,6 +51,7 @@ func (s *Server) buildRouter() *chi.Mux {
 	r.Use(requestLogger)
 
 	r.Get("/health", s.handleHealth)
+	r.Get("/dimensions", s.handleDimensions)
 	r.Get("/media/search", s.handleMediaSearch)
 	r.Get("/media/{id}", s.handleMediaFetch)
 	r.Post("/score", s.handleScore)

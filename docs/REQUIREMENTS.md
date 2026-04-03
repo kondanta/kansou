@@ -203,7 +203,14 @@ Publishing requires explicit user confirmation. In the CLI, `score add` displays
 the final score and then prompts `Publish to AniList? [y/N]`. Only a `y` response
 triggers the publish. Entering anything else (including pressing Enter) skips
 publishing silently. Via the API, the caller must send `POST /score/publish`
-explicitly. A calculated score is never automatically published.
+explicitly with `media_id` and `score`. A calculated score is never automatically
+published.
+
+**FR-04a-i — Implicit dimension skipping (API)**
+When calling `POST /score`, any dimension defined in server config that is absent
+from the `scores` map is automatically treated as skipped (N/A). The client does
+not need to declare skipped dimensions explicitly. `weight_overrides` is an
+optional field for per-session weight adjustment; omitting it uses config weights.
 
 **FR-04b — What is published**
 Only the final numeric score is written to AniList. The breakdown and
@@ -277,10 +284,20 @@ seven reference dimensions with their labels, descriptions, and weights.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | /health | Liveness check. Returns 200 with no body. |
+| GET | /dimensions | List configured scoring dimensions in order |
 | GET | /media/search?q={query} | Search AniList by name |
 | GET | /media/{id} | Fetch media by AniList ID |
 | POST | /score | Calculate score for a media entry |
 | POST | /score/publish | Publish a score to AniList |
+
+**FR-07a-i — Dimension sync contract**
+`GET /dimensions` returns the ordered list of scoring dimensions as configured
+on the server, including each dimension's key, label, description, and base weight.
+The response includes a `config_hash` field (SHA256 of the serialised dimensions
+config) that clients can store and compare to detect when the dimension list has
+changed. Frontends must use the keys returned by this endpoint as the keys in the
+`scores` map when calling `POST /score` — dimension keys are defined by server
+config and must not be hardcoded on the client.
 
 **FR-07b — Error envelope**
 All errors return JSON in this shape:

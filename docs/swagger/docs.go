@@ -20,6 +20,26 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/dimensions": {
+            "get": {
+                "description": "Returns the ordered list of scoring dimensions defined in server config. Use the returned keys in the scores map when calling POST /score.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "score"
+                ],
+                "summary": "List scoring dimensions",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.dimensionsResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/health": {
             "get": {
                 "description": "Returns 200 OK if the server is running.",
@@ -68,26 +88,26 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/internal_server.mediaResponse"
+                                "$ref": "#/definitions/server.mediaResponse"
                             }
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/internal_server.errorResponse"
+                            "$ref": "#/definitions/server.errorResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/internal_server.errorResponse"
+                            "$ref": "#/definitions/server.errorResponse"
                         }
                     },
                     "502": {
                         "description": "Bad Gateway",
                         "schema": {
-                            "$ref": "#/definitions/internal_server.errorResponse"
+                            "$ref": "#/definitions/server.errorResponse"
                         }
                     }
                 }
@@ -116,25 +136,25 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_server.mediaResponse"
+                            "$ref": "#/definitions/server.mediaResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/internal_server.errorResponse"
+                            "$ref": "#/definitions/server.errorResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/internal_server.errorResponse"
+                            "$ref": "#/definitions/server.errorResponse"
                         }
                     },
                     "502": {
                         "description": "Bad Gateway",
                         "schema": {
-                            "$ref": "#/definitions/internal_server.errorResponse"
+                            "$ref": "#/definitions/server.errorResponse"
                         }
                     }
                 }
@@ -160,7 +180,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_server.scoreRequest"
+                            "$ref": "#/definitions/server.scoreRequest"
                         }
                     }
                 ],
@@ -168,19 +188,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_server.scoreResponse"
+                            "$ref": "#/definitions/server.scoreResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/internal_server.errorResponse"
+                            "$ref": "#/definitions/server.errorResponse"
                         }
                     },
                     "502": {
                         "description": "Bad Gateway",
                         "schema": {
-                            "$ref": "#/definitions/internal_server.errorResponse"
+                            "$ref": "#/definitions/server.errorResponse"
                         }
                     }
                 }
@@ -206,7 +226,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_server.publishRequest"
+                            "$ref": "#/definitions/server.publishRequest"
                         }
                     }
                 ],
@@ -214,19 +234,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_server.publishResponse"
+                            "$ref": "#/definitions/server.publishResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/internal_server.errorResponse"
+                            "$ref": "#/definitions/server.errorResponse"
                         }
                     },
                     "502": {
                         "description": "Bad Gateway",
                         "schema": {
-                            "$ref": "#/definitions/internal_server.errorResponse"
+                            "$ref": "#/definitions/server.errorResponse"
                         }
                     }
                 }
@@ -234,7 +254,7 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "internal_server.breakdownRowResponse": {
+        "server.breakdownRowResponse": {
             "type": "object",
             "properties": {
                 "applied_multiplier": {
@@ -276,7 +296,44 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_server.errorResponse": {
+        "server.dimensionItem": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "description": "Description is the scoring hint shown to the user.",
+                    "type": "string"
+                },
+                "key": {
+                    "description": "Key is the internal identifier used in the scores map of POST /score.",
+                    "type": "string"
+                },
+                "label": {
+                    "description": "Label is the human-readable display name.",
+                    "type": "string"
+                },
+                "weight": {
+                    "description": "Weight is the base weight for this dimension (all weights sum to 1.0).",
+                    "type": "number"
+                }
+            }
+        },
+        "server.dimensionsResponse": {
+            "type": "object",
+            "properties": {
+                "config_hash": {
+                    "description": "ConfigHash is the SHA256 digest of the current dimensions config.\nClients can use this to detect when the dimension list has changed.",
+                    "type": "string"
+                },
+                "dimensions": {
+                    "description": "Dimensions is the ordered list of scoring dimensions.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/server.dimensionItem"
+                    }
+                }
+            }
+        },
+        "server.errorResponse": {
             "type": "object",
             "properties": {
                 "error": {
@@ -285,7 +342,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_server.mediaResponse": {
+        "server.mediaResponse": {
             "type": "object",
             "properties": {
                 "anilist_url": {
@@ -335,7 +392,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_server.publishRequest": {
+        "server.publishRequest": {
             "type": "object",
             "properties": {
                 "media_id": {
@@ -348,7 +405,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_server.publishResponse": {
+        "server.publishResponse": {
             "type": "object",
             "properties": {
                 "message": {
@@ -365,7 +422,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_server.scoreRequest": {
+        "server.scoreRequest": {
             "type": "object",
             "properties": {
                 "media_id": {
@@ -373,22 +430,15 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "scores": {
-                    "description": "Scores maps dimension keys to user scores (1.0–10.0).",
+                    "description": "Scores maps dimension keys to user scores (1.0–10.0).\nAny configured dimension absent from this map is treated as skipped (N/A).",
                     "type": "object",
                     "additionalProperties": {
                         "type": "number",
                         "format": "float64"
                     }
                 },
-                "skipped_dimensions": {
-                    "description": "SkippedDimensions lists dimension keys the user has marked as N/A.",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
                 "weight_overrides": {
-                    "description": "WeightOverrides maps dimension keys to per-session weight overrides.",
+                    "description": "WeightOverrides maps dimension keys to per-session weight overrides.\nOptional — omit to use the weights defined in server config.",
                     "type": "object",
                     "additionalProperties": {
                         "type": "number",
@@ -397,14 +447,14 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_server.scoreResponse": {
+        "server.scoreResponse": {
             "type": "object",
             "properties": {
                 "breakdown": {
                     "description": "Breakdown is the per-dimension audit trail.",
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/internal_server.breakdownRowResponse"
+                        "$ref": "#/definitions/server.breakdownRowResponse"
                     }
                 },
                 "final_score": {
@@ -415,13 +465,13 @@ const docTemplate = `{
                     "description": "Meta carries session-level provenance.",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/internal_server.sessionMetaResponse"
+                            "$ref": "#/definitions/server.sessionMetaResponse"
                         }
                     ]
                 }
             }
         },
-        "internal_server.sessionMetaResponse": {
+        "server.sessionMetaResponse": {
             "type": "object",
             "properties": {
                 "all_genres": {

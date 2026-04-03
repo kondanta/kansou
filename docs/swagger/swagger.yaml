@@ -1,6 +1,6 @@
 basePath: /
 definitions:
-  internal_server.breakdownRowResponse:
+  server.breakdownRowResponse:
     properties:
       applied_multiplier:
         type: number
@@ -28,13 +28,43 @@ definitions:
       weight_override:
         type: boolean
     type: object
-  internal_server.errorResponse:
+  server.dimensionItem:
+    properties:
+      description:
+        description: Description is the scoring hint shown to the user.
+        type: string
+      key:
+        description: Key is the internal identifier used in the scores map of POST
+          /score.
+        type: string
+      label:
+        description: Label is the human-readable display name.
+        type: string
+      weight:
+        description: Weight is the base weight for this dimension (all weights sum
+          to 1.0).
+        type: number
+    type: object
+  server.dimensionsResponse:
+    properties:
+      config_hash:
+        description: |-
+          ConfigHash is the SHA256 digest of the current dimensions config.
+          Clients can use this to detect when the dimension list has changed.
+        type: string
+      dimensions:
+        description: Dimensions is the ordered list of scoring dimensions.
+        items:
+          $ref: '#/definitions/server.dimensionItem'
+        type: array
+    type: object
+  server.errorResponse:
     properties:
       error:
         description: Error is a human-readable description of what went wrong.
         type: string
     type: object
-  internal_server.mediaResponse:
+  server.mediaResponse:
     properties:
       anilist_url:
         type: string
@@ -67,7 +97,7 @@ definitions:
       title_romaji:
         type: string
     type: object
-  internal_server.publishRequest:
+  server.publishRequest:
     properties:
       media_id:
         description: MediaID is the AniList media ID to publish the score for.
@@ -76,7 +106,7 @@ definitions:
         description: Score is the final score to publish (e.g. 8.79).
         type: number
     type: object
-  internal_server.publishResponse:
+  server.publishResponse:
     properties:
       message:
         description: Message is a human-readable confirmation.
@@ -88,7 +118,7 @@ definitions:
         description: Title is the media title as confirmed by AniList.
         type: string
     type: object
-  internal_server.scoreRequest:
+  server.scoreRequest:
     properties:
       media_id:
         description: MediaID is the AniList media ID of the entry being scored.
@@ -97,27 +127,25 @@ definitions:
         additionalProperties:
           format: float64
           type: number
-        description: Scores maps dimension keys to user scores (1.0–10.0).
+        description: |-
+          Scores maps dimension keys to user scores (1.0–10.0).
+          Any configured dimension absent from this map is treated as skipped (N/A).
         type: object
-      skipped_dimensions:
-        description: SkippedDimensions lists dimension keys the user has marked as
-          N/A.
-        items:
-          type: string
-        type: array
       weight_overrides:
         additionalProperties:
           format: float64
           type: number
-        description: WeightOverrides maps dimension keys to per-session weight overrides.
+        description: |-
+          WeightOverrides maps dimension keys to per-session weight overrides.
+          Optional — omit to use the weights defined in server config.
         type: object
     type: object
-  internal_server.scoreResponse:
+  server.scoreResponse:
     properties:
       breakdown:
         description: Breakdown is the per-dimension audit trail.
         items:
-          $ref: '#/definitions/internal_server.breakdownRowResponse'
+          $ref: '#/definitions/server.breakdownRowResponse'
         type: array
       final_score:
         description: FinalScore is the computed weighted score (rounded to 2 decimal
@@ -125,10 +153,10 @@ definitions:
         type: number
       meta:
         allOf:
-        - $ref: '#/definitions/internal_server.sessionMetaResponse'
+        - $ref: '#/definitions/server.sessionMetaResponse'
         description: Meta carries session-level provenance.
     type: object
-  internal_server.sessionMetaResponse:
+  server.sessionMetaResponse:
     properties:
       all_genres:
         items:
@@ -161,6 +189,20 @@ info:
   title: kansou API
   version: "1.0"
 paths:
+  /dimensions:
+    get:
+      description: Returns the ordered list of scoring dimensions defined in server
+        config. Use the returned keys in the scores map when calling POST /score.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.dimensionsResponse'
+      summary: List scoring dimensions
+      tags:
+      - score
   /health:
     get:
       description: Returns 200 OK if the server is running.
@@ -187,19 +229,19 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_server.mediaResponse'
+            $ref: '#/definitions/server.mediaResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_server.errorResponse'
+            $ref: '#/definitions/server.errorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/internal_server.errorResponse'
+            $ref: '#/definitions/server.errorResponse'
         "502":
           description: Bad Gateway
           schema:
-            $ref: '#/definitions/internal_server.errorResponse'
+            $ref: '#/definitions/server.errorResponse'
       summary: Fetch media by ID
       tags:
       - media
@@ -224,20 +266,20 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/internal_server.mediaResponse'
+              $ref: '#/definitions/server.mediaResponse'
             type: array
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_server.errorResponse'
+            $ref: '#/definitions/server.errorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/internal_server.errorResponse'
+            $ref: '#/definitions/server.errorResponse'
         "502":
           description: Bad Gateway
           schema:
-            $ref: '#/definitions/internal_server.errorResponse'
+            $ref: '#/definitions/server.errorResponse'
       summary: Search media
       tags:
       - media
@@ -252,22 +294,22 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_server.scoreRequest'
+          $ref: '#/definitions/server.scoreRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_server.scoreResponse'
+            $ref: '#/definitions/server.scoreResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_server.errorResponse'
+            $ref: '#/definitions/server.errorResponse'
         "502":
           description: Bad Gateway
           schema:
-            $ref: '#/definitions/internal_server.errorResponse'
+            $ref: '#/definitions/server.errorResponse'
       summary: Calculate score
       tags:
       - score
@@ -283,22 +325,22 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_server.publishRequest'
+          $ref: '#/definitions/server.publishRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_server.publishResponse'
+            $ref: '#/definitions/server.publishResponse'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/internal_server.errorResponse'
+            $ref: '#/definitions/server.errorResponse'
         "502":
           description: Bad Gateway
           schema:
-            $ref: '#/definitions/internal_server.errorResponse'
+            $ref: '#/definitions/server.errorResponse'
       summary: Publish score
       tags:
       - score

@@ -1,4 +1,4 @@
-package cli
+package cmd
 
 import (
 	"bufio"
@@ -11,6 +11,17 @@ import (
 
 	"github.com/kondanta/kansou/internal/anilist"
 )
+
+// mediaCmd returns the `media` cobra command and its subcommands.
+func (a *App) mediaCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "media",
+		Short: "Media discovery commands",
+		Long:  "Commands for searching and fetching media information from AniList.",
+	}
+	cmd.AddCommand(a.mediaFindCmd())
+	return cmd
+}
 
 // mediaFindCmd returns the `media find` cobra command.
 func (a *App) mediaFindCmd() *cobra.Command {

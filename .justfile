@@ -1,5 +1,5 @@
-binary := "kansou"
-main    := "./cmd/kansou"
+binary   := "kansou"
+main     := "."
 swag_out := "docs/swagger"
 
 # List available recipes
@@ -12,7 +12,7 @@ build:
 
 # Build with version stamped from git tag
 build-release:
-    go build -ldflags "-X main.version=$(git describe --tags --always --dirty)" -o {{binary}} {{main}}
+    go build -ldflags "-X github.com/kondanta/kansou/cmd.version=$(git describe --tags --always --dirty)" -o {{binary}} {{main}}
 
 # Run all tests
 test:
@@ -32,7 +32,7 @@ vet:
 
 # Regenerate Swagger docs (run after any handler change)
 swagger:
-    swag init -g cmd/kansou/main.go --parseDependency --output {{swag_out}}
+    swag init -g main.go --parseDependency --output {{swag_out}}
 
 # Run the full definition-of-done check: build + test + vet
 check: build test vet

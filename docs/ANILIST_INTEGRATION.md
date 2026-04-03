@@ -172,7 +172,8 @@ parsing logic.
 
 ### 3. Publish Score
 
-**Triggered by:** `kansou score publish`
+**Triggered by:** answering `y` at the publish prompt in `kansou score add` (CLI),
+or `POST /score/publish` (API)
 
 **GraphQL mutation:**
 
@@ -210,10 +211,10 @@ field on `SaveMediaListEntry`.
   Frieren: Beyond Journey's End — 8.79
 ```
 
-**On failure:**
+**On failure (CLI):**
 ```
 error: failed to publish score to AniList: {reason}
-       your calculated score was 8.79 — re-run score add to recalculate
+       your calculated score was 8.79
 ```
 
 ---

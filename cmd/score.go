@@ -1,4 +1,4 @@
-package cli
+package cmd
 
 import (
 	"bufio"
@@ -14,6 +14,17 @@ import (
 	"github.com/kondanta/kansou/internal/scoring"
 )
 
+// scoreCmd returns the `score` cobra command and its subcommands.
+func (a *App) scoreCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "score",
+		Short: "Scoring commands",
+		Long:  "Commands for scoring anime and manga and publishing scores to AniList.",
+	}
+	cmd.AddCommand(a.scoreAddCmd())
+	return cmd
+}
+
 // scoreAddCmd returns the `score add` cobra command.
 func (a *App) scoreAddCmd() *cobra.Command {
 	var urlFlag string
@@ -28,7 +39,7 @@ func (a *App) scoreAddCmd() *cobra.Command {
 Prompts for a score (1–10) for each configured dimension.
 Enter 's' or 'skip' to mark a dimension as not applicable.
 
-The calculated score is held in memory. Use 'score publish' to write it to AniList.`,
+After scoring, prompts whether to publish the result to AniList.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return a.runScoreAdd(args, urlFlag, typeFlag, breakdownFlag, weightFlag)
@@ -42,9 +53,8 @@ The calculated score is held in memory. Use 'score publish' to write it to AniLi
 	return cmd
 }
 
-
 // runScoreAdd fetches the media entry, runs the interactive prompt loop,
-// calculates the score, and stores the result in a.Session.
+// calculates the score, and offers to publish it to AniList.
 func (a *App) runScoreAdd(args []string, urlFlag, typeFlag string, breakdown bool, weightFlag string) error {
 	// Parse --type and --weight before any network I/O.
 	mediaType, err := resolveMediaType(typeFlag)

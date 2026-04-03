@@ -50,7 +50,7 @@ The tool runs with built-in defaults if no config file is found. See [`docs/CONF
 
 ## AniList Token
 
-Write operations (`score publish`, `POST /score/publish`) require an AniList user token:
+Write operations (publish prompt in `score add`, `POST /score/publish`) require an AniList user token:
 
 ```bash
 export ANILIST_TOKEN=your_token_here
@@ -73,8 +73,7 @@ kansou [command]
 
 Commands:
   media find <query>    Search AniList and display media info
-  score add <query>     Start an interactive scoring session
-  score publish         Publish the last calculated score to AniList
+  score add <query>     Start an interactive scoring session (includes publish prompt)
   serve                 Start the REST server
 
 Global flags:
@@ -90,6 +89,12 @@ kansou score add "frieren" --breakdown
 kansou score add --url https://anilist.co/anime/154587 --breakdown
 ```
 
+After scoring, you'll be prompted:
+
+```
+Publish to AniList? [y/N]:
+```
+
 With per-session weight overrides:
 
 ```bash
@@ -101,13 +106,6 @@ kansou score add "Mushishi" --weight pacing=0.05,world_building=0.20
 ```bash
 kansou media find "Mushishi"
 kansou media find --url https://anilist.co/anime/457
-```
-
-### Publish
-
-```bash
-# after score add in the same session
-kansou score publish
 ```
 
 ---
@@ -122,6 +120,7 @@ kansou serve --port 3000
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/health` | Liveness check |
+| `GET` | `/dimensions` | List configured scoring dimensions |
 | `GET` | `/media/search?q={query}` | Search AniList by name |
 | `GET` | `/media/{id}` | Fetch media by AniList ID |
 | `POST` | `/score` | Calculate a weighted score |

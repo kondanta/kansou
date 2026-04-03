@@ -22,14 +22,16 @@ You must follow this layout exactly. Do not create packages outside of it withou
 
 ```
 kansou/
+├── main.go                  # Entrypoint only. Calls cmd.Execute().
 ├── cmd/
-│   └── kansou/
-│       └── main.go          # Entrypoint only. No logic here.
+│   ├── root.go              # App struct, Execute(), PersistentPreRunE, newEngine
+│   ├── serve.go             # serve subcommand
+│   ├── media.go             # media subcommands + rendering helpers
+│   └── score.go             # score subcommands + breakdown rendering
 ├── internal/
 │   ├── anilist/             # AniList GraphQL client
 │   ├── config/              # Config loader, validator, defaults
 │   ├── scoring/             # Scoring engine: weights, multipliers, formula
-│   ├── cli/                 # CLI command definitions (cobra)
 │   ├── logger/              # Structured logging setup (log/slog wrappers)
 │   └── server/              # REST server (chi router + handlers)
 ├── docs/
@@ -65,46 +67,40 @@ If you think a new dependency is justified, stop and ask. Do not `go get` anythi
 
 ## CLI Application Structure
 
-The CLI layer uses an `App` struct defined in `internal/cli/` to own all shared
-dependencies. This is the only sanctioned pattern for sharing state between cobra
-commands. Do not use package-level variables for this purpose.
+The CLI layer lives in `cmd/` as `package cmd`. All cobra command definitions
+live here. `internal/` contains only pure business logic with no CLI concerns.
+Do not use package-level variables for state — use the `App` struct instead.
 
 ```go
-// internal/cli/app.go
+// cmd/root.go
 
 // App owns all shared CLI dependencies.
-// Config, AniList, and Engine are set by PersistentPreRunE after flag parsing.
+// Constructed with nil deps in Execute() before commands are registered.
+// PersistentPreRunE populates the fields after flag parsing so --config works.
 type App struct {
     Config  *config.Config
     AniList *anilist.Client
     Engine  *scoring.Engine
 }
 
-// NewApp constructs an App. Called with nil deps before Execute(); deps are
-// populated by PersistentPreRunE so --config is honoured.
-func NewApp(cfg *config.Config, al *anilist.Client, eng *scoring.Engine) *App
-
-// MediaCmd returns the `media` cobra command and its subcommands.
-func (a *App) MediaCmd() *cobra.Command
-
-// ScoreCmd returns the `score` cobra command and its subcommands.
-func (a *App) ScoreCmd() *cobra.Command
+// Execute builds the command tree and runs it. Called from main.
+func Execute()
 ```
 
-`main.go` owns the root command and wires everything:
+`main.go` at the root is the sole entry point:
 
 ```go
-// cmd/kansou/main.go
-app := cli.NewApp(nil, nil, nil)  // deps set by PersistentPreRunE
-rootCmd.PersistentPreRunE = func(...) { /* load config, set app.Config/AniList/Engine */ }
-rootCmd.AddCommand(app.MediaCmd())
-rootCmd.AddCommand(app.ScoreCmd())
-rootCmd.AddCommand(newServeCmd(app))
+// main.go
+package main
+
+import "github.com/kondanta/kansou/cmd"
+
+func main() { cmd.Execute() }
 ```
 
-The server command uses `app.Config`, `app.AniList`, and `app.Engine` which are
-populated by `PersistentPreRunE` before any `RunE` fires. The server is stateless
-by design — each HTTP request receives all necessary data in the request body.
+`Execute()` in `cmd/root.go` owns the root command, `PersistentPreRunE` (config
+loading + dep wiring), and registers subcommands via `App` methods defined in
+`cmd/media.go`, `cmd/score.go`, and `cmd/serve.go`.
 
 **`score add` flow:** search → interactive scoring → display result → `Publish to AniList? [y/N]`
 prompt. Publishing happens inline. There is no separate `score publish` command —

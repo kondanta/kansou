@@ -68,11 +68,11 @@ Both modes share identical business logic. The binary entry point branches into 
 
 ## Layer Responsibilities
 
-### Entry Point — `cmd/kansou/main.go`
-Parses the top-level invocation and delegates to either the CLI layer or the server layer. Contains no business logic. Constructs an `App` with nil deps early (so commands can be registered), then wires config and all dependencies in `PersistentPreRunE` after flag parsing — ensuring `--config` is honoured.
+### Entry Point — `main.go`
+Single line: calls `cmd.Execute()`. Contains no logic. Swagger API annotations live here so `swag init -g main.go` picks them up.
 
-### CLI Layer — `internal/cli/`
-Built on `cobra`. Handles user input, calls core logic, and renders output to stdout. The only layer allowed to write to stdout. Does not contain business logic — it orchestrates calls to the scoring engine and AniList client.
+### CLI Layer — `cmd/`
+`package cmd`. Built on `cobra`. Handles user input, calls core logic, and renders output to stdout. The only layer allowed to write to stdout. Does not contain business logic — it orchestrates calls to the scoring engine and AniList client. `cmd/root.go` owns the `App` struct, `Execute()`, `PersistentPreRunE` (config loading + dep wiring), and `newEngine()`. Each subcommand domain has its own file: `media.go`, `score.go`, `serve.go`.
 
 ### Server Layer — `internal/server/`
 Built on `chi`. Exposes the same operations as the CLI over HTTP. Handles request parsing, response serialisation, and error enveloping. Swagger annotations live here. Does not contain business logic.

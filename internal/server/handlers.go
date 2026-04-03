@@ -111,16 +111,64 @@ func (s *Server) handleMediaFetch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toMediaResponse(media))
 }
 
+// dimensionItem is the JSON representation of a single scoring dimension.
+// swagger:model dimensionItem
+type dimensionItem struct {
+	// Key is the internal identifier used in the scores map of POST /score.
+	Key string `json:"key"`
+	// Label is the human-readable display name.
+	Label string `json:"label"`
+	// Description is the scoring hint shown to the user.
+	Description string `json:"description"`
+	// Weight is the base weight for this dimension (all weights sum to 1.0).
+	Weight float64 `json:"weight"`
+}
+
+// dimensionsResponse is the response body for GET /dimensions.
+// swagger:model dimensionsResponse
+type dimensionsResponse struct {
+	// ConfigHash is the SHA256 digest of the current dimensions config.
+	// Clients can use this to detect when the dimension list has changed.
+	ConfigHash string `json:"config_hash"`
+	// Dimensions is the ordered list of scoring dimensions.
+	Dimensions []dimensionItem `json:"dimensions"`
+}
+
+// handleDimensions returns the configured scoring dimensions in order.
+//
+//	@Summary		List scoring dimensions
+//	@Description	Returns the ordered list of scoring dimensions defined in server config. Use the returned keys in the scores map when calling POST /score.
+//	@Tags			score
+//	@Produce		json
+//	@Success		200	{object}	dimensionsResponse
+//	@Router			/dimensions [get]
+func (s *Server) handleDimensions(w http.ResponseWriter, r *http.Request) {
+	items := make([]dimensionItem, 0, len(s.cfg.DimensionOrder))
+	for _, key := range s.cfg.DimensionOrder {
+		d := s.cfg.Dimensions[key]
+		items = append(items, dimensionItem{
+			Key:         key,
+			Label:       d.Label,
+			Description: d.Description,
+			Weight:      d.Weight,
+		})
+	}
+	writeJSON(w, http.StatusOK, dimensionsResponse{
+		ConfigHash: s.cfg.DimensionsHash,
+		Dimensions: items,
+	})
+}
+
 // scoreRequest is the request body for POST /score.
 // swagger:model scoreRequest
 type scoreRequest struct {
 	// MediaID is the AniList media ID of the entry being scored.
 	MediaID int `json:"media_id"`
 	// Scores maps dimension keys to user scores (1.0–10.0).
+	// Any configured dimension absent from this map is treated as skipped (N/A).
 	Scores map[string]float64 `json:"scores"`
-	// SkippedDimensions lists dimension keys the user has marked as N/A.
-	SkippedDimensions []string `json:"skipped_dimensions,omitempty"`
 	// WeightOverrides maps dimension keys to per-session weight overrides.
+	// Optional — omit to use the weights defined in server config.
 	WeightOverrides map[string]float64 `json:"weight_overrides,omitempty"`
 }
 
@@ -198,9 +246,12 @@ func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	skipped := make(map[string]bool, len(req.SkippedDimensions))
-	for _, k := range req.SkippedDimensions {
-		skipped[k] = true
+	// Any configured dimension absent from req.Scores is implicitly skipped.
+	skipped := make(map[string]bool)
+	for _, key := range s.cfg.DimensionOrder {
+		if _, ok := req.Scores[key]; !ok {
+			skipped[key] = true
+		}
 	}
 	if req.WeightOverrides == nil {
 		req.WeightOverrides = map[string]float64{}

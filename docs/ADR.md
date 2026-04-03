@@ -734,3 +734,64 @@ flow. The REST API already covers programmatic publishing — a `score publish
   The `bufio.Reader` used for dimension scoring is reused for the prompt.
 - `ARCHITECTURE.md`, `docs/CLI.md`, `docs/REQUIREMENTS.md`, and `CLAUDE.md`
   updated to reflect the new flow.
+
+---
+
+## ADR-019 — Simplified POST /score body; implicit dimension skipping; GET /dimensions
+
+**Status:** Accepted
+
+**Date:** 2026
+
+**Context:**
+The original `POST /score` request body exposed `skipped_dimensions` (a list of
+keys to mark N/A) and `weight_overrides` (per-session weight adjustments) alongside
+`media_id` and `scores`. This created two problems:
+
+1. `skipped_dimensions` was redundant. If a dimension is absent from `scores`,
+   the intent is unambiguous — the client chose not to score it. Requiring a
+   separate list to say "these keys I already omitted" adds surface area with
+   no benefit and creates a contradiction trap (what if a key appears in both
+   `scores` and `skipped_dimensions`?).
+
+2. The frontend had no way to know which dimension keys to use in `scores` without
+   hardcoding them, which breaks silently when the server config changes dimensions.
+
+**Decision:**
+- Remove `skipped_dimensions` from `scoreRequest`. Any configured dimension
+  absent from `scores` is implicitly skipped by the server.
+- Keep `weight_overrides` as optional. It has genuine utility for frontends
+  exposing per-session weight sliders and is not redundant with anything else.
+- Add `GET /dimensions` endpoint that returns the configured dimensions in order
+  (key, label, description, weight) plus a `config_hash`. Frontends call this
+  on load to render the scoring form dynamically and detect config changes.
+
+**Reasoning:**
+Removing `skipped_dimensions` eliminates an ambiguity with no loss of
+expressiveness — absence from a map is a natural, idiomatic way to signal
+non-participation. The `GET /dimensions` endpoint solves the frontend sync
+problem at the right layer: the server owns the dimension config, so the
+server should be the source of truth for what keys exist. `config_hash` gives
+clients a cheap way to detect staleness without polling the full list.
+`weight_overrides` stays because it expresses something `scores` cannot — a
+desire to shift the weight distribution for a specific session — and mirrors
+the existing `--weight` CLI flag.
+
+**Alternatives considered:**
+- Keep `skipped_dimensions` as optional — rejected. Optional redundant fields
+  become required in practice once clients start using them, and the contradiction
+  trap remains. Implicit skipping is strictly cleaner.
+- Expose genre multipliers in `GET /dimensions` — rejected. Genre bias is
+  server-side scoring logic; the frontend has no use for it and exposing it
+  leaks implementation detail.
+- Include `bias_resistant` in `GET /dimensions` — deferred. Informational only;
+  can be added when a frontend needs it.
+
+**Consequences:**
+- `scoreRequest.SkippedDimensions` removed. `scoreRequest.WeightOverrides`
+  retained as optional.
+- `handleScore` builds the skipped map by comparing `s.cfg.DimensionOrder`
+  against `req.Scores` instead of reading a client-supplied list.
+- `GET /dimensions` added to the router. `handleDimensions`, `dimensionItem`,
+  and `dimensionsResponse` added to `internal/server/handlers.go`.
+- `docs/REQUIREMENTS.md` and `docs/ANILIST_INTEGRATION.md` updated.
