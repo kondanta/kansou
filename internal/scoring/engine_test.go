@@ -50,7 +50,7 @@ func testEngine() *Engine {
 			"production":    1.1,
 		},
 	}
-	return NewEngine(dims, defs, genres)
+	return NewEngine(dims, defs, genres, 0.6)
 }
 
 // allTen returns an Entry with every dimension scored 10, no skips, no overrides.
@@ -152,18 +152,35 @@ func TestScore_GenreMultiplierAveraged(t *testing.T) {
 	}
 }
 
-func TestScore_UnmatchedGenreContributes1(t *testing.T) {
-	// "romance" is not in the test engine's genre config.
-	// story multiplier should be 1.0 (unmatched genre defaults to 1.0).
+func TestScore_NoMatchedGenres_Multiplier1(t *testing.T) {
+	// "romance" is not in the test engine's genre config at all, so no genres
+	// match. All dimension multipliers must be 1.0 (contributing-only averaging: no opinions → neutral).
 	eng := testEngine()
 	result, err := eng.Score(allTen([]string{"Romance"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	for _, row := range result.Breakdown {
-		if row.Key == "story" {
-			if !approxEqual(row.AppliedMultiplier, 1.0, 0.001) {
-				t.Errorf("unmatched genre: expected multiplier 1.0 for story, got %v", row.AppliedMultiplier)
+		if !approxEqual(row.AppliedMultiplier, 1.0, 0.001) && !row.Skipped && !row.BiasResistant {
+			t.Errorf("no matched genres: expected multiplier 1.0 for %q, got %v", row.Key, row.AppliedMultiplier)
+		}
+	}
+}
+
+func TestScore_ContributingOnly_DimensionlessGenreExcluded(t *testing.T) {
+	// Action defines production, pacing, story, world_building — but NOT characters.
+	// Drama defines story, characters, production, pacing.
+	// Old behavior: characters = (drama.characters + action.neutral_1.0) / 2 = (1.3+1.0)/2 = 1.15
+	// contributing-only averaging:     characters = drama.characters / 1 = 1.3 (action excluded for this dimension)
+	eng := testEngine()
+	result, err := eng.Score(allTen([]string{"Action", "Drama"}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, row := range result.Breakdown {
+		if row.Key == "characters" {
+			if !approxEqual(row.AppliedMultiplier, 1.3, 0.001) {
+				t.Errorf("contributing-only averaging: characters multiplier expected 1.3, got %v (action should be excluded as it has no opinion)", row.AppliedMultiplier)
 			}
 		}
 	}
@@ -482,5 +499,125 @@ func TestCombinedMultiplier_SingleGenre(t *testing.T) {
 	}
 	if contributions["action"] != 0.8 {
 		t.Errorf("expected contribution action=0.8, got %v", contributions["action"])
+	}
+}
+
+func TestCombinedMultiplier_ContributingOnly_NoDimensionEntry(t *testing.T) {
+	// genre "action" defines story=0.8 but NOT characters.
+	// For "characters": action should be excluded by contributing-only averaging → result 1.0.
+	genres := map[string]map[DimensionKey]float64{
+		"action": {"story": 0.8},
+	}
+	m, contrib := combinedMultiplier("characters", []string{"action"}, genres)
+	if m != 1.0 {
+		t.Errorf("contributing-only averaging: expected 1.0 when no genre has opinion on dimension, got %v", m)
+	}
+	if len(contrib) != 0 {
+		t.Errorf("expected empty contributions, got %v", contrib)
+	}
+}
+
+func TestScore_PrimaryGenre_BlendApplied(t *testing.T) {
+	// Mystery (primary, story=1.5) + Action (secondary, story=0.8), blend=0.6.
+	// final = (1.5 × 0.6) + (0.8 × 0.4) = 0.9 + 0.32 = 1.22
+	eng := testEngine()
+	entry := allTen([]string{"Mystery", "Action"})
+	entry.PrimaryGenre = "mystery"
+	result, err := eng.Score(entry)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, row := range result.Breakdown {
+		if row.Key == "story" {
+			expected := (1.5 * 0.6) + (0.8 * 0.4)
+			if !approxEqual(row.AppliedMultiplier, expected, 0.001) {
+				t.Errorf("primary blend: story multiplier expected %.4f, got %v", expected, row.AppliedMultiplier)
+			}
+			if !approxEqual(row.PrimaryGenreMultiplier, 1.5, 0.001) {
+				t.Errorf("primary blend: PrimaryGenreMultiplier expected 1.5, got %v", row.PrimaryGenreMultiplier)
+			}
+		}
+	}
+}
+
+func TestScore_PrimaryGenre_NoPrimary_FallsBackToOptionB(t *testing.T) {
+	// Same genres without primary genre flag → plain contributing-only average.
+	// story: mystery=1.5, action=0.8 → (1.5+0.8)/2 = 1.15
+	eng := testEngine()
+	result, err := eng.Score(allTen([]string{"Mystery", "Action"}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, row := range result.Breakdown {
+		if row.Key == "story" {
+			expected := (1.5 + 0.8) / 2
+			if !approxEqual(row.AppliedMultiplier, expected, 0.001) {
+				t.Errorf("fallback to contributing-only averaging: story multiplier expected %.4f, got %v", expected, row.AppliedMultiplier)
+			}
+		}
+	}
+}
+
+func TestScore_PrimaryGenre_NoSecondary_BlendWithNeutral(t *testing.T) {
+	// Only mystery matched (primary). No secondary genres.
+	// story: primary_mult=1.5, secondary_avg=1.0 (neutral), blend=0.6.
+	// final = (1.5 × 0.6) + (1.0 × 0.4) = 0.9 + 0.4 = 1.30
+	eng := testEngine()
+	entry := allTen([]string{"Mystery"})
+	entry.PrimaryGenre = "mystery"
+	result, err := eng.Score(entry)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, row := range result.Breakdown {
+		if row.Key == "story" {
+			expected := (1.5 * 0.6) + (1.0 * 0.4)
+			if !approxEqual(row.AppliedMultiplier, expected, 0.001) {
+				t.Errorf("primary only: story multiplier expected %.4f, got %v", expected, row.AppliedMultiplier)
+			}
+		}
+	}
+}
+
+func TestScore_PrimaryGenre_NoDimensionEntry_PrimaryMult1(t *testing.T) {
+	// Mystery has no "characters" entry. Primary mult defaults to 1.0.
+	// Drama (secondary) has characters=1.3.
+	// final_characters = (1.0 × 0.6) + (1.3 × 0.4) = 0.6 + 0.52 = 1.12
+	eng := testEngine()
+	entry := allTen([]string{"Mystery", "Drama"})
+	entry.PrimaryGenre = "mystery"
+	result, err := eng.Score(entry)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, row := range result.Breakdown {
+		if row.Key == "characters" {
+			expected := (1.0 * 0.6) + (1.3 * 0.4)
+			if !approxEqual(row.AppliedMultiplier, expected, 0.001) {
+				t.Errorf("primary no-opinion: characters multiplier expected %.4f, got %v", expected, row.AppliedMultiplier)
+			}
+			// PrimaryGenreMultiplier should be 0 because mystery has no characters entry.
+			if row.PrimaryGenreMultiplier != 0 {
+				t.Errorf("expected PrimaryGenreMultiplier=0 when primary has no dimension entry, got %v", row.PrimaryGenreMultiplier)
+			}
+		}
+	}
+}
+
+func TestScore_PrimaryGenre_WeightsStillSumToOne(t *testing.T) {
+	// After primary genre blending, final weights must still sum to 1.0.
+	eng := testEngine()
+	entry := allTen([]string{"Mystery", "Drama", "Action"})
+	entry.PrimaryGenre = "mystery"
+	result, err := eng.Score(entry)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	sum := 0.0
+	for _, row := range result.Breakdown {
+		sum += row.FinalWeight
+	}
+	if !approxEqual(sum, 1.0, 0.001) {
+		t.Errorf("primary genre blend: final weights sum to %v, expected 1.0", sum)
 	}
 }

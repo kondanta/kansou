@@ -16,20 +16,27 @@ type Engine struct {
 	defs map[DimensionKey]DimensionDef
 	// genres maps lowercase genre name to a map of dimension key → multiplier.
 	genres map[string]map[DimensionKey]float64
+	// primaryGenreWeight is the blend ratio for primary genre support (ADR-022).
+	// Range [0.0, 1.0]. 0.0 disables the feature; default is 0.6.
+	primaryGenreWeight float64
 }
 
 // NewEngine constructs an Engine from the provided dimension definitions and
 // genre multiplier map. The dimensions slice defines the iteration order.
 // genres maps lowercase genre names to per-dimension multipliers.
+// primaryGenreWeight is the blend ratio used when Entry.PrimaryGenre is set;
+// pass 0 to disable primary genre blending.
 func NewEngine(
 	dimensions []DimensionKey,
 	defs map[DimensionKey]DimensionDef,
 	genres map[string]map[DimensionKey]float64,
+	primaryGenreWeight float64,
 ) *Engine {
 	return &Engine{
-		dimensions: dimensions,
-		defs:       defs,
-		genres:     genres,
+		dimensions:         dimensions,
+		defs:               defs,
+		genres:             genres,
+		primaryGenreWeight: primaryGenreWeight,
 	}
 }
 
@@ -115,6 +122,12 @@ func (e *Engine) effectiveWeights(entry Entry) (map[DimensionKey]float64, []Brea
 	// Collect matched genres (lowercased for case-insensitive lookup).
 	matchedGenres := matchedGenreKeys(entry.Genres, e.genres)
 
+	// Lowercase primary genre once for consistent lookup.
+	primaryGenre := ""
+	if entry.PrimaryGenre != "" {
+		primaryGenre = toLower(entry.PrimaryGenre)
+	}
+
 	for _, key := range e.dimensions {
 		def, ok := e.defs[key]
 		if !ok {
@@ -122,12 +135,13 @@ func (e *Engine) effectiveWeights(entry Entry) (map[DimensionKey]float64, []Brea
 		}
 
 		row := BreakdownRow{
-			Key:           key,
-			Label:         def.Label,
-			BaseWeight:    def.Weight,
-			BiasResistant: def.BiasResistant,
-			Score:         entry.Scores[key],
+			Key:              key,
+			Label:            def.Label,
+			BaseWeight:       def.Weight,
+			BiasResistant:    def.BiasResistant,
+			Score:            entry.Scores[key],
 			GenreMultipliers: make(map[string]float64),
+			PrimaryGenre:     entry.PrimaryGenre,
 		}
 
 		if entry.SkippedDimensions[key] {
@@ -140,7 +154,9 @@ func (e *Engine) effectiveWeights(entry Entry) (map[DimensionKey]float64, []Brea
 
 		multiplier := 1.0
 		if !def.BiasResistant {
-			multiplier, row.GenreMultipliers = combinedMultiplier(key, matchedGenres, e.genres)
+			var primaryMult float64
+			multiplier, primaryMult, row.GenreMultipliers = e.blendedMultiplier(key, primaryGenre, matchedGenres)
+			row.PrimaryGenreMultiplier = primaryMult
 		}
 		row.AppliedMultiplier = multiplier
 		effective[key] = def.Weight * multiplier
@@ -150,8 +166,11 @@ func (e *Engine) effectiveWeights(entry Entry) (map[DimensionKey]float64, []Brea
 	return effective, breakdown, nil
 }
 
-// combinedMultiplier averages the per-dimension multiplier across all matched genres.
-// Genres that do not define a multiplier for this dimension contribute 1.0.
+// combinedMultiplier averages the per-dimension multiplier across matched genres
+// that explicitly define a multiplier for this dimension (contributing-only averaging, ADR-021).
+// Genres in matchedGenres that have no configured entry for this dimension are
+// excluded from the denominator — they do not contribute a neutral 1.0.
+// Returns 1.0 when no matched genre has an opinion on this dimension.
 // Returns the averaged multiplier and the per-genre contributions for provenance.
 func combinedMultiplier(
 	key DimensionKey,
@@ -164,17 +183,71 @@ func combinedMultiplier(
 
 	contributions := make(map[string]float64)
 	sum := 0.0
+	count := 0
 	for _, genre := range matchedGenres {
-		m := 1.0
 		if gm, ok := genres[genre]; ok {
 			if v, ok := gm[key]; ok {
-				m = v
+				sum += v
+				count++
 				contributions[genre] = v
 			}
 		}
-		sum += m
 	}
-	return sum / float64(len(matchedGenres)), contributions
+	if count == 0 {
+		return 1.0, nil
+	}
+	return sum / float64(count), contributions
+}
+
+// blendedMultiplier calculates the effective multiplier for a dimension, applying
+// a primary-genre blend when a primary genre is specified (ADR-022).
+// When primaryGenre is empty or primaryGenreWeight is 0, falls back to combinedMultiplier.
+// Returns (finalMultiplier, primaryGenreMultiplier, perGenreContributions).
+// primaryGenreMultiplier is the raw multiplier from the primary genre alone (0 if N/A).
+func (e *Engine) blendedMultiplier(
+	key DimensionKey,
+	primaryGenre string, // already lowercased; empty if not set
+	matchedGenres []string,
+) (float64, float64, map[string]float64) {
+	if primaryGenre == "" || e.primaryGenreWeight == 0 {
+		m, contrib := combinedMultiplier(key, matchedGenres, e.genres)
+		return m, 0, contrib
+	}
+
+	// Primary multiplier: what the primary genre says for this dimension.
+	// configuredPrimaryMult is 0 if the primary genre has no entry (used for provenance).
+	// effectivePrimaryMult is the value used in the blend (defaults to 1.0 when unset).
+	configuredPrimaryMult := 0.0
+	effectivePrimaryMult := 1.0
+	if gm, ok := e.genres[primaryGenre]; ok {
+		if v, ok := gm[key]; ok {
+			configuredPrimaryMult = v
+			effectivePrimaryMult = v
+		}
+	}
+
+	// Secondary: contributing-only average over non-primary matched genres.
+	secondary := make([]string, 0, len(matchedGenres))
+	for _, g := range matchedGenres {
+		if g != primaryGenre {
+			secondary = append(secondary, g)
+		}
+	}
+	secondaryMult, contrib := combinedMultiplier(key, secondary, e.genres)
+
+	blend := e.primaryGenreWeight
+	final := (effectivePrimaryMult * blend) + (secondaryMult * (1 - blend))
+
+	// Include primary genre's contribution in the map for provenance, if it
+	// defines a multiplier for this dimension.
+	if configuredPrimaryMult != 0 {
+		if contrib == nil {
+			contrib = make(map[string]float64)
+		}
+		contrib[primaryGenre] = configuredPrimaryMult
+	}
+
+	return final, configuredPrimaryMult, contrib
 }
 
 // renormalise returns a new weight map scaled so values sum to 1.0.

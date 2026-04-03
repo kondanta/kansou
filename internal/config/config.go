@@ -25,6 +25,11 @@ const DefaultPort = 8080
 // Raise it in config if you need more aggressive genre bias adjustment.
 const DefaultMaxMultiplier = 2.0
 
+// DefaultPrimaryGenreWeight is the default blend ratio for primary genre support.
+// 0.6 means 60% weight on the primary genre's raw multiplier, 40% on the
+// contributing-only average across secondary matched genres. See ADR-022.
+const DefaultPrimaryGenreWeight = 0.6
+
 // weightSumTolerance is the allowed deviation from 1.0 for dimension weight sums.
 const weightSumTolerance = 0.001
 
@@ -66,6 +71,9 @@ type Config struct {
 	// All values in [genres.*] blocks must be > 0.0 and ≤ MaxMultiplier.
 	// Default: 2.0.
 	MaxMultiplier float64
+	// PrimaryGenreWeight is the blend ratio for primary genre support (ADR-022).
+	// Range [0.0, 1.0]. 0.0 disables the feature. Default: 0.6.
+	PrimaryGenreWeight float64
 	// Server holds REST server configuration.
 	Server ServerConfig
 	// DimensionsHash is the SHA256 hex digest of the serialised dimensions
@@ -76,10 +84,13 @@ type Config struct {
 // rawConfig mirrors the TOML structure for parsing.
 // Dimensions and Genres use maps because TOML table keys are dynamic.
 type rawConfig struct {
-	Dimensions    map[string]DimensionDef       `toml:"dimensions"`
-	Genres        map[string]map[string]float64 `toml:"genres"`
-	MaxMultiplier float64                        `toml:"max_multiplier"`
-	Server        ServerConfig                   `toml:"server"`
+	Dimensions         map[string]DimensionDef       `toml:"dimensions"`
+	Genres             map[string]map[string]float64 `toml:"genres"`
+	MaxMultiplier      float64                        `toml:"max_multiplier"`
+	// PrimaryGenreWeight is a pointer so we can distinguish "not set" from
+	// "explicitly 0.0" — 0.0 is a valid user value meaning "disable blending".
+	PrimaryGenreWeight *float64                       `toml:"primary_genre_weight"`
+	Server             ServerConfig                   `toml:"server"`
 }
 
 // Load reads the config file at path, validates it, and returns a Config.
@@ -177,6 +188,15 @@ func build(raw *rawConfig) (*Config, error) {
 		return nil, err
 	}
 
+	// Resolve primary_genre_weight — default if not set.
+	primaryGenreWeight := DefaultPrimaryGenreWeight
+	if raw.PrimaryGenreWeight != nil {
+		if *raw.PrimaryGenreWeight < 0.0 || *raw.PrimaryGenreWeight > 1.0 {
+			return nil, fmt.Errorf("primary_genre_weight %.4f must be between 0.0 and 1.0", *raw.PrimaryGenreWeight)
+		}
+		primaryGenreWeight = *raw.PrimaryGenreWeight
+	}
+
 	// Lowercase all genre keys for case-insensitive matching.
 	genres := lowercaseGenreKeys(raw.Genres)
 
@@ -186,10 +206,11 @@ func build(raw *rawConfig) (*Config, error) {
 	order := dimensionOrder(raw.Dimensions)
 
 	cfg := &Config{
-		DimensionOrder: order,
-		Dimensions:     raw.Dimensions,
-		Genres:         genres,
-		MaxMultiplier:  maxMult,
+		DimensionOrder:     order,
+		Dimensions:         raw.Dimensions,
+		Genres:             genres,
+		MaxMultiplier:      maxMult,
+		PrimaryGenreWeight: primaryGenreWeight,
 		Server: ServerConfig{
 			Port:               port,
 			CORSAllowedOrigins: raw.Server.CORSAllowedOrigins,

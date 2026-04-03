@@ -26,15 +26,21 @@ kansou scores media through a four-step pipeline. The renormalization step is wh
 
 Each active dimension starts from its configured base weight. If the media's genres match any configured genre rules, the dimension's weight is nudged by a **genre multiplier**.
 
-The multiplier for dimension $i$ is the **average** across all matched genres (genres without a rule for this dimension contribute a neutral $1.0$):
+Let $G_i \subseteq G$ be the subset of matched genres that **explicitly define** a multiplier for dimension $i$. Genres that have no configured entry for dimension $i$ are excluded entirely — they do not contribute a diluting $1.0$ to the average (Option B, see ADR-021):
 
-$$\bar{m}_i = \frac{1}{|G|} \sum_{g \in G} m_{g,i}$$
+$$\bar{m}_i = \begin{cases} \dfrac{1}{|G_i|} \displaystyle\sum_{g \in G_i} m_{g,i} & \text{if } |G_i| > 0 \\ 1.0 & \text{if } |G_i| = 0 \end{cases}$$
 
 The effective (pre-normalisation) weight is:
 
 $$w_{\text{eff},i} = w_{\text{base},i} \times \bar{m}_i$$
 
 Dimensions marked `bias_resistant` always use $\bar{m}_i = 1.0$ — genre rules never touch them.
+
+**Optional: primary genre blend.** When `--primary-genre` is specified, one genre is designated as constitutive. Its multiplier is blended with the contributing-only average across the remaining genres at a configurable ratio $\beta$ (`primary_genre_weight`, default $0.6$):
+
+$$\bar{m}_i = \beta \cdot m_{\text{primary},i} + (1-\beta) \cdot \bar{m}^{\text{secondary}}_i$$
+
+where $m_{\text{primary},i}$ is the primary genre's multiplier for dimension $i$ (or $1.0$ if it has no entry), and $\bar{m}^{\text{secondary}}_i$ is the contributing-only average over non-primary matched genres. Setting $\beta = 0$ disables the feature.
 
 ### Step 2 — Renormalization
 
@@ -58,19 +64,20 @@ Each dimension's score is multiplied by its final renormalized weight. The resul
 
 ### Example
 
-Config has five dimensions with equal base weights of $0.20$. The media matches a genre that sets a $1.5\times$ multiplier on *Story* and a $0.8\times$ multiplier on *Pacing*. The user skips *Production*.
+Config has six dimensions with equal base weights of $0.20$. The media matches one genre that defines a $1.5\times$ multiplier on *Story* and a $0.8\times$ multiplier on *Pacing* — it has **no entry** for *Characters* or *World Building*. The user skips *Production*.
 
-| Dimension   | Base W | Multiplier | Effective W | Renormalized W |
-|-------------|--------|-----------|-------------|----------------|
-| Story       | 0.20   | ×1.50     | 0.300       | **0.294**      |
-| Characters  | 0.20   | ×1.00     | 0.200       | **0.196**      |
-| Pacing      | 0.20   | ×0.80     | 0.160       | **0.157**      |
-| Enjoyment   | 0.20   | ×1.00 *   | 0.200       | **0.196**      |
-| Production  | —      | skipped   | —           | —              |
-| World Build | 0.20   | ×1.00     | 0.200       | **0.196**      |
-| **Total**   |        |           | **1.020** ✗ | **1.000** ✓    |
+| Dimension   | Base W | $G_i$ | Multiplier | Effective W | Renormalized W |
+|-------------|--------|--------|-----------|-------------|----------------|
+| Story       | 0.20   | 1      | ×1.50     | 0.300       | **0.294**      |
+| Characters  | 0.20   | 0      | ×1.00 †   | 0.200       | **0.196**      |
+| Pacing      | 0.20   | 1      | ×0.80     | 0.160       | **0.157**      |
+| Enjoyment   | 0.20   | —  *   | ×1.00     | 0.200       | **0.196**      |
+| Production  | —      | —      | skipped   | —           | —              |
+| World Build | 0.20   | 0      | ×1.00 †   | 0.200       | **0.196**      |
+| **Total**   |        |        |           | **1.020** ✗ | **1.000** ✓    |
 
-\* Enjoyment is `bias_resistant` — the genre multiplier is ignored.
+\* Enjoyment is `bias_resistant` — genre rules never apply.  
+† No matched genre defined a multiplier for this dimension — contributing-only averaging returns $1.0$ (neutral), not an average diluted by a phantom $1.0$ contribution.
 
 Without renormalization the weights would sum to $1.02$ and the score would be silently inflated. With renormalization, the active pool is always $1.0$ and the result is honest.
 
@@ -90,7 +97,7 @@ Or with version stamping:
 just build-release
 ```
 
-Requires Go 1.22+.
+Requires Go 1.26+.
 
 ---
 
@@ -185,6 +192,7 @@ kansou serve --port 3000
 |--------|------|-------------|
 | `GET` | `/health` | Liveness check |
 | `GET` | `/dimensions` | List configured scoring dimensions |
+| `GET` | `/genres` | List configured genre multiplier blocks |
 | `GET` | `/media/search?q={query}` | Search AniList by name |
 | `GET` | `/media/{id}` | Fetch media by AniList ID |
 | `POST` | `/score` | Calculate a weighted score |

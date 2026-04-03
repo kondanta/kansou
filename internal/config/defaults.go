@@ -140,10 +140,11 @@ func defaults() *Config {
 	}
 
 	return &Config{
-		DimensionOrder: order,
-		Dimensions:     dims,
-		Genres:         genres,
-		MaxMultiplier:  DefaultMaxMultiplier,
+		DimensionOrder:     order,
+		Dimensions:         dims,
+		Genres:             genres,
+		MaxMultiplier:      DefaultMaxMultiplier,
+		PrimaryGenreWeight: DefaultPrimaryGenreWeight,
 		Server: ServerConfig{
 			Port:               DefaultPort,
 			CORSAllowedOrigins: []string{"http://localhost:3000", "http://localhost:5173", "http://localhost:8080"},

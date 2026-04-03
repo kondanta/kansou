@@ -130,11 +130,22 @@ Adding a new dimension requires adding its weight to config. The validator
 ensures the total remains 1.0 — it will reject a config where a new dimension
 is added without rebalancing the other weights.
 
-**FR-03b — Genre adjustment**
-Each genre defined in config carries a multiplier per dimension (default 1.0 if unspecified).
+**FR-03b — Genre adjustment (contributing-only averaging, ADR-021)**
+Each genre defined in config carries a multiplier per dimension.
 When a media entry has multiple genres, the multiplier for each dimension is the
-**average** of that dimension's multiplier across all matched genres.
-Genres present on the entry but absent from config are ignored.
+**average across only the genres that explicitly define a multiplier for that dimension**.
+Genres present on the entry but absent from config are ignored entirely.
+Matched genres that are in config but have no entry for a specific dimension are
+also excluded from the average for that dimension — they do not contribute a
+diluting neutral 1.0. If no matched genre has an opinion on a dimension, the
+multiplier is 1.0 (neutral).
+
+**Optional — Primary genre blend (ADR-022):** When `--primary-genre` is specified,
+one genre is designated as constitutive. Its raw multiplier is blended with the
+contributing-only average across remaining matched genres at a configurable ratio
+`primary_genre_weight` (default 0.6):
+`final_multiplier = (primary_mult × blend) + (secondary_avg × (1 − blend))`
+Setting `primary_genre_weight = 0.0` in config disables the feature.
 
 Dimensions marked `bias_resistant = true` in config always receive a multiplier
 of exactly 1.0, regardless of what any genre block defines. By default, Enjoyment
@@ -148,7 +159,10 @@ so they sum to 1.0 before the final score is computed.
 **FR-03d — Final score formula**
 
 ```
-effective_weight(s)  = base_weight(s) × average_genre_multiplier(s)
+genre_multiplier(s)  = average of m(g,s) across genres g that define m(g,s)
+                       (contributing-only averaging: genres with no entry for s are excluded)
+                       = 1.0 if no matched genre has an entry for s
+effective_weight(s)  = base_weight(s) × genre_multiplier(s)
                        (skipped dimensions excluded from pool)
 final_weight(s)      = effective_weight(s) / Σ effective_weight(all non-skipped)
 final_score          = Σ ( section_score(s) × final_weight(s) )

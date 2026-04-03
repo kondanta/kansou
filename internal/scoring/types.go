@@ -58,6 +58,10 @@ type Entry struct {
 	// Used to look up multipliers in the config genre map.
 	Genres []string
 
+	// PrimaryGenre, if non-empty, designates one genre as the constitutive genre
+	// for blended multiplier calculation. See ADR-022.
+	PrimaryGenre string
+
 	// Meta carries session-level provenance data (media identity, config hash).
 	// Constructed by the caller before invoking Engine.Score().
 	Meta SessionMeta
@@ -117,6 +121,14 @@ type BreakdownRow struct {
 	// Skipped indicates the user marked this dimension as not applicable.
 	// Skipped dimensions have FinalWeight=0 and Contribution=0.
 	Skipped bool
+	// PrimaryGenre is the genre designated as primary for this scoring session.
+	// Empty when no primary genre was specified. Carried for provenance only.
+	// See ADR-022.
+	PrimaryGenre string
+	// PrimaryGenreMultiplier is the raw multiplier the primary genre defines for
+	// this dimension (1.0 if the primary genre has no opinion on it). Zero when
+	// no primary genre was specified or the dimension is bias-resistant.
+	PrimaryGenreMultiplier float64
 }
 
 // Result is the output of Engine.Score(). The Breakdown is always fully

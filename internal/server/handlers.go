@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"sort"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
@@ -159,6 +160,49 @@ func (s *Server) handleDimensions(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// genreMultiplierItem is the JSON representation of a single genre's configured
+// per-dimension multipliers.
+// swagger:model genreMultiplierItem
+type genreMultiplierItem struct {
+	// Genre is the AniList genre name (lowercased).
+	Genre string `json:"genre"`
+	// Multipliers maps dimension keys to their configured multiplier values.
+	Multipliers map[string]float64 `json:"multipliers"`
+}
+
+// genresResponse is the response body for GET /genres.
+// swagger:model genresResponse
+type genresResponse struct {
+	// PrimaryGenreWeight is the configured blend ratio for primary genre support.
+	PrimaryGenreWeight float64 `json:"primary_genre_weight"`
+	// Genres is the list of configured genre multiplier blocks, sorted alphabetically.
+	Genres []genreMultiplierItem `json:"genres"`
+}
+
+// handleGenres returns the configured genre multiplier table.
+//
+//	@Summary		List genre multipliers
+//	@Description	Returns all configured genre multiplier blocks and the primary genre blend ratio.
+//	@Tags			score
+//	@Produce		json
+//	@Success		200	{object}	genresResponse
+//	@Router			/genres [get]
+func (s *Server) handleGenres(w http.ResponseWriter, r *http.Request) {
+	items := make([]genreMultiplierItem, 0, len(s.cfg.Genres))
+	for genre, multipliers := range s.cfg.Genres {
+		items = append(items, genreMultiplierItem{
+			Genre:       genre,
+			Multipliers: multipliers,
+		})
+	}
+	// Sort for deterministic output.
+	sort.Slice(items, func(i, j int) bool { return items[i].Genre < items[j].Genre })
+	writeJSON(w, http.StatusOK, genresResponse{
+		PrimaryGenreWeight: s.cfg.PrimaryGenreWeight,
+		Genres:             items,
+	})
+}
+
 // scoreRequest is the request body for POST /score.
 // swagger:model scoreRequest
 type scoreRequest struct {
@@ -170,6 +214,10 @@ type scoreRequest struct {
 	// WeightOverrides maps dimension keys to per-session weight overrides.
 	// Optional — omit to use the weights defined in server config.
 	WeightOverrides map[string]float64 `json:"weight_overrides,omitempty"`
+	// PrimaryGenre designates one of the media's genres as constitutive for
+	// blended multiplier calculation. Must match one of the media's AniList genres
+	// (case-insensitive). Optional — omit to use contributing-only averaging with no primary.
+	PrimaryGenre string `json:"primary_genre,omitempty"`
 }
 
 // scoreResponse is the response body for POST /score.
@@ -265,6 +313,7 @@ func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 		SkippedDimensions: skipped,
 		WeightOverrides:   req.WeightOverrides,
 		Genres:            media.Genres,
+		PrimaryGenre:      req.PrimaryGenre,
 		Meta: scoring.SessionMeta{
 			MediaID:       media.ID,
 			TitleRomaji:   media.TitleRomaji,

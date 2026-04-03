@@ -24,6 +24,7 @@ causes an immediate exit with a descriptive error message.
 - All dimension weights must sum to 1.0 (±0.001 tolerance for float rounding)
 - All dimension keys referenced in `[genres.*]` blocks must exist in `[dimensions]`
 - All genre multiplier values must be > 0.0 and ≤ `max_multiplier` (default 2.0)
+- `primary_genre_weight`, if set, must be in the range 0.0–1.0
 - Server port must be an integer in the range 1024–65535
 - Every dimension must have a non-empty `label`
 - Every dimension `weight` must be > 0.0 and ≤ 1.0
@@ -47,6 +48,28 @@ involved and what the current sum is.
 # ---------------------------------------------------------------
 
 max_multiplier = 2.0
+
+# ---------------------------------------------------------------
+# primary_genre_weight
+#
+# Blend ratio for --primary-genre / primary_genre support (ADR-022).
+# When a primary genre is designated, the effective multiplier for each
+# non-bias-resistant dimension is:
+#
+#   final = (primary_mult × primary_genre_weight)
+#         + (secondary_avg × (1 − primary_genre_weight))
+#
+# where:
+#   primary_mult  — raw multiplier from the primary genre for this dimension
+#                   (1.0 if the primary genre has no configured entry for it)
+#   secondary_avg — contributing-only average across all other matched genres
+#                   (1.0 if none have an opinion)
+#
+# Range: 0.0–1.0. 0.0 disables the feature entirely.
+# Default: 0.6
+# ---------------------------------------------------------------
+
+primary_genre_weight = 0.6
 
 # ---------------------------------------------------------------
 # [dimensions]

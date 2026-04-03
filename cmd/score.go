@@ -32,6 +32,7 @@ func (a *App) scoreAddCmd() *cobra.Command {
 	var typeFlag string
 	var breakdownFlag bool
 	var weightFlag string
+	var primaryGenreFlag string
 
 	cmd := &cobra.Command{
 		Use:   "add [query]",
@@ -43,7 +44,7 @@ Enter 's' or 'skip' to mark a dimension as not applicable.
 After scoring, prompts whether to publish the result to AniList.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return a.runScoreAdd(args, urlFlag, typeFlag, breakdownFlag, weightFlag)
+			return a.runScoreAdd(args, urlFlag, typeFlag, breakdownFlag, weightFlag, primaryGenreFlag)
 		},
 	}
 
@@ -51,12 +52,13 @@ After scoring, prompts whether to publish the result to AniList.`,
 	cmd.Flags().StringVar(&typeFlag, "type", "", "Media type filter: anime or manga")
 	cmd.Flags().BoolVar(&breakdownFlag, "breakdown", false, "Show weighted contribution table after scoring")
 	cmd.Flags().StringVar(&weightFlag, "weight", "", "Override dimension weights for this session (e.g. pacing=0.05,world_building=0.20)")
+	cmd.Flags().StringVar(&primaryGenreFlag, "primary-genre", "", "Designate one genre as primary for blended multiplier calculation (e.g. Mystery)")
 	return cmd
 }
 
 // runScoreAdd fetches the media entry, runs the interactive prompt loop,
 // calculates the score, and offers to publish it to AniList.
-func (a *App) runScoreAdd(args []string, urlFlag, typeFlag string, breakdown bool, weightFlag string) error {
+func (a *App) runScoreAdd(args []string, urlFlag, typeFlag string, breakdown bool, weightFlag, primaryGenreFlag string) error {
 	// Parse --type and --weight before any network I/O.
 	mediaType, err := resolveMediaType(typeFlag)
 	if err != nil {
@@ -94,6 +96,24 @@ func (a *App) runScoreAdd(args []string, urlFlag, typeFlag string, breakdown boo
 		}
 	default:
 		return fmt.Errorf("provide a search query or --url")
+	}
+
+	// Validate --primary-genre if provided: must appear in the media's genre list.
+	primaryGenre := ""
+	if primaryGenreFlag != "" {
+		lowerFlag := strings.ToLower(primaryGenreFlag)
+		found := false
+		for _, g := range media.Genres {
+			if strings.ToLower(g) == lowerFlag {
+				primaryGenre = g // use the canonical casing from AniList
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("primary genre %q is not in the media's genre list: %s",
+				primaryGenreFlag, strings.Join(media.Genres, ", "))
+		}
 	}
 
 	// Display media header.
@@ -168,6 +188,7 @@ func (a *App) runScoreAdd(args []string, urlFlag, typeFlag string, breakdown boo
 		SkippedDimensions: skipped,
 		WeightOverrides:   overrides,
 		Genres:            media.Genres,
+		PrimaryGenre:      primaryGenre,
 		Meta: scoring.SessionMeta{
 			MediaID:       media.ID,
 			TitleRomaji:   media.TitleRomaji,
@@ -271,6 +292,8 @@ func printBreakdown(result scoring.Result) {
 			annotations = " [skipped]"
 		} else if row.WeightOverride {
 			annotations = " [overridden]"
+		} else if row.PrimaryGenre != "" && row.PrimaryGenreMultiplier != 0 {
+			annotations = " [primary blended]"
 		} else if row.AppliedMultiplier != 1.0 {
 			annotations = " [genre adjusted]"
 		}

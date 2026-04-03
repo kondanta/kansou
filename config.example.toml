@@ -17,6 +17,25 @@
 max_multiplier = 2.0
 
 # ---------------------------------------------------------------
+# Primary genre blend ratio (ADR-022)
+#
+# When --primary-genre is passed to `score add` (or primary_genre is
+# set in POST /score), the effective multiplier for each dimension is:
+#
+#   final = (primary_mult × primary_genre_weight)
+#         + (secondary_avg × (1 − primary_genre_weight))
+#
+# where primary_mult is the primary genre's raw multiplier for the
+# dimension and secondary_avg is the contributing-only average across the other
+# matched genres.
+#
+# Range: 0.0–1.0. 0.0 disables the blend (falls back to contributing-only averaging).
+# Default: 0.6
+# ---------------------------------------------------------------
+
+primary_genre_weight = 0.6
+
+# ---------------------------------------------------------------
 # Dimensions
 #
 # Each key is the internal identifier used in genre blocks and output.
@@ -80,8 +99,9 @@ bias_resistant = true
 #   >1.0 — this dimension carries more weight for this genre
 #   <1.0 — this dimension carries less weight for this genre
 #
-# Multi-genre: multipliers are averaged per dimension across all
-# matched genres — never multiplied together.
+# Multi-genre contributing-only averaging: only genres that explicitly define a multiplier
+# for a given dimension are included in the average. Genres with no
+# opinion on a dimension are excluded, not treated as 1.0.
 #
 # Bias-resistant dimensions: multipliers listed here for
 # bias_resistant dimensions are silently ignored by the engine.

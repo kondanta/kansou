@@ -883,3 +883,126 @@ multiple tags compound.
 - `BreakdownRow.GenreMultipliers` (currently genre-only) may need to become
   `AppliedMultipliers map[string]float64` covering both genres and tags, to
   preserve full provenance in the breakdown output.
+
+---
+
+## ADR-021 — Contributing-only averaging: only genres with a configured entry for a dimension participate
+
+**Status:** Accepted
+
+**Date:** 2026
+
+**Context:**
+The original averaging formula (ADR-005) treated matched genres that have no
+configured multiplier for a given dimension as contributing a neutral `1.0` to
+the average. This is the **dilution problem**: if a show matches two genres and
+only one defines a multiplier for `characters`, the other genre silently pulls
+the average toward `1.0`, weakening the signal from the genre that does have an
+opinion.
+
+Example:
+- Drama defines `characters = 1.3`, Action does not.
+- Old formula: `(1.3 + 1.0) / 2 = 1.15` — Action dilutes Drama's signal.
+- contributing-only averaging:    `1.3 / 1 = 1.3`         — only Drama has an opinion; it counts alone.
+
+**Decision:**
+Switch to **contributing-only averaging**: include in the average only the genres that
+explicitly define a multiplier for the dimension being calculated. Genres in the
+matched set that have no entry for the dimension are excluded from the
+denominator entirely. If no matched genre has an opinion on a dimension, the
+result is `1.0` (neutral).
+
+**Reasoning:**
+The previous neutral-contribution approach was a conservative default that
+appeared mathematically safe but consistently undershot the intended genre
+effect. A genre with no configured opinion should have zero influence, not a
+diluting `1.0`. Option B produces averages that actually reflect the signal from
+genres that have been configured to care about the dimension.
+
+**Alternatives considered:**
+- Option A (keep original): simple but dilutes signal with every additional
+  matched genre that has no opinion on the dimension.
+- Multiplicative combination: `Π multipliers` — rejected (ADR-005) because it
+  compounds to extreme values for multi-genre media.
+- Per-dimension max instead of average: `max(multipliers)` — rejected because
+  it makes the outcome dependent on the highest single genre regardless of how
+  strongly the other matched genres pull in the opposite direction.
+
+**Consequences:**
+- `combinedMultiplier` in `internal/scoring/engine.go` now iterates matched
+  genres and accumulates only those with an entry for the target dimension.
+  Denominator is the count of contributing genres, not `len(matchedGenres)`.
+- Existing tests for partial genre matching (`TestScore_PartialGenreMatch`)
+  continue to pass unchanged — they already exercised the unmatched-genre
+  exclusion path (genres not in config at all).
+- `TestScore_UnmatchedGenreContributes1` renamed to `TestScore_NoMatchedGenres_Multiplier1`
+  to accurately describe what it tests (no matched genres at all → multiplier 1.0).
+- New test `TestScore_OptionB_DimensionlessGenreExcluded` covers the dilution
+  scenario explicitly (Action+Drama for `characters` → 1.3 not 1.15).
+
+---
+
+## ADR-022 — Primary genre blend for multi-genre media
+
+**Status:** Accepted
+
+**Date:** 2026
+
+**Context:**
+Some shows have multiple genres of very unequal importance. A "Mystery" show
+tagged with "Slice of Life" may use slice-of-life as incidental texture while
+being constitutively a mystery. Treating both genres with equal weight in the
+contributing-only average applies the slice-of-life multipliers as strongly as the
+mystery multipliers, which misrepresents the show's character.
+
+**Decision:**
+Add an optional `--primary-genre` flag to `kansou score add` (and a
+`primary_genre` field to `POST /score`). When a primary genre is set, the
+effective multiplier for each dimension is calculated as a weighted blend:
+
+```
+final_multiplier = (primary_mult × blend) + (secondary_avg × (1 − blend))
+```
+
+Where:
+- `primary_mult` is the primary genre's raw multiplier for the dimension (`1.0`
+  if the primary genre has no opinion on it).
+- `secondary_avg` is the contributing-only average across all **non-primary** matched
+  genres (`1.0` if there are none or none have an opinion).
+- `blend` is `primary_genre_weight` from config (default: `0.6`).
+
+The configurable blend ratio `primary_genre_weight` (range `[0.0, 1.0]`) is
+set once in `config.toml`. Setting it to `0.0` is equivalent to disabling
+primary genre support entirely (falls back to Option B). Default is `0.6`.
+
+Bias-resistant dimensions are unaffected — they always receive `1.0`.
+
+**Reasoning:**
+The blend approach gives the user an explicit signal ("this is the defining
+genre") without hard-coding that genre's multipliers as gospel. At `0.6` the
+primary genre's multipliers carry 60% of the weight; secondary genres share the
+remaining 40%. The fallback to contributing-only averaging when no primary genre is specified
+preserves backward compatibility.
+
+**Alternatives considered:**
+- Primary-only (ignore secondary genres entirely): too aggressive; loses signal
+  from genres that do legitimately affect the show.
+- Raise the primary genre's weight to 2× before averaging: implicit and hard to
+  reason about; does not generalise cleanly to more than two matched genres.
+- Make `blend` a per-session override: deferred; `config.toml` setting covers
+  the use case without adding flag complexity per session.
+
+**Consequences:**
+- `Engine` gains a `primaryGenreWeight float64` field. `NewEngine` accepts it
+  as a parameter. `cmd/root.go` passes `cfg.PrimaryGenreWeight`.
+- `Entry` gains `PrimaryGenre string`. `BreakdownRow` gains `PrimaryGenre string`
+  and `PrimaryGenreMultiplier float64` for provenance.
+- `config.go` adds `DefaultPrimaryGenreWeight = 0.6`, `PrimaryGenreWeight *float64`
+  in `rawConfig`, and `PrimaryGenreWeight float64` in `Config`.
+  Pointer in rawConfig distinguishes "not set" (use default) from "explicitly 0.0".
+- `config.example.toml` documents `primary_genre_weight = 0.6`.
+- `cmd/score.go` adds `--primary-genre` flag. Validation: the value must appear
+  in the media's genre list (case-insensitive); unknown value is an error.
+- `POST /score` accepts optional `primary_genre` string field.
+- `GET /genres` endpoint added to the REST server, returning the configured genre
+  multiplier table so web clients can display available genre options.

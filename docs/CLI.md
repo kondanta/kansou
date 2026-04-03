@@ -153,6 +153,7 @@ kansou score add --url <url> [flags]
 | `--type <type>` | Filter results by media type: `anime` or `manga` |
 | `--breakdown` | Show weighted contribution table after scoring |
 | `--weight <overrides>` | Override dimension weights for this session only |
+| `--primary-genre <genre>` | Designate one genre as primary for blended multiplier calculation |
 
 **--weight flag syntax:**
 
@@ -165,7 +166,35 @@ All values must be > 0.0. The sum of all overridden values must be < 1.0
 --weight story=0.30
 ```
 
-Validation errors for `--weight`:
+**--primary-genre flag:**
+
+Designates one of the media's AniList genres as the constitutive genre for
+blended multiplier calculation (ADR-022). The value must match one of the genres
+returned by AniList for this entry (case-insensitive). If it does not match,
+the session exits before prompting.
+
+```bash
+--primary-genre Mystery
+--primary-genre "Slice of Life"
+```
+
+The blend ratio is configured globally via `primary_genre_weight` in config.toml
+(default `0.6`). When this flag is set, the effective multiplier for each
+non-bias-resistant dimension becomes:
+
+```
+final = (primary_mult × blend) + (secondary_avg × (1 − blend))
+```
+
+Where `secondary_avg` uses contributing-only averaging across the remaining matched genres.
+Setting `primary_genre_weight = 0.0` in config disables the feature globally.
+
+The `--breakdown` table marks primary-blended dimensions with `[primary blended]`.
+
+Validation errors for `--primary-genre`:
+- Value not in the media's genre list → exits with error listing available genres
+
+****Validation errors for `--weight`:****
 - Unknown dimension key → exits before fetching media
 - Value ≤ 0.0 or > 1.0 → exits before fetching media
 - Sum of override values ≥ 1.0 → exits before fetching media
@@ -300,6 +329,8 @@ kansou score add "mushishi" --breakdown
 kansou score add --url https://anilist.co/anime/457 --breakdown
 kansou score add "Mushishi" --weight pacing=0.05,world_building=0.20
 kansou score add "Mushishi" --weight pacing=0.05 --breakdown
+kansou score add "Mushishi" --primary-genre "Supernatural"
+kansou score add "Mushishi" --primary-genre "Mystery" --breakdown
 ```
 
 ---

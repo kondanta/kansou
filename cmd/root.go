@@ -97,5 +97,5 @@ func newEngine(cfg *config.Config) *scoring.Engine {
 			BiasResistant: d.BiasResistant,
 		}
 	}
-	return scoring.NewEngine(cfg.DimensionOrder, dims, cfg.Genres)
+	return scoring.NewEngine(cfg.DimensionOrder, dims, cfg.Genres, cfg.PrimaryGenreWeight)
 }
