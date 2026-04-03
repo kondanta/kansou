@@ -10,9 +10,9 @@ default:
 build:
     go build -o {{binary}} {{main}}
 
-# Build with version stamped from git tag
+# Build with version stamped from the nearest git tag (clean semver, no commit hash)
 build-release:
-    go build -ldflags "-X github.com/kondanta/kansou/cmd.version=$(git describe --tags --always --dirty)" -o {{binary}} {{main}}
+    go build -ldflags "-X github.com/kondanta/kansou/cmd.version=$(git describe --tags --abbrev=0 2>/dev/null || echo dev)" -o {{binary}} {{main}}
 
 # Run all tests
 test:

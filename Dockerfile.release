@@ -1,0 +1,19 @@
+# Copies a pre-built binary into the image — no compilation here.
+# Build stage only selects the correct binary for TARGETPLATFORM.
+FROM alpine:3.19
+RUN apk add --no-cache ca-certificates tzdata
+
+WORKDIR /app
+
+ARG TARGETPLATFORM
+COPY kansou-linux-amd64 kansou-linux-arm64 kansou-linux-armv7 /tmp/
+RUN case "$TARGETPLATFORM" in \
+      "linux/amd64")  mv /tmp/kansou-linux-amd64  /app/kansou ;; \
+      "linux/arm64")  mv /tmp/kansou-linux-arm64  /app/kansou ;; \
+      "linux/arm/v7") mv /tmp/kansou-linux-armv7  /app/kansou ;; \
+      *) echo "unsupported platform: $TARGETPLATFORM" && exit 1 ;; \
+    esac && chmod +x /app/kansou && rm -f /tmp/kansou-*
+
+EXPOSE 8080
+ENTRYPOINT ["/app/kansou"]
+CMD ["serve"]
