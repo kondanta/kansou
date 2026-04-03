@@ -95,8 +95,8 @@ func (s *Server) ListenAndServe(portOverride int) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		slog.Info("kansou listening", "addr", "http://localhost"+addr)
-		slog.Info("swagger available", "addr", "http://localhost"+addr+"/swagger/index.html")
+		slog.Info("kansou listening", "addr", "http://0.0.0.0"+addr)
+		slog.Info("swagger available", "addr", "http://0.0.0.0"+addr+"/swagger/index.html")
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			errCh <- err
 		}
