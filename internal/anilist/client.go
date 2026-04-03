@@ -45,7 +45,7 @@ func NewClient() *Client {
 // Returns an error if the network is unreachable, AniList returns an error,
 // or no results are found.
 func (c *Client) SearchByNameMulti(search, mediaType string) ([]Media, error) {
-	vars := map[string]interface{}{ // interface{} required: GraphQL variables are heterogeneous
+	vars := map[string]any{ // interface{} required: GraphQL variables are heterogeneous
 		"search":  search,
 		"perPage": searchPageSize,
 	}
@@ -89,7 +89,7 @@ func (c *Client) SearchByNameMulti(search, mediaType string) ([]Media, error) {
 // FetchByID retrieves a media entry by its AniList ID.
 // Returns an error if the network is unreachable or AniList returns an error.
 func (c *Client) FetchByID(id int) (*Media, error) {
-	vars := map[string]interface{}{ // interface{} required: GraphQL variables are heterogeneous
+	vars := map[string]any{ // interface{} required: GraphQL variables are heterogeneous
 		"id": id,
 	}
 
@@ -150,7 +150,7 @@ func (c *Client) PublishScore(mediaID int, score float64) (*PublishResult, error
 		)
 	}
 
-	vars := map[string]interface{}{ // interface{} required: GraphQL variables are heterogeneous
+	vars := map[string]any{ // interface{} required: GraphQL variables are heterogeneous
 		"mediaId": mediaID,
 		"score":   score,
 	}
@@ -188,8 +188,8 @@ func (c *Client) PublishScore(mediaID int, score float64) (*PublishResult, error
 
 // do executes a GraphQL request. If withAuth is true, the Authorization header
 // is included. The caller is responsible for closing resp.Body.
-func (c *Client) do(query string, variables map[string]interface{}, withAuth bool) (*http.Response, error) {
-	body, err := json.Marshal(map[string]interface{}{ // interface{} required: GraphQL request body is heterogeneous
+func (c *Client) do(query string, variables map[string]any, withAuth bool) (*http.Response, error) {
+	body, err := json.Marshal(map[string]any{ // interface{} required: GraphQL request body is heterogeneous
 		"query":     query,
 		"variables": variables,
 	})
@@ -222,7 +222,7 @@ func (c *Client) do(query string, variables map[string]interface{}, withAuth boo
 // decodeResponse decodes a JSON response body into dst.
 // dst must be a pointer to a struct with an Errors []gqlError field at the top level.
 // The caller must call checkErrors on the decoded Errors slice separately.
-func decodeResponse(resp *http.Response, dst interface{}) error { // interface{} required: generic JSON decode target
+func decodeResponse(resp *http.Response, dst any) error { // interface{} required: generic JSON decode target
 	if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
 		return fmt.Errorf("decoding AniList response: %w", err)
 	}
