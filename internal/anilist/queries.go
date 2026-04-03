@@ -69,7 +69,7 @@ query ($id: Int) {
 // Sets the list entry score and status to COMPLETED if not already set.
 const publishMutation = `
 mutation ($mediaId: Int, $score: Float) {
-  SaveMediaListEntry(mediaId: $mediaId, score: $score, status: COMPLETED) {
+  SaveMediaListEntry(mediaId: $mediaId, score: $score) {
     id
     score
     status

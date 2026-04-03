@@ -122,6 +122,12 @@ To obtain a token:
 
 Read operations (search, fetch) do not require a token.
 
+> **What publish does and does not do:**
+> Publishing writes only the final numeric score to your AniList list entry.
+> It does **not** change the entry's status (watching, completed, dropped, etc.).
+> If the entry does not yet exist in your list, it is created with the score but no status set.
+> Your watch/read status is always left as-is.
+
 ---
 
 ## CLI Usage

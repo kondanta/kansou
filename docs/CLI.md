@@ -310,8 +310,7 @@ kansou score add "Mushishi" --weight pacing=0.05 --breakdown
 | Code | Meaning |
 |------|---------|
 | `0` | Success |
-| `1` | General error (config invalid, AniList error, bad input) |
-| `2` | Misuse of CLI (unknown command, missing argument) |
+| `1` | Any error (config invalid, AniList error, bad input, unknown command) |
 
 ---
 
