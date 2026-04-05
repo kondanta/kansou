@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -240,9 +241,9 @@ type scoreResponse struct {
 // breakdownRowResponse is the JSON representation of a single BreakdownRow.
 // swagger:model breakdownRowResponse
 type breakdownRowResponse struct {
-	Key                    string             `json:"key"`
-	Label                  string             `json:"label"`
-	Score                  float64            `json:"score"`
+	Key                    string  `json:"key"`
+	Label                  string  `json:"label"`
+	Score                  float64 `json:"score"`
 	BaseWeight             float64 `json:"base_weight"`
 	AppliedMultiplier      float64 `json:"applied_multiplier"`
 	FinalWeight            float64 `json:"final_weight"`
@@ -316,9 +317,6 @@ func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 		req.WeightOverrides = map[string]float64{}
 	}
 
-	// Determine matched genres for session meta.
-	matched := matchedGenres(media.Genres, s.cfg.Genres)
-
 	// Validate primary_genre: when selected_genres are provided, the primary must
 	// be in that set; otherwise it must be in the full AniList genre list.
 	if req.PrimaryGenre != "" {
@@ -327,9 +325,9 @@ func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 			validationSet = req.SelectedGenres
 		}
 		found := false
-		primaryLower := toLower(req.PrimaryGenre)
+		primaryLower := strings.ToLower(req.PrimaryGenre)
 		for _, g := range validationSet {
-			if toLower(g) == primaryLower {
+			if strings.ToLower(g) == primaryLower {
 				found = true
 				break
 			}
@@ -354,7 +352,6 @@ func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 			MediaType:          media.MediaType,
 			AniListURL:         aniListURL(media),
 			AllGenres:          media.Genres,
-			MatchedGenres:      matched,
 			ConfigHash:         s.cfg.DimensionsHash,
 			PrimaryGenre:       req.PrimaryGenre,
 			PrimaryGenreWeight: s.cfg.PrimaryGenreWeight,
@@ -484,9 +481,9 @@ func (s *Server) handleWeights(w http.ResponseWriter, r *http.Request) {
 			validationSet = req.SelectedGenres
 		}
 		found := false
-		primaryLower := toLower(req.PrimaryGenre)
+		primaryLower := strings.ToLower(req.PrimaryGenre)
 		for _, g := range validationSet {
-			if toLower(g) == primaryLower {
+			if strings.ToLower(g) == primaryLower {
 				found = true
 				break
 			}
@@ -663,27 +660,4 @@ func aniListURL(m *anilist.Media) string {
 		t = "manga"
 	}
 	return "https://anilist.co/" + t + "/" + strconv.Itoa(m.ID)
-}
-
-// matchedGenres returns the subset of genres that have a config entry (case-insensitive).
-func matchedGenres(genres []string, configGenres map[string]map[string]float64) []string {
-	matched := make([]string, 0, len(genres))
-	for _, g := range genres {
-		lower := toLower(g)
-		if _, ok := configGenres[lower]; ok {
-			matched = append(matched, g)
-		}
-	}
-	return matched
-}
-
-// toLower is a dependency-free ASCII lowercase for genre keys.
-func toLower(s string) string {
-	b := []byte(s)
-	for i, c := range b {
-		if c >= 'A' && c <= 'Z' {
-			b[i] = c + 32
-		}
-	}
-	return string(b)
 }

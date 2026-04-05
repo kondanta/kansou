@@ -12,19 +12,19 @@ func testEngine() *Engine {
 		"story", "enjoyment", "characters", "production", "pacing", "world_building", "value",
 	}
 	defs := map[DimensionKey]DimensionDef{
-		"story":         {Label: "Story", Weight: 0.25, BiasResistant: false},
-		"enjoyment":     {Label: "Enjoyment", Weight: 0.20, BiasResistant: true},
-		"characters":    {Label: "Characters", Weight: 0.15, BiasResistant: false},
-		"production":    {Label: "Production", Weight: 0.15, BiasResistant: false},
-		"pacing":        {Label: "Pacing", Weight: 0.10, BiasResistant: false},
+		"story":          {Label: "Story", Weight: 0.25, BiasResistant: false},
+		"enjoyment":      {Label: "Enjoyment", Weight: 0.20, BiasResistant: true},
+		"characters":     {Label: "Characters", Weight: 0.15, BiasResistant: false},
+		"production":     {Label: "Production", Weight: 0.15, BiasResistant: false},
+		"pacing":         {Label: "Pacing", Weight: 0.10, BiasResistant: false},
 		"world_building": {Label: "World Building", Weight: 0.10, BiasResistant: false},
-		"value":         {Label: "Value", Weight: 0.05, BiasResistant: true},
+		"value":          {Label: "Value", Weight: 0.05, BiasResistant: true},
 	}
 	genres := map[string]map[DimensionKey]float64{
 		"action": {
-			"production":    1.4,
-			"pacing":        1.3,
-			"story":         0.8,
+			"production":     1.4,
+			"pacing":         1.3,
+			"story":          0.8,
 			"world_building": 0.9,
 		},
 		"drama": {
@@ -34,20 +34,20 @@ func testEngine() *Engine {
 			"pacing":     1.1,
 		},
 		"mystery": {
-			"story":         1.5,
-			"pacing":        1.3,
+			"story":          1.5,
+			"pacing":         1.3,
 			"world_building": 1.2,
 		},
 		"slice_of_life": {
-			"characters":    1.4,
+			"characters":     1.4,
 			"world_building": 0.7,
-			"story":         0.8,
-			"pacing":        0.9,
+			"story":          0.8,
+			"pacing":         0.9,
 		},
 		"supernatural": {
 			"world_building": 1.3,
-			"story":         1.1,
-			"production":    1.1,
+			"story":          1.1,
+			"production":     1.1,
 		},
 	}
 	return NewEngine(dims, defs, genres, 0.6)
@@ -282,7 +282,7 @@ func TestScore_WeightOverride_OverriddenFixed_RemainderRescaled(t *testing.T) {
 		},
 		SkippedDimensions: map[DimensionKey]bool{},
 		WeightOverrides: map[DimensionKey]float64{
-			"pacing":        0.05,
+			"pacing":         0.05,
 			"world_building": 0.20,
 		},
 		Genres: nil,
@@ -748,9 +748,9 @@ func TestScore_UserSelectedGenres_GenreDeselected_FlagSet(t *testing.T) {
 	}
 	// Action defines: production, pacing, story, world_building → GenreDeselected expected true.
 	deselectedExpected := map[DimensionKey]bool{
-		"production":    true,
-		"pacing":        true,
-		"story":         true,
+		"production":     true,
+		"pacing":         true,
+		"story":          true,
 		"world_building": true,
 	}
 	for _, row := range result.Breakdown {

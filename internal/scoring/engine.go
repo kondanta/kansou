@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 )
 
 // Engine holds the config needed to score an entry. Construct it once per
@@ -77,11 +78,14 @@ func (e *Engine) Score(entry Entry) (Result, error) {
 		}
 	}
 
+	// allMatched is the full set of entry genres that have a config entry.
+	// Used for both MatchedGenres provenance and the GenreDeselected post-pass.
+	allMatched := matchedGenreKeys(entry.Genres, e.genres)
+
 	// GenreDeselected post-pass: mark dimensions where a deselected genre
 	// had a configured multiplier. Only runs when the caller supplied a
 	// restricted genre set.
 	if len(entry.UserSelectedGenres) > 0 {
-		allMatched := matchedGenreKeys(entry.Genres, e.genres)
 		activeSet := make(map[string]bool)
 		for _, g := range matchedGenreKeys(entry.UserSelectedGenres, e.genres) {
 			activeSet[g] = true
@@ -114,8 +118,11 @@ func (e *Engine) Score(entry Entry) (Result, error) {
 		finalScore += entry.Scores[row.Key] * row.FinalWeight
 	}
 
-	// Populate GenresActive in meta.
+	// Populate genre provenance in meta. Both fields are derived from
+	// entry.Genres (already lowercased at AniList ingestion) against the
+	// config genre map, so no external caller needs to pre-compute them.
 	meta := entry.Meta
+	meta.MatchedGenres = allMatched
 	meta.GenresActive = matchedGenreKeys(genreSource, e.genres)
 
 	return Result{
@@ -143,7 +150,7 @@ func (e *Engine) Weights(
 
 	primaryGenreLower := ""
 	if primaryGenre != "" {
-		primaryGenreLower = toLower(primaryGenre)
+		primaryGenreLower = strings.ToLower(primaryGenre)
 	}
 
 	// Step 1: compute effective weights (base × genre multiplier).
@@ -377,7 +384,7 @@ func matchedGenreKeys(genres []string, configGenres map[string]map[DimensionKey]
 	seen := make(map[string]bool, len(genres))
 	matched := make([]string, 0, len(genres))
 	for _, g := range genres {
-		lower := toLower(g)
+		lower := strings.ToLower(g)
 		if _, ok := configGenres[lower]; ok && !seen[lower] {
 			matched = append(matched, lower)
 			seen[lower] = true
@@ -397,15 +404,4 @@ func isOverridden(key DimensionKey, overrides map[DimensionKey]float64) bool {
 // round2 rounds f to two decimal places.
 func round2(f float64) float64 {
 	return math.Round(f*100) / 100
-}
-
-// toLower is a dependency-free ASCII lowercase for genre keys.
-func toLower(s string) string {
-	b := []byte(s)
-	for i, c := range b {
-		if c >= 'A' && c <= 'Z' {
-			b[i] = c + 32
-		}
-	}
-	return string(b)
 }

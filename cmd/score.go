@@ -180,9 +180,6 @@ func (a *App) runScoreAdd(args []string, urlFlag, typeFlag string, breakdown boo
 		return fmt.Errorf("all dimensions were skipped — at least one dimension must be scored")
 	}
 
-	// Determine matched genres for session meta.
-	matchedGenreList := matchedGenres(media.Genres, a.Config.Genres)
-
 	entry := scoring.Entry{
 		Scores:            scores,
 		SkippedDimensions: skipped,
@@ -196,7 +193,6 @@ func (a *App) runScoreAdd(args []string, urlFlag, typeFlag string, breakdown boo
 			MediaType:          media.MediaType,
 			AniListURL:         fmt.Sprintf("https://anilist.co/%s/%d", strings.ToLower(string(media.MediaType)), media.ID),
 			AllGenres:          media.Genres,
-			MatchedGenres:      matchedGenreList,
 			ConfigHash:         a.Config.DimensionsHash,
 			PrimaryGenre:       primaryGenre,
 			PrimaryGenreWeight: a.Config.PrimaryGenreWeight,
@@ -469,16 +465,4 @@ func formatNote(result scoring.Result) string {
 	fmt.Fprintf(&b, "Config:  %s", result.Meta.ConfigHash)
 
 	return b.String()
-}
-
-// matchedGenres returns the subset of genres that have a config entry (case-insensitive).
-func matchedGenres(genres []string, configGenres map[string]map[string]float64) []string {
-	matched := make([]string, 0, len(genres))
-	for _, g := range genres {
-		lower := strings.ToLower(g)
-		if _, ok := configGenres[lower]; ok {
-			matched = append(matched, g)
-		}
-	}
-	return matched
 }

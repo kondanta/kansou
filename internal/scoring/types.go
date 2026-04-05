@@ -90,6 +90,7 @@ type SessionMeta struct {
 	// AllGenres is the full genre list returned by AniList.
 	AllGenres []string
 	// MatchedGenres is the subset of AllGenres that matched a config genre block.
+	// Populated by Engine.Score() — callers do not need to pre-compute this.
 	MatchedGenres []string
 	// GenresActive is the genre set that actually participated in multiplier
 	// calculation for this session. Equal to MatchedGenres when no

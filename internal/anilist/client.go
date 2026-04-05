@@ -298,12 +298,12 @@ type gqlMedia struct {
 		English string `json:"english"`
 		Native  string `json:"native"`
 	} `json:"title"`
-	Format       string   `json:"format"`
-	Status       string   `json:"status"`
-	Episodes     int      `json:"episodes"`
-	Chapters     int      `json:"chapters"`
-	Genres       []string `json:"genres"`
-	Tags         []struct {
+	Format   string   `json:"format"`
+	Status   string   `json:"status"`
+	Episodes int      `json:"episodes"`
+	Chapters int      `json:"chapters"`
+	Genres   []string `json:"genres"`
+	Tags     []struct {
 		Name           string `json:"name"`
 		Rank           int    `json:"rank"`
 		IsMediaSpoiler bool   `json:"isMediaSpoiler"`
@@ -313,7 +313,7 @@ type gqlMedia struct {
 	} `json:"coverImage"`
 	BannerImage  string `json:"bannerImage"`
 	AverageScore int    `json:"averageScore"`
-	MeanScore    int `json:"meanScore"`
+	MeanScore    int    `json:"meanScore"`
 }
 
 // toMedia converts a gqlMedia response to our domain Media type.
@@ -335,7 +335,7 @@ func (g *gqlMedia) toMedia() *Media {
 		Status:       g.Status,
 		Episodes:     g.Episodes,
 		Chapters:     g.Chapters,
-		Genres:       g.Genres,
+		Genres:       lowerStrings(g.Genres),
 		Tags:         tags,
 		CoverImage:   g.CoverImage.ExtraLarge,
 		BannerImage:  g.BannerImage,
@@ -343,6 +343,17 @@ func (g *gqlMedia) toMedia() *Media {
 		MeanScore:    g.MeanScore,
 		MediaType:    mediaTypeFromFormat(g.Format),
 	}
+}
+
+// lowerStrings returns a new slice with every element lowercased.
+// Genre strings are normalised to lowercase on ingestion so the rest of the
+// system can use plain equality against config keys without case handling.
+func lowerStrings(ss []string) []string {
+	out := make([]string, len(ss))
+	for i, s := range ss {
+		out[i] = strings.ToLower(s)
+	}
+	return out
 }
 
 // gqlListEntry is the raw GraphQL SaveMediaListEntry response shape.

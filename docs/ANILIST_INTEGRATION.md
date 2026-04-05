@@ -90,8 +90,9 @@ query ($search: String, $type: MediaType, $perPage: Int) {
         isMediaSpoiler
       }
       coverImage {
-        medium
+        extraLarge
       }
+      bannerImage
       averageScore
       meanScore
     }
@@ -278,7 +279,10 @@ type Media struct {
     Chapters     int      // manga only — 0 if not applicable
     Genres       []string // used for genre bias calculation
     Tags         []Tag    // AniList content tags
-    CoverImage   string   // URL of cover image (medium size)
+    CoverImage   string   // URL of cover image (extra-large size)
+    BannerImage  string   // URL of banner image (may be empty)
+    // Note: Genres is normalised to lowercase on ingestion. All genre strings
+    // throughout the system are lowercase from this point forward.
     AverageScore int      // AniList community average (0–100)
     MeanScore    int      // AniList mean score (0–100)
     MediaType    scoring.MediaType // derived from Format

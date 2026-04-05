@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -84,13 +85,13 @@ type Config struct {
 // rawConfig mirrors the TOML structure for parsing.
 // Dimensions and Genres use maps because TOML table keys are dynamic.
 type rawConfig struct {
-	Dimensions         map[string]DimensionDef       `toml:"dimensions"`
-	Genres             map[string]map[string]float64 `toml:"genres"`
-	MaxMultiplier      float64                        `toml:"max_multiplier"`
+	Dimensions    map[string]DimensionDef       `toml:"dimensions"`
+	Genres        map[string]map[string]float64 `toml:"genres"`
+	MaxMultiplier float64                       `toml:"max_multiplier"`
 	// PrimaryGenreWeight is a pointer so we can distinguish "not set" from
 	// "explicitly 0.0" — 0.0 is a valid user value meaning "disable blending".
-	PrimaryGenreWeight *float64                       `toml:"primary_genre_weight"`
-	Server             ServerConfig                   `toml:"server"`
+	PrimaryGenreWeight *float64     `toml:"primary_genre_weight"`
+	Server             ServerConfig `toml:"server"`
 }
 
 // Load reads the config file at path, validates it, and returns a Config.
@@ -277,7 +278,7 @@ func validatePort(port int) error {
 func lowercaseGenreKeys(genres map[string]map[string]float64) map[string]map[string]float64 {
 	out := make(map[string]map[string]float64, len(genres))
 	for genre, multipliers := range genres {
-		out[toLower(genre)] = multipliers
+		out[strings.ToLower(genre)] = multipliers
 	}
 	return out
 }
@@ -307,17 +308,6 @@ func hashDimensions(dims map[string]DimensionDef, order []string) string {
 		fmt.Fprintf(h, "%s:%.6f:%v\n", key, d.Weight, d.BiasResistant)
 	}
 	return fmt.Sprintf("%x", h.Sum(nil))
-}
-
-// toLower is a dependency-free ASCII lowercase for config keys.
-func toLower(s string) string {
-	b := []byte(s)
-	for i, c := range b {
-		if c >= 'A' && c <= 'Z' {
-			b[i] = c + 32
-		}
-	}
-	return string(b)
 }
 
 // stableSort sorts a string slice in place using insertion sort.
