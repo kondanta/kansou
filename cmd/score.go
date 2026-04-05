@@ -323,9 +323,14 @@ func printBreakdown(result scoring.Result) {
 
 	// Primary genre annotation.
 	if result.Meta.PrimaryGenre != "" {
-		blendPct := int(result.Meta.PrimaryGenreWeight * 100)
-		fmt.Printf("  Primary genre          : %s [primary] (blend %d/%d)\n",
-			result.Meta.PrimaryGenre, blendPct, 100-blendPct)
+		if blendWasApplied(result.Meta) {
+			blendPct := int(result.Meta.PrimaryGenreWeight * 100)
+			fmt.Printf("  Primary genre          : %s [primary] (blend %d/%d)\n",
+				result.Meta.PrimaryGenre, blendPct, 100-blendPct)
+		} else {
+			fmt.Printf("  Primary genre          : %s [primary] (sole active genre)\n",
+				result.Meta.PrimaryGenre)
+		}
 	}
 
 	// Genre match detail.
@@ -453,8 +458,12 @@ func formatNote(result scoring.Result) string {
 
 	fmt.Fprintln(&b)
 	if result.Meta.PrimaryGenre != "" {
-		blendPct := int(result.Meta.PrimaryGenreWeight * 100)
-		fmt.Fprintf(&b, "Primary: %s (blend %d/%d)\n", result.Meta.PrimaryGenre, blendPct, 100-blendPct)
+		if blendWasApplied(result.Meta) {
+			blendPct := int(result.Meta.PrimaryGenreWeight * 100)
+			fmt.Fprintf(&b, "Primary: %s (blend %d/%d)\n", result.Meta.PrimaryGenre, blendPct, 100-blendPct)
+		} else {
+			fmt.Fprintf(&b, "Primary: %s (sole active genre)\n", result.Meta.PrimaryGenre)
+		}
 	}
 	if len(result.Meta.AllGenres) > 0 {
 		fmt.Fprintf(&b, "Genres:  %s\n", strings.Join(result.Meta.AllGenres, ", "))
@@ -465,4 +474,18 @@ func formatNote(result scoring.Result) string {
 	fmt.Fprintf(&b, "Config:  %s", result.Meta.ConfigHash)
 
 	return b.String()
+}
+
+// blendWasApplied reports whether the primary genre blend formula was actually
+// used — i.e. at least one real secondary genre was active alongside the primary.
+// When the primary is the sole active matched genre, the engine applies its
+// multiplier directly (ADR-025) and no blend ratio is meaningful to display.
+func blendWasApplied(meta scoring.SessionMeta) bool {
+	primaryLower := strings.ToLower(meta.PrimaryGenre)
+	for _, g := range meta.GenresActive {
+		if g != primaryLower {
+			return true
+		}
+	}
+	return false
 }

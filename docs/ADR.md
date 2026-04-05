@@ -1109,3 +1109,55 @@ Remove `BreakdownRow.GenreMultipliers` entirely. The third return value from
   breaking change to the API response shape, but since the field was always
   empty in practice (populated with an empty map, serialised as absent via
   `omitempty`), no client observed any data in this field.
+
+---
+
+## ADR-025 — Skip blend when primary genre is the sole active genre
+
+**Date:** 2026-04-05
+**Status:** Accepted
+**Supersedes:** ADR-022 (partial — blend formula unchanged when real secondaries exist)
+
+**Context:**
+ADR-022 defined the primary genre blend formula as:
+`final = (primary_mult × blend) + (secondary_avg × (1 − blend))`
+
+When no secondary genres participate (either because the media has only one
+matched config genre, or because the user deselected all others via
+`selected_genres`), `secondary_avg` falls back to the neutral `1.0` returned
+by `combinedMultiplier` for an empty input. This produces a result weaker than
+not designating a primary at all:
+
+| Scenario | Pacing result (adventure=1.1, blend=0.6) |
+|---|---|
+| No primary, adventure only | `1.10` (raw multiplier) |
+| Adventure as primary, sole genre (old) | `(1.1×0.6)+(1.0×0.4) = 1.06` |
+
+Setting a primary genre that is the sole active genre actually *weakens* its
+multiplier compared to contributing-only averaging with no primary set — a
+counterintuitive inversion that violates the intent of the feature.
+
+**Decision:**
+In `blendedMultiplier`, when `secondary` is empty after filtering out the
+primary genre, return `effectivePrimaryMult` directly without applying the
+blend formula. The 60/40 (or configured) ratio is only meaningful when there
+is a real secondary opinion to blend against.
+
+```
+if len(secondary) == 0:
+    return effectivePrimaryMult  // direct, no blend
+```
+
+**Consequences:**
+- `blendedMultiplier` gains an early return before `combinedMultiplier` is
+  called on `secondary`, when `secondary` is empty.
+- `TestScore_PrimaryGenre_NoSecondary_BlendWithNeutral` renamed to
+  `TestScore_PrimaryGenre_NoSecondary_DirectMultiplier` with updated expected
+  value (1.5 not 1.30 for story with mystery as sole primary).
+- Two new tests added: `TestScore_PrimaryGenre_SoleActiveViaDeselect_DirectMultiplier`
+  and `TestScore_PrimaryGenre_NoSecondary_NoBetterThanNoBlend`.
+- Display: CLI `printBreakdown` and `formatNote`, and the web UI, now show
+  "(sole active genre)" instead of "(blend 60/40)" when no real secondary
+  participated. This is determined from `SessionMeta.GenresActive` — if the
+  only active matched genre is the primary itself, no blend occurred.
+- The blend formula (ADR-022) is unchanged when real secondaries exist.

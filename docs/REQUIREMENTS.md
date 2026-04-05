@@ -148,13 +148,20 @@ genres are recorded in the breakdown (`genre_deselected: true` on affected
 dimensions). When `selected_genres` is absent or empty, all matched config genres
 participate (CLI-compatible behaviour, no breaking change).
 
-**Optional — Primary genre blend (ADR-022):** One genre may be designated as
-constitutive. Its raw multiplier is blended with the contributing-only average
-across remaining matched genres at a configurable ratio `primary_genre_weight`
-(default 0.6):
+**Optional — Primary genre blend (ADR-022, ADR-025):** One genre may be
+designated as constitutive. Its raw multiplier is blended with the
+contributing-only average across remaining active matched genres at a
+configurable ratio `primary_genre_weight` (default 0.6):
 `final_multiplier = (primary_mult × blend) + (secondary_avg × (1 − blend))`
 Setting `primary_genre_weight = 0.0` in config disables the feature.
 When `selected_genres` is present, `primary_genre` must be in that set.
+
+**Exception — sole active genre (ADR-025):** When the primary genre is the
+only active matched genre (no real secondaries to blend against), its
+multiplier is applied directly without blending. Blending against a phantom
+neutral `1.0` would produce a weaker result than contributing-only averaging
+with no primary set — a counterintuitive inversion. The blend formula only
+runs when at least one real secondary genre participates.
 
 **Primary genre designation — session flow:**
 After displaying the media header and genre list, `score add` interactively

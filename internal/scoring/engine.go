@@ -298,6 +298,15 @@ func (e *Engine) blendedMultiplier(
 			secondary = append(secondary, g)
 		}
 	}
+	// When there are no real secondary genres, use the primary multiplier
+	// directly. Blending against a phantom neutral 1.0 would produce a weaker
+	// result than contributing-only averaging with no primary set at all —
+	// a counterintuitive inversion where designating a primary genre hurts it.
+	// See ADR-025.
+	if len(secondary) == 0 {
+		return effectivePrimaryMult, configuredPrimaryMult, nil
+	}
+
 	secondaryMult, contrib := combinedMultiplier(key, secondary, e.genres)
 
 	blend := e.primaryGenreWeight

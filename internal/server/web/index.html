@@ -569,8 +569,13 @@
     const info = document.getElementById('genre-info');
     info.innerHTML = '';
     if (meta.primary_genre) {
-      const blendPct = Math.round((meta.primary_genre_weight ?? 0.6) * 100);
-      info.innerHTML += `<div>Primary genre: <span>${meta.primary_genre} [primary] (blend ${blendPct}/${100-blendPct})</span></div>`;
+      const primaryLower = meta.primary_genre.toLowerCase();
+      const active = meta.genres_active || [];
+      const hasRealSecondary = active.some(g => g !== primaryLower);
+      const blendLabel = hasRealSecondary
+        ? `(blend ${Math.round((meta.primary_genre_weight ?? 0.6) * 100)}/${100 - Math.round((meta.primary_genre_weight ?? 0.6) * 100)})`
+        : '(sole active genre)';
+      info.innerHTML += `<div>Primary genre: <span>${meta.primary_genre} [primary] ${blendLabel}</span></div>`;
     }
     if (meta.all_genres?.length)
       info.innerHTML += `<div>Genres returned: <span>${meta.all_genres.join(', ')}</span></div>`;
@@ -631,8 +636,13 @@
     lines.push('');
     const meta = data.meta;
     if (meta.primary_genre) {
-      const blendPct = Math.round((meta.primary_genre_weight ?? 0.6) * 100);
-      lines.push(`Primary: ${meta.primary_genre} (blend ${blendPct}/${100-blendPct})`);
+      const primaryLower = meta.primary_genre.toLowerCase();
+      const active = meta.genres_active || [];
+      const hasRealSecondary = active.some(g => g !== primaryLower);
+      const blendLabel = hasRealSecondary
+        ? `(blend ${Math.round((meta.primary_genre_weight ?? 0.6) * 100)}/${100 - Math.round((meta.primary_genre_weight ?? 0.6) * 100)})`
+        : '(sole active genre)';
+      lines.push(`Primary: ${meta.primary_genre} ${blendLabel}`);
     }
     if (meta.all_genres?.length)     lines.push(`Genres:  ${meta.all_genres.join(', ')}`);
     if (meta.matched_genres?.length) lines.push(`Matched: ${meta.matched_genres.join(', ')}`);

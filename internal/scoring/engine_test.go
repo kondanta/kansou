@@ -558,12 +558,13 @@ func TestScore_PrimaryGenre_NoPrimary_FallsBackToOptionB(t *testing.T) {
 	}
 }
 
-func TestScore_PrimaryGenre_NoSecondary_BlendWithNeutral(t *testing.T) {
+func TestScore_PrimaryGenre_NoSecondary_DirectMultiplier(t *testing.T) {
 	// Only mystery matched (primary). No secondary genres.
-	// story: primary_mult=1.5, secondary_avg=1.0 (neutral), blend=0.6.
-	// final = (1.5 × 0.6) + (1.0 × 0.4) = 0.9 + 0.4 = 1.30
+	// ADR-025: when no real secondaries exist, use the primary multiplier
+	// directly — no blend against a phantom neutral 1.0.
+	// story: expected 1.5 (direct), NOT (1.5×0.6)+(1.0×0.4)=1.30.
 	eng := testEngine()
-	entry := allTen([]string{"Mystery"})
+	entry := allTen([]string{"mystery"})
 	entry.PrimaryGenre = "mystery"
 	result, err := eng.Score(entry)
 	if err != nil {
@@ -571,10 +572,56 @@ func TestScore_PrimaryGenre_NoSecondary_BlendWithNeutral(t *testing.T) {
 	}
 	for _, row := range result.Breakdown {
 		if row.Key == "story" {
-			expected := (1.5 * 0.6) + (1.0 * 0.4)
-			if !approxEqual(row.AppliedMultiplier, expected, 0.001) {
-				t.Errorf("primary only: story multiplier expected %.4f, got %v", expected, row.AppliedMultiplier)
+			if !approxEqual(row.AppliedMultiplier, 1.5, 0.001) {
+				t.Errorf("sole primary: story multiplier expected 1.5 (direct), got %v", row.AppliedMultiplier)
 			}
+		}
+	}
+}
+
+func TestScore_PrimaryGenre_SoleActiveViaDeselect_DirectMultiplier(t *testing.T) {
+	// Media has mystery + action. User deselects action, keeps only mystery as active,
+	// and sets mystery as primary. No real secondaries after deselection.
+	// ADR-025: primary applied directly, not blended against phantom 1.0.
+	// story (mystery=1.5): expected 1.5, NOT (1.5×0.6)+(1.0×0.4)=1.30.
+	eng := testEngine()
+	entry := allTen([]string{"mystery", "action"})
+	entry.UserSelectedGenres = []string{"mystery"}
+	entry.PrimaryGenre = "mystery"
+	result, err := eng.Score(entry)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, row := range result.Breakdown {
+		if row.Key == "story" {
+			if !approxEqual(row.AppliedMultiplier, 1.5, 0.001) {
+				t.Errorf("sole active primary via deselect: story expected 1.5, got %v", row.AppliedMultiplier)
+			}
+		}
+	}
+}
+
+func TestScore_PrimaryGenre_NoSecondary_NoBetterThanNoBlend(t *testing.T) {
+	// ADR-025: setting a genre as sole primary must give the same result as
+	// contributing-only averaging with that genre alone (no primary set).
+	// Both should yield the raw genre multiplier — no phantom pull to neutral.
+	eng := testEngine()
+	withPrimary := allTen([]string{"mystery"})
+	withPrimary.PrimaryGenre = "mystery"
+	withoutPrimary := allTen([]string{"mystery"})
+
+	rWith, err := eng.Score(withPrimary)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	rWithout, err := eng.Score(withoutPrimary)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for i, row := range rWith.Breakdown {
+		if !approxEqual(row.AppliedMultiplier, rWithout.Breakdown[i].AppliedMultiplier, 0.001) {
+			t.Errorf("dimension %q: sole primary multiplier %.4f != no-primary multiplier %.4f",
+				row.Key, row.AppliedMultiplier, rWithout.Breakdown[i].AppliedMultiplier)
 		}
 	}
 }
