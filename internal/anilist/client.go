@@ -142,8 +142,10 @@ func ParseMediaURL(rawURL string) (int, error) {
 }
 
 // PublishScore writes the given score for mediaID to the user's AniList account.
+// If notes is non-empty, the existing list entry notes are fetched first and the
+// new scoring block is appended before saving, so prior notes are preserved.
 // Requires ANILIST_TOKEN to be set; returns an error if it is missing or empty.
-func (c *Client) PublishScore(mediaID int, score float64) (*PublishResult, error) {
+func (c *Client) PublishScore(mediaID int, score float64, notes string) (*PublishResult, error) {
 	if c.token == "" {
 		return nil, fmt.Errorf(
 			"ANILIST_TOKEN environment variable is not set\n       set it with: export ANILIST_TOKEN=your_token_here\n       see docs/ANILIST_INTEGRATION.md for how to obtain a token",
@@ -154,9 +156,20 @@ func (c *Client) PublishScore(mediaID int, score float64) (*PublishResult, error
 		"mediaId": mediaID,
 		"score":   score,
 	}
+	mutation := publishMutation
 
-	slog.Debug("anilist: publishing score", "media_id", mediaID, "score", score)
-	resp, err := c.do(publishMutation, vars, true)
+	if notes != "" {
+		existing := c.fetchExistingNotes(mediaID)
+		combined := notes
+		if existing != "" {
+			combined = existing + "\n\n---\n\n" + notes
+		}
+		vars["notes"] = combined
+		mutation = publishWithNotesMutation
+	}
+
+	slog.Debug("anilist: publishing score", "media_id", mediaID, "score", score, "with_notes", notes != "")
+	resp, err := c.do(mutation, vars, true)
 	if err != nil {
 		return nil, err
 	}
@@ -184,6 +197,38 @@ func (c *Client) PublishScore(mediaID int, score float64) (*PublishResult, error
 		Status:      e.Status,
 		TitleRomaji: e.Media.Title.Romaji,
 	}, nil
+}
+
+// fetchExistingNotes retrieves the authenticated user's current list entry notes
+// for mediaID. Returns an empty string if the entry has no notes, is not on the
+// user's list, or if the request fails — note fetching failure must not block publishing.
+func (c *Client) fetchExistingNotes(mediaID int) string {
+	vars := map[string]any{ // interface{} required: GraphQL variables are heterogeneous
+		"mediaId": mediaID,
+	}
+	resp, err := c.do(fetchListEntryNotesQuery, vars, true)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Data struct {
+			Media struct {
+				MediaListEntry *struct {
+					Notes string `json:"notes"`
+				} `json:"mediaListEntry"`
+			} `json:"Media"`
+		} `json:"data"`
+		Errors []gqlError `json:"errors"`
+	}
+	if err := decodeResponse(resp, &result); err != nil {
+		return ""
+	}
+	if result.Data.Media.MediaListEntry == nil {
+		return ""
+	}
+	return result.Data.Media.MediaListEntry.Notes
 }
 
 // do executes a GraphQL request. If withAuth is true, the Authorization header

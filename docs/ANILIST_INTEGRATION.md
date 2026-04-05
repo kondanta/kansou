@@ -175,7 +175,7 @@ parsing logic.
 **Triggered by:** answering `y` at the publish prompt in `kansou score add` (CLI),
 or `POST /score/publish` (API)
 
-**GraphQL mutation:**
+**GraphQL mutation (score only):**
 
 ```graphql
 mutation ($mediaId: Int, $score: Float) {
@@ -192,11 +192,53 @@ mutation ($mediaId: Int, $score: Float) {
 }
 ```
 
-**Variables:**
+**GraphQL mutation (score + notes, used when `--notes` flag is set or `notes` field is non-empty):**
+
+```graphql
+mutation ($mediaId: Int, $score: Float, $notes: String) {
+  SaveMediaListEntry(mediaId: $mediaId, score: $score, notes: $notes) {
+    id
+    score
+    status
+    media {
+      title {
+        romaji
+      }
+    }
+  }
+}
+```
+
+When notes are requested, an additional query is issued first to fetch the existing
+list entry notes. If any exist, the new scoring block is appended after a `---`
+separator so prior notes are not overwritten.
+
+**Fetch existing notes query (notes path only):**
+
+```graphql
+query ($mediaId: Int) {
+  Media(id: $mediaId) {
+    mediaListEntry {
+      notes
+    }
+  }
+}
+```
+
+**Variables (score only):**
 ```json
 {
   "mediaId": 154587,
   "score": 8.79
+}
+```
+
+**Variables (with notes):**
+```json
+{
+  "mediaId": 154587,
+  "score": 8.79,
+  "notes": "Frieren: Beyond Journey's End\nScore: 9.73 / 10  [kansou]\n..."
 }
 ```
 
@@ -321,6 +363,25 @@ Used by web clients to populate the primary genre picker.
 - `genres` — alphabetically sorted list of configured genre blocks.
 - `multipliers` — only dimensions explicitly configured for that genre; dimensions absent here
   are excluded from the contributing-only average (not treated as 1.0).
+
+### POST /score/publish — notes field
+
+The `POST /score/publish` request body accepts an optional `notes` string:
+
+```json
+{
+  "media_id": 154587,
+  "score": 9.73,
+  "notes": "Frieren: Beyond Journey's End\nScore: 9.73 / 10  [kansou]\n..."
+}
+```
+
+- If `notes` is non-empty, the server fetches the existing list entry notes and
+  appends the new block after a `---` separator before saving.
+- If `notes` is omitted or empty, only the score is written (existing notes unchanged).
+- The web UI's `buildNotes()` function produces a compatible string from a `POST /score` result.
+
+---
 
 ### POST /score — primary_genre field
 

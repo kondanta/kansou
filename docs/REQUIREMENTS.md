@@ -235,8 +235,10 @@ not need to declare skipped dimensions explicitly. `weight_overrides` is an
 optional field for per-session weight adjustment; omitting it uses config weights.
 
 **FR-04b — What is published**
-Only the final numeric score is written to AniList. The breakdown and
-per-dimension scores are not transmitted to AniList in v1.
+The final numeric score is always written to AniList. Optionally, the scoring
+breakdown may also be appended to the list entry notes field (CLI: `--notes` flag;
+API: `notes` field in `POST /score/publish`). If the entry already has notes,
+the new block is appended after a `---` separator — existing notes are never overwritten.
 
 **FR-04c — Confirmation**
 After a successful publish, the user receives confirmation including the media title
@@ -346,6 +348,7 @@ Full command reference is in `docs/CLI.md`. Summary:
 | `kansou media find <query>` | Search for media and display info |
 | `kansou score add <query>` | Start a scoring session by search (includes publish prompt) |
 | `kansou score add --url <url>` | Start a scoring session by AniList URL (includes publish prompt) |
+| `kansou score add --notes` | Score and optionally append breakdown to AniList list entry notes |
 
 ---
 

@@ -348,6 +348,11 @@ type publishRequest struct {
 	MediaID int `json:"media_id"`
 	// Score is the final score to publish (e.g. 8.79).
 	Score float64 `json:"score"`
+	// Notes is an optional pre-formatted scoring breakdown to append to the
+	// AniList list entry notes. If the entry already has notes, the new block
+	// is appended after a "---" separator so existing content is preserved.
+	// Omit or leave empty to skip writing notes entirely.
+	Notes string `json:"notes,omitempty" example:"Frieren: Beyond Journey's End\nScore: 9.73 / 10  [kansou]"`
 }
 
 // publishResponse is the response body for POST /score/publish.
@@ -388,7 +393,7 @@ func (s *Server) handleScorePublish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pub, err := s.al.PublishScore(req.MediaID, req.Score)
+	pub, err := s.al.PublishScore(req.MediaID, req.Score, req.Notes)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return

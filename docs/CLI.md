@@ -154,6 +154,7 @@ kansou score add --url <url> [flags]
 | `--breakdown` | Show weighted contribution table after scoring |
 | `--weight <overrides>` | Override dimension weights for this session only |
 | `--primary-genre <genre>` | Designate one genre as primary for blended multiplier calculation |
+| `--notes` | Append scoring breakdown to AniList list entry notes when publishing |
 
 **--weight flag syntax:**
 
@@ -370,7 +371,42 @@ kansou score add "Mushishi" --weight pacing=0.05,world_building=0.20
 kansou score add "Mushishi" --weight pacing=0.05 --breakdown
 kansou score add "Mushishi" --primary-genre "Supernatural"
 kansou score add "Mushishi" --primary-genre "Mystery" --breakdown
+kansou score add "Mushishi" --notes
+kansou score add "Mushishi" --breakdown --notes
 ```
+
+**--notes flag:**
+
+When `--notes` is set and the user confirms publish (`y`), `kansou` appends the
+scoring breakdown as a note to the AniList list entry. If the entry already has
+notes, the new block is appended after a `---` separator so prior content is
+preserved.
+
+```
+✓ Score published to AniList
+  Mushishi — 9.22
+  ✓ Scoring breakdown appended to list entry notes
+```
+
+The note format is:
+```
+Mushishi
+Score: 9.22 / 10  [kansou]
+
+Dimension        Score   BaseW    ×Mult  FinalW  Contrib
+───────────────────────────────────────────────────────
+Story             9.0   25.0%   ×1.23   26.1%     2.35
+Enjoyment        10.0   15.0%   ×1.00   13.2%     1.32  *
+...
+
+Genres:  Mystery, Slice of Life, Supernatural
+Matched: Mystery, Slice of Life
+Config:  04d78507
+```
+
+`--notes` has no effect if the user does not confirm publish.
+The `--notes` and `--breakdown` flags are independent — `--breakdown` controls
+terminal display, `--notes` controls what is written to AniList.
 
 ---
 

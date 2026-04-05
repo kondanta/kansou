@@ -458,6 +458,11 @@ const docTemplate = `{
                     "description": "MediaID is the AniList media ID to publish the score for.",
                     "type": "integer"
                 },
+                "notes": {
+                    "description": "Notes is an optional pre-formatted scoring breakdown to append to the\nAniList list entry notes. If the entry already has notes, the new block\nis appended after a \"---\" separator so existing content is preserved.\nOmit or leave empty to skip writing notes entirely.",
+                    "type": "string",
+                    "example": "Frieren: Beyond Journey's End\nScore: 9.73 / 10  [kansou]"
+                },
                 "score": {
                     "description": "Score is the final score to publish (e.g. 8.79).",
                     "type": "number"

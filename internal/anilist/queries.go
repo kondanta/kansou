@@ -80,3 +80,31 @@ mutation ($mediaId: Int, $score: Float) {
     }
   }
 }`
+
+// publishWithNotesMutation is the GraphQL mutation used to write a score and notes
+// to AniList in a single call. Used only when the caller provides a non-empty notes string.
+const publishWithNotesMutation = `
+mutation ($mediaId: Int, $score: Float, $notes: String) {
+  SaveMediaListEntry(mediaId: $mediaId, score: $score, notes: $notes) {
+    id
+    score
+    status
+    media {
+      title {
+        romaji
+      }
+    }
+  }
+}`
+
+// fetchListEntryNotesQuery fetches the authenticated user's existing list entry
+// notes for a given media ID. Used before appending a new scoring block so that
+// existing notes are preserved.
+const fetchListEntryNotesQuery = `
+query ($mediaId: Int) {
+  Media(id: $mediaId) {
+    mediaListEntry {
+      notes
+    }
+  }
+}`

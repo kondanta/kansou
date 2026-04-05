@@ -224,6 +224,10 @@
     </div>
 
     <p id="publish-error" class="error"></p>
+    <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem;">
+      <input type="checkbox" id="publish-notes-chk" checked>
+      <label for="publish-notes-chk" style="font-size:0.85rem;color:#aaa;cursor:pointer;">Append breakdown to AniList notes</label>
+    </div>
     <div class="actions">
       <button onclick="show('search')">← New Search</button>
       <button class="success" id="publish-btn" onclick="publish()">Publish to AniList</button>
@@ -506,10 +510,13 @@
     const btn = document.getElementById('publish-btn');
     btn.disabled = true;
     try {
+      const includeNotes = document.getElementById('publish-notes-chk').checked;
+      const publishBody = { media_id: state.media.id, score: state.result.final_score };
+      if (includeNotes) publishBody.notes = document.getElementById('notes-text').value;
       const res = await fetch(`${API}/score/publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ media_id: state.media.id, score: state.result.final_score }),
+        body: JSON.stringify(publishBody),
       });
       const data = await res.json();
       if (!res.ok) {

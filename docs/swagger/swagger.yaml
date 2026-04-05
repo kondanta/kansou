@@ -132,6 +132,16 @@ definitions:
       media_id:
         description: MediaID is the AniList media ID to publish the score for.
         type: integer
+      notes:
+        description: |-
+          Notes is an optional pre-formatted scoring breakdown to append to the
+          AniList list entry notes. If the entry already has notes, the new block
+          is appended after a "---" separator so existing content is preserved.
+          Omit or leave empty to skip writing notes entirely.
+        example: |-
+          Frieren: Beyond Journey's End
+          Score: 9.73 / 10  [kansou]
+        type: string
       score:
         description: Score is the final score to publish (e.g. 8.79).
         type: number

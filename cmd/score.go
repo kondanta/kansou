@@ -33,6 +33,7 @@ func (a *App) scoreAddCmd() *cobra.Command {
 	var breakdownFlag bool
 	var weightFlag string
 	var primaryGenreFlag string
+	var notesFlag bool
 
 	cmd := &cobra.Command{
 		Use:   "add [query]",
@@ -44,7 +45,7 @@ Enter 's' or 'skip' to mark a dimension as not applicable.
 After scoring, prompts whether to publish the result to AniList.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return a.runScoreAdd(args, urlFlag, typeFlag, breakdownFlag, weightFlag, primaryGenreFlag)
+			return a.runScoreAdd(args, urlFlag, typeFlag, breakdownFlag, weightFlag, primaryGenreFlag, notesFlag)
 		},
 	}
 
@@ -53,12 +54,13 @@ After scoring, prompts whether to publish the result to AniList.`,
 	cmd.Flags().BoolVar(&breakdownFlag, "breakdown", false, "Show weighted contribution table after scoring")
 	cmd.Flags().StringVar(&weightFlag, "weight", "", "Override dimension weights for this session (e.g. pacing=0.05,world_building=0.20)")
 	cmd.Flags().StringVar(&primaryGenreFlag, "primary-genre", "", "Designate one genre as primary for blended multiplier calculation (e.g. Mystery)")
+	cmd.Flags().BoolVar(&notesFlag, "notes", false, "Append scoring breakdown to AniList list entry notes when publishing")
 	return cmd
 }
 
 // runScoreAdd fetches the media entry, runs the interactive prompt loop,
 // calculates the score, and offers to publish it to AniList.
-func (a *App) runScoreAdd(args []string, urlFlag, typeFlag string, breakdown bool, weightFlag, primaryGenreFlag string) error {
+func (a *App) runScoreAdd(args []string, urlFlag, typeFlag string, breakdown bool, weightFlag, primaryGenreFlag string, notesFlag bool) error {
 	// Parse --type and --weight before any network I/O.
 	mediaType, err := resolveMediaType(typeFlag)
 	if err != nil {
@@ -223,12 +225,20 @@ func (a *App) runScoreAdd(args []string, urlFlag, typeFlag string, breakdown boo
 		return nil
 	}
 
-	pub, pubErr := a.AniList.PublishScore(media.ID, result.FinalScore)
+	notes := ""
+	if notesFlag {
+		notes = formatNote(result)
+	}
+
+	pub, pubErr := a.AniList.PublishScore(media.ID, result.FinalScore, notes)
 	if pubErr != nil {
 		return fmt.Errorf("publishing score to AniList (your calculated score was %.2f): %w", result.FinalScore, pubErr)
 	}
 	fmt.Printf("✓ Score published to AniList\n")
 	fmt.Printf("  %s — %.2f\n", pub.TitleRomaji, pub.Score)
+	if notes != "" {
+		fmt.Println("  ✓ Scoring breakdown appended to list entry notes")
+	}
 	return nil
 }
 
@@ -413,6 +423,52 @@ func annotateMatchedGenres(matched []string, primaryGenre string) string {
 		}
 	}
 	return strings.Join(parts, ", ")
+}
+
+// formatNote builds the plain-text scoring breakdown to be stored as an AniList
+// list entry note. The caller is responsible for appending to any existing notes.
+func formatNote(result scoring.Result) string {
+	const sep = "───────────────────────────────────────────────────────"
+	var b strings.Builder
+
+	fmt.Fprintf(&b, "%s\n", result.Meta.TitleRomaji)
+	fmt.Fprintf(&b, "Score: %.2f / 10  [kansou]\n\n", result.FinalScore)
+	fmt.Fprintf(&b, "%-15s  %5s  %6s  %6s  %6s  Contrib\n",
+		"Dimension", "Score", "BaseW", "×Mult", "FinalW")
+	fmt.Fprintln(&b, sep)
+
+	for _, row := range result.Breakdown {
+		if row.Skipped {
+			fmt.Fprintf(&b, "%-15s  %5s  %6s  %6s  %6s  —\n",
+				row.Label, "—", "—", "—", "—")
+			continue
+		}
+		suffix := ""
+		if row.BiasResistant {
+			suffix = "  *"
+		}
+		fmt.Fprintf(&b, "%-15s  %5.1f  %6s  %6s  %6s  %.2f%s\n",
+			row.Label, row.Score,
+			fmt.Sprintf("%.1f%%", row.BaseWeight*100),
+			fmt.Sprintf("×%.2f", row.AppliedMultiplier),
+			fmt.Sprintf("%.1f%%", row.FinalWeight*100),
+			row.Contribution, suffix)
+	}
+
+	fmt.Fprintln(&b)
+	if result.Meta.PrimaryGenre != "" {
+		blendPct := int(result.Meta.PrimaryGenreWeight * 100)
+		fmt.Fprintf(&b, "Primary: %s (blend %d/%d)\n", result.Meta.PrimaryGenre, blendPct, 100-blendPct)
+	}
+	if len(result.Meta.AllGenres) > 0 {
+		fmt.Fprintf(&b, "Genres:  %s\n", strings.Join(result.Meta.AllGenres, ", "))
+	}
+	if len(result.Meta.MatchedGenres) > 0 {
+		fmt.Fprintf(&b, "Matched: %s\n", annotateMatchedGenres(result.Meta.MatchedGenres, result.Meta.PrimaryGenre))
+	}
+	fmt.Fprintf(&b, "Config:  %s", result.Meta.ConfigHash)
+
+	return b.String()
 }
 
 // matchedGenres returns the subset of genres that have a config entry (case-insensitive).
