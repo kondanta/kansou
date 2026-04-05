@@ -414,6 +414,9 @@ type weightDimensionRow struct {
 // weightsResponse is the response body for POST /weights.
 // swagger:model weightsResponse
 type weightsResponse struct {
+	// PrimaryGenreWeight is the blend ratio applied when a primary genre is set (0–1).
+	// A value of 0.6 means 60 % primary, 40 % secondary average.
+	PrimaryGenreWeight float64 `json:"primary_genre_weight"`
 	// Dimensions is the ordered list of per-dimension weight rows.
 	Dimensions []weightDimensionRow `json:"dimensions"`
 }
@@ -511,7 +514,10 @@ func (s *Server) handleWeights(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, weightsResponse{Dimensions: dimRows})
+	writeJSON(w, http.StatusOK, weightsResponse{
+		PrimaryGenreWeight: s.cfg.PrimaryGenreWeight,
+		Dimensions:         dimRows,
+	})
 }
 
 // publishRequest is the request body for POST /score/publish.

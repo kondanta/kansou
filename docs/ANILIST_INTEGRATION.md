@@ -439,6 +439,7 @@ a live weight preview as the user adjusts genre selection or skips dimensions.
 **Response shape:**
 ```json
 {
+  "primary_genre_weight": 0.6,
   "dimensions": [
     {
       "key": "story",
@@ -455,6 +456,10 @@ a live weight preview as the user adjusts genre selection or skips dimensions.
 }
 ```
 
+- `primary_genre_weight` — the blend ratio from config (0–1). A value of 0.6 means the
+  primary genre's multiplier contributes 60 % and the secondary average contributes 40 %.
+  Always present; reflects the current config value regardless of whether a primary genre
+  was supplied in the request.
 - `multiplier` — the blended genre multiplier (1.0 for bias-resistant dimensions or when no
   matched genre has an opinion on this dimension).
 - `final_weight` — weight after genre adjustment, renormalization, and overrides. This is
