@@ -621,3 +621,222 @@ func TestScore_PrimaryGenre_WeightsStillSumToOne(t *testing.T) {
 		t.Errorf("primary genre blend: final weights sum to %v, expected 1.0", sum)
 	}
 }
+
+// --- v2 tests: Engine.Weights() and UserSelectedGenres ---
+
+func TestWeights_SumsToOne_NoGenres(t *testing.T) {
+	// Weights() with no genres or overrides must produce final weights summing to 1.0.
+	eng := testEngine()
+	rows := eng.Weights(nil, "", map[DimensionKey]bool{}, map[DimensionKey]float64{})
+	sum := 0.0
+	for _, wr := range rows {
+		sum += wr.FinalWeight
+	}
+	if !approxEqual(sum, 1.0, 0.001) {
+		t.Errorf("Weights() no genres: sum=%v, expected 1.0", sum)
+	}
+}
+
+func TestWeights_MatchesScoreBreakdown_FinalWeights(t *testing.T) {
+	// Weights() and Score() must produce identical FinalWeights for every dimension.
+	eng := testEngine()
+	genres := []string{"Mystery", "Drama"}
+	entry := allTen(genres)
+
+	result, err := eng.Score(entry)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	rows := eng.Weights(genres, "", map[DimensionKey]bool{}, map[DimensionKey]float64{})
+	weightByKey := make(map[DimensionKey]float64, len(rows))
+	for _, wr := range rows {
+		weightByKey[wr.Key] = wr.FinalWeight
+	}
+	for _, row := range result.Breakdown {
+		if !approxEqual(row.FinalWeight, weightByKey[row.Key], 0.0001) {
+			t.Errorf("dimension %q: Score FinalWeight=%v, Weights FinalWeight=%v", row.Key, row.FinalWeight, weightByKey[row.Key])
+		}
+	}
+}
+
+func TestWeights_SkippedDimension_ZeroFinalWeight(t *testing.T) {
+	eng := testEngine()
+	skipped := map[DimensionKey]bool{"value": true}
+	rows := eng.Weights(nil, "", skipped, map[DimensionKey]float64{})
+	for _, wr := range rows {
+		if wr.Key == "value" {
+			if !wr.Skipped {
+				t.Error("expected value to be marked Skipped")
+			}
+			if wr.FinalWeight != 0 {
+				t.Errorf("skipped dimension FinalWeight should be 0, got %v", wr.FinalWeight)
+			}
+		}
+	}
+	// Remaining weights must still sum to 1.0.
+	sum := 0.0
+	for _, wr := range rows {
+		sum += wr.FinalWeight
+	}
+	if !approxEqual(sum, 1.0, 0.001) {
+		t.Errorf("Weights() with skip: sum=%v, expected 1.0", sum)
+	}
+}
+
+func TestWeights_Override_FixedAndRemainder(t *testing.T) {
+	eng := testEngine()
+	overrides := map[DimensionKey]float64{"pacing": 0.05, "world_building": 0.20}
+	rows := eng.Weights(nil, "", map[DimensionKey]bool{}, overrides)
+	for _, wr := range rows {
+		switch wr.Key {
+		case "pacing":
+			if !approxEqual(wr.FinalWeight, 0.05, 0.001) {
+				t.Errorf("pacing override: expected 0.05, got %v", wr.FinalWeight)
+			}
+			if !wr.WeightOverride {
+				t.Error("pacing: expected WeightOverride=true")
+			}
+		case "world_building":
+			if !approxEqual(wr.FinalWeight, 0.20, 0.001) {
+				t.Errorf("world_building override: expected 0.20, got %v", wr.FinalWeight)
+			}
+		}
+	}
+	sum := 0.0
+	for _, wr := range rows {
+		sum += wr.FinalWeight
+	}
+	if !approxEqual(sum, 1.0, 0.001) {
+		t.Errorf("Weights() with overrides: sum=%v, expected 1.0", sum)
+	}
+}
+
+func TestScore_UserSelectedGenres_RestrictsActiveSet(t *testing.T) {
+	// Media has Mystery + Action. User selects only Mystery.
+	// story multiplier should be mystery=1.5 (action excluded from active set).
+	eng := testEngine()
+	entry := allTen([]string{"Mystery", "Action"})
+	entry.UserSelectedGenres = []string{"Mystery"}
+
+	result, err := eng.Score(entry)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, row := range result.Breakdown {
+		if row.Key == "story" {
+			// With only mystery active, story mult = 1.5 (not (1.5+0.8)/2=1.15).
+			if !approxEqual(row.AppliedMultiplier, 1.5, 0.001) {
+				t.Errorf("UserSelectedGenres: story multiplier expected 1.5, got %v", row.AppliedMultiplier)
+			}
+		}
+	}
+}
+
+func TestScore_UserSelectedGenres_GenreDeselected_FlagSet(t *testing.T) {
+	// Media has Mystery + Action. User selects only Mystery.
+	// Action defines production, pacing, story, world_building.
+	// Those dimensions should have GenreDeselected=true.
+	// Characters (only drama defines it, drama not in media.Genres) should be false.
+	eng := testEngine()
+	entry := allTen([]string{"Mystery", "Action"})
+	entry.UserSelectedGenres = []string{"Mystery"}
+
+	result, err := eng.Score(entry)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Action defines: production, pacing, story, world_building → GenreDeselected expected true.
+	deselectedExpected := map[DimensionKey]bool{
+		"production":    true,
+		"pacing":        true,
+		"story":         true,
+		"world_building": true,
+	}
+	for _, row := range result.Breakdown {
+		want := deselectedExpected[row.Key]
+		if row.GenreDeselected != want {
+			t.Errorf("dimension %q: GenreDeselected expected %v, got %v", row.Key, want, row.GenreDeselected)
+		}
+	}
+}
+
+func TestScore_UserSelectedGenres_None_NoDeselectedFlag(t *testing.T) {
+	// When UserSelectedGenres is nil, GenreDeselected must always be false.
+	eng := testEngine()
+	result, err := eng.Score(allTen([]string{"Mystery", "Action"}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, row := range result.Breakdown {
+		if row.GenreDeselected {
+			t.Errorf("dimension %q: GenreDeselected should be false when no UserSelectedGenres, got true", row.Key)
+		}
+	}
+}
+
+func TestScore_UserSelectedGenres_AllSelected_NoDeselectedFlag(t *testing.T) {
+	// When UserSelectedGenres contains all the same genres, no genre is deselected.
+	eng := testEngine()
+	entry := allTen([]string{"Mystery", "Action"})
+	entry.UserSelectedGenres = []string{"Mystery", "Action"}
+
+	result, err := eng.Score(entry)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, row := range result.Breakdown {
+		if row.GenreDeselected {
+			t.Errorf("dimension %q: GenreDeselected should be false when all genres selected, got true", row.Key)
+		}
+	}
+}
+
+func TestScore_UserSelectedGenres_GenresActiveInMeta(t *testing.T) {
+	// GenresActive in meta should reflect the active (selected) genre set,
+	// not the full AniList genre list.
+	eng := testEngine()
+	entry := allTen([]string{"Mystery", "Action"})
+	entry.UserSelectedGenres = []string{"Mystery"}
+
+	result, err := eng.Score(entry)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// GenresActive should only contain "mystery" (lowercased, only matched config genre).
+	if len(result.Meta.GenresActive) != 1 || result.Meta.GenresActive[0] != "mystery" {
+		t.Errorf("GenresActive: expected [mystery], got %v", result.Meta.GenresActive)
+	}
+}
+
+func TestScore_NoUserSelectedGenres_GenresActiveEqualsMatchedGenres(t *testing.T) {
+	// When UserSelectedGenres is absent, GenresActive = matched genres from full list.
+	eng := testEngine()
+	entry := allTen([]string{"Mystery", "Action", "Romance"}) // Romance not in config.
+
+	result, err := eng.Score(entry)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Matched genres = mystery + action (romance not in config). GenresActive should match.
+	if len(result.Meta.GenresActive) != 2 {
+		t.Errorf("GenresActive: expected 2 entries, got %v", result.Meta.GenresActive)
+	}
+}
+
+func TestWeights_OrderMatchesEngineConfig(t *testing.T) {
+	// Weights() rows must appear in the same order as the engine's dimension slice.
+	eng := testEngine()
+	rows := eng.Weights(nil, "", map[DimensionKey]bool{}, map[DimensionKey]float64{})
+	expected := []DimensionKey{
+		"story", "enjoyment", "characters", "production", "pacing", "world_building", "value",
+	}
+	if len(rows) != len(expected) {
+		t.Fatalf("expected %d rows, got %d", len(expected), len(rows))
+	}
+	for i, wr := range rows {
+		if wr.Key != expected[i] {
+			t.Errorf("rows[%d]: expected %q, got %q", i, expected[i], wr.Key)
+		}
+	}
+}

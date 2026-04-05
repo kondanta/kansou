@@ -58,6 +58,12 @@ type Entry struct {
 	// Used to look up multipliers in the config genre map.
 	Genres []string
 
+	// UserSelectedGenres, if non-nil and non-empty, is the definitive active genre
+	// set for this session. Only these genres participate in multiplier calculation.
+	// When nil or empty, all matched config genres participate — preserving the
+	// existing CLI behaviour. Set by the web UI via POST /score's selected_genres field.
+	UserSelectedGenres []string
+
 	// PrimaryGenre, if non-empty, designates one genre as the constitutive genre
 	// for blended multiplier calculation. See ADR-022.
 	PrimaryGenre string
@@ -85,6 +91,11 @@ type SessionMeta struct {
 	AllGenres []string
 	// MatchedGenres is the subset of AllGenres that matched a config genre block.
 	MatchedGenres []string
+	// GenresActive is the genre set that actually participated in multiplier
+	// calculation for this session. Equal to MatchedGenres when no
+	// UserSelectedGenres were specified; equal to the intersection of
+	// UserSelectedGenres with the config genre map otherwise.
+	GenresActive []string
 	// ConfigHash is a SHA256 hex digest of the serialised dimensions config
 	// at time of scoring. Allows detection of config drift for stored scores.
 	ConfigHash string
@@ -108,9 +119,6 @@ type BreakdownRow struct {
 	Score float64
 	// BaseWeight is the configured weight before any genre adjustment.
 	BaseWeight float64
-	// GenreMultipliers maps each matched genre name to the multiplier it
-	// contributed for this dimension. Empty for bias-resistant or unmatched dimensions.
-	GenreMultipliers map[string]float64
 	// AppliedMultiplier is the averaged multiplier actually used
 	// (1.0 for bias-resistant dimensions or when no genres matched).
 	AppliedMultiplier float64
@@ -127,6 +135,12 @@ type BreakdownRow struct {
 	// Skipped indicates the user marked this dimension as not applicable.
 	// Skipped dimensions have FinalWeight=0 and Contribution=0.
 	Skipped bool
+	// GenreDeselected is true when at least one deselected genre (present in
+	// Entry.Genres and the config, but excluded by UserSelectedGenres) has a
+	// configured multiplier for this specific dimension. False when no
+	// UserSelectedGenres were specified or no deselected genre had an opinion
+	// on this dimension. See ADR-023.
+	GenreDeselected bool
 	// PrimaryGenre is the genre designated as primary for this scoring session.
 	// Empty when no primary genre was specified. Carried for provenance only.
 	// See ADR-022.
@@ -146,4 +160,33 @@ type Result struct {
 	Breakdown []BreakdownRow
 	// Meta is the session-level provenance carried through from Entry.Meta.
 	Meta SessionMeta
+}
+
+// WeightRow is the per-dimension output of Engine.Weights(). It carries the
+// final weight and multiplier for a single dimension without requiring scores.
+// Used by POST /weights for live preview in the web UI. See ADR-023.
+type WeightRow struct {
+	// Key is the dimension's config key.
+	Key DimensionKey
+	// Label is the human-readable display name for this dimension.
+	Label string
+	// BaseWeight is the configured weight before any genre adjustment.
+	BaseWeight float64
+	// Multiplier is the blended genre multiplier applied to this dimension
+	// (1.0 for bias-resistant dimensions or when no genres have an opinion).
+	Multiplier float64
+	// FinalWeight is the weight after genre adjustment, renormalization, and
+	// any weight overrides. This is the value used in the final score formula.
+	FinalWeight float64
+	// Skipped indicates this dimension was excluded from the weight pool.
+	Skipped bool
+	// BiasResistant indicates this dimension's multiplier is always 1.0.
+	BiasResistant bool
+	// WeightOverride indicates the final weight was set by a weight override
+	// rather than derived from the base weight and genre multipliers.
+	WeightOverride bool
+	// PrimaryGenreMultiplier is the raw multiplier the primary genre defines for
+	// this dimension (0 when no primary genre is set or the dimension is
+	// bias-resistant; 0 also when the primary genre has no config entry for it).
+	PrimaryGenreMultiplier float64
 }

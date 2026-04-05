@@ -1006,3 +1006,106 @@ preserves backward compatibility.
 - `POST /score` accepts optional `primary_genre` string field.
 - `GET /genres` endpoint added to the REST server, returning the configured genre
   multiplier table so web clients can display available genre options.
+
+---
+
+## ADR-023 — User-selectable active genre set (POST /score `selected_genres` and POST /weights)
+
+**Date:** 2026-04-05
+**Status:** Accepted
+
+**Context:**
+A multi-genre show (e.g. Mystery + Slice of Life + Action) may have genres whose
+multipliers work against each other. A user may want to score a show treating it
+primarily as one genre type and exclude others whose influence feels wrong for
+that particular work. There was no mechanism to restrict which genres participate
+in multiplier calculation beyond omitting them from config globally — which would
+affect all shows of that genre.
+
+**Decision:**
+`POST /score` and `POST /weights` accept an optional `selected_genres []string`
+field. When provided, only the listed genres participate in multiplier calculation.
+Genres present on the media but absent from `selected_genres` are excluded from
+the active set. When omitted or empty, all matched config genres participate —
+preserving the existing CLI behaviour (no breaking change).
+
+A new `POST /weights` endpoint allows clients to preview per-dimension final
+weights without providing scores. It is used by the web UI for a live weight
+preview as the user adjusts genre selection. The endpoint accepts: `media_id`,
+`selected_genres`, `primary_genre`, `skipped_dimensions`, and `weight_overrides`.
+It returns a `dimensions` array of `weightDimensionRow` objects with the same
+final weights that `POST /score` would use.
+
+**Engine changes:**
+- `Entry` gains `UserSelectedGenres []string`. When non-empty, `Score()` uses
+  this as the genre source instead of `Entry.Genres`.
+- `Engine.Weights()` is extracted as a public method with signature:
+  `Weights(genres []string, primaryGenre string, skipped map[DimensionKey]bool, overrides map[DimensionKey]float64) []WeightRow`
+  This is the single renormalization path. `Score()` delegates to it.
+- `WeightRow` is a new type (per-dimension weight without score). `Score()` builds
+  `[]BreakdownRow` from `[]WeightRow` and the per-dimension scores.
+- `BreakdownRow.GenreDeselected bool` is added. It is `true` when at least one
+  deselected genre (present in `Entry.Genres` and in config, but excluded by
+  `UserSelectedGenres`) has a configured multiplier for that specific dimension.
+  Computed as a post-pass in `Score()` using `matchedGenreKeys()`.
+- `BreakdownRow.GenreMultipliers map[string]float64` is removed (dead code — not
+  used by any consumer since the switch to `blendedMultiplier`).
+- `SessionMeta` gains `GenresActive []string` — the intersection of the active
+  genre source with the config genre map. Equals `MatchedGenres` when no
+  `UserSelectedGenres` were specified.
+- `POST /score` response: `breakdownRowResponse` adds `genre_deselected bool`;
+  `sessionMetaResponse` adds `genres_active []string`.
+- `primary_genre` validation: when `selected_genres` is present, `primary_genre`
+  must be in `selected_genres`; otherwise it must be in the media's full genre list.
+
+**Alternatives considered:**
+- Expose genre weights as editable sliders (per-genre multiplier override per session):
+  much more complex; the current model already has `weight_overrides` for
+  per-dimension control. Genre selection is a simpler and more natural UI model.
+- Keep genre exclusion as a CLI-only feature: rules out web UI usage.
+
+**Consequences:**
+- `GET /genres` response is used by the web UI to distinguish config-matched
+  genres from unmatched ones, so checkboxes for unmatched genres can be
+  visually dimmed (they have no effect on weights).
+- Web UI: genre checkboxes replace plain informational display. All start checked.
+  Unchecking a genre that is set as primary automatically clears the primary
+  selection. A debounced (150ms) POST /weights call updates the live weight
+  preview in the dimension rows.
+- CLI is not changed — no `selected_genres` flag. The feature is web-UI-only
+  for now. `UserSelectedGenres` is nil in all CLI-originated entries.
+
+---
+
+## ADR-024 — Remove BreakdownRow.GenreMultipliers (dead field cleanup)
+
+**Date:** 2026-04-05
+**Status:** Accepted
+
+**Context:**
+`BreakdownRow.GenreMultipliers map[string]float64` was introduced to provide
+per-genre contribution provenance in the breakdown. After the introduction of
+`blendedMultiplier` (ADR-022), the per-genre contributions map was returned from
+`blendedMultiplier` as a third return value but was no longer surfaced in any
+consumer — it was not included in the server JSON response (`handlers.go`
+serialised it via `json:"genre_multipliers,omitempty"` but `toScoreResponse` set
+it from `row.GenreMultipliers` which was always populated with an empty map
+after `effectiveWeights` construction), and was not rendered by `printBreakdown`
+in the CLI.
+
+**Decision:**
+Remove `BreakdownRow.GenreMultipliers` entirely. The third return value from
+`blendedMultiplier` (the contributions map) is now discarded with `_` in
+`Engine.Weights()`. The field is no longer part of the engine's public API.
+`breakdownRowResponse.GenreMultipliers` is also removed from `handlers.go`.
+
+**Alternatives considered:**
+- Keep the field but omit it from the JSON response: retains dead internal state
+  with no benefit; makes the struct larger and the tests harder to read.
+
+**Consequences:**
+- `BreakdownRow` is smaller and cleaner.
+- `breakdownRowResponse` loses the `genre_multipliers` JSON field. This is a
+  breaking change to the API response shape, but since the field was always
+  empty in practice (populated with an empty map, serialised as absent via
+  `omitempty`), no client observed any data in this field.

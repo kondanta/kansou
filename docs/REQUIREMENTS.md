@@ -140,12 +140,21 @@ also excluded from the average for that dimension — they do not contribute a
 diluting neutral 1.0. If no matched genre has an opinion on a dimension, the
 multiplier is 1.0 (neutral).
 
+**Optional — User-selectable active genre set (ADR-023):** Via the web UI
+(`POST /score` `selected_genres` field), the user may restrict which genres
+participate in multiplier calculation. Only the listed genres are treated as
+active; any matched config genre absent from the list is deselected. Deselected
+genres are recorded in the breakdown (`genre_deselected: true` on affected
+dimensions). When `selected_genres` is absent or empty, all matched config genres
+participate (CLI-compatible behaviour, no breaking change).
+
 **Optional — Primary genre blend (ADR-022):** One genre may be designated as
 constitutive. Its raw multiplier is blended with the contributing-only average
 across remaining matched genres at a configurable ratio `primary_genre_weight`
 (default 0.6):
 `final_multiplier = (primary_mult × blend) + (secondary_avg × (1 − blend))`
 Setting `primary_genre_weight = 0.0` in config disables the feature.
+When `selected_genres` is present, `primary_genre` must be in that set.
 
 **Primary genre designation — session flow:**
 After displaying the media header and genre list, `score add` interactively
@@ -195,6 +204,8 @@ Session-level provenance includes:
 - Media ID, title, type, and AniList URL
 - All genres returned by AniList
 - Which genres matched a config block
+- Which genres were active (participated in calculation) — equals matched genres
+  when no `selected_genres` restriction was applied
 - A SHA256 hash of the serialised dimensions config at time of scoring
 
 **FR-03f — Per-session weight override**

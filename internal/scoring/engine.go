@@ -50,37 +50,148 @@ func (e *Engine) Score(entry Entry) (Result, error) {
 		return Result{}, fmt.Errorf("validating entry: %w", err)
 	}
 
-	// Step 1: compute effective weights (base × genre multiplier).
-	effective, breakdown, err := e.effectiveWeights(entry)
-	if err != nil {
-		return Result{}, fmt.Errorf("computing effective weights: %w", err)
+	// Determine which genres are active for this session.
+	genreSource := entry.Genres
+	if len(entry.UserSelectedGenres) > 0 {
+		genreSource = entry.UserSelectedGenres
 	}
 
-	// Step 2: renormalize effective weights to sum to 1.0.
-	normalised := renormalise(effective)
+	// Delegate weight computation to Weights().
+	weightRows := e.Weights(genreSource, entry.PrimaryGenre, entry.SkippedDimensions, entry.WeightOverrides)
 
-	// Step 3: apply per-session weight overrides and rescale the remainder.
-	finalWeights := applyOverrides(normalised, entry.WeightOverrides, entry.SkippedDimensions)
+	// Build BreakdownRows from WeightRows and the per-dimension scores.
+	breakdown := make([]BreakdownRow, len(weightRows))
+	for i, wr := range weightRows {
+		breakdown[i] = BreakdownRow{
+			Key:                    wr.Key,
+			Label:                  wr.Label,
+			Score:                  entry.Scores[wr.Key],
+			BaseWeight:             wr.BaseWeight,
+			AppliedMultiplier:      wr.Multiplier,
+			FinalWeight:            wr.FinalWeight,
+			BiasResistant:          wr.BiasResistant,
+			WeightOverride:         wr.WeightOverride,
+			Skipped:                wr.Skipped,
+			PrimaryGenre:           entry.PrimaryGenre,
+			PrimaryGenreMultiplier: wr.PrimaryGenreMultiplier,
+		}
+	}
 
-	// Step 4: compute final score and fill breakdown contributions.
+	// GenreDeselected post-pass: mark dimensions where a deselected genre
+	// had a configured multiplier. Only runs when the caller supplied a
+	// restricted genre set.
+	if len(entry.UserSelectedGenres) > 0 {
+		allMatched := matchedGenreKeys(entry.Genres, e.genres)
+		activeSet := make(map[string]bool)
+		for _, g := range matchedGenreKeys(entry.UserSelectedGenres, e.genres) {
+			activeSet[g] = true
+		}
+		for i := range breakdown {
+			row := &breakdown[i]
+			for _, g := range allMatched {
+				if activeSet[g] {
+					continue
+				}
+				// g is deselected — does it have an opinion on this dimension?
+				if gm, ok := e.genres[g]; ok {
+					if _, hasDim := gm[row.Key]; hasDim {
+						row.GenreDeselected = true
+						break
+					}
+				}
+			}
+		}
+	}
+
+	// Compute final score contributions.
 	finalScore := 0.0
 	for i := range breakdown {
 		row := &breakdown[i]
 		if row.Skipped {
 			continue
 		}
-		w := finalWeights[row.Key]
-		row.FinalWeight = w
-		row.WeightOverride = isOverridden(row.Key, entry.WeightOverrides)
-		row.Contribution = round2(entry.Scores[row.Key] * w)
-		finalScore += entry.Scores[row.Key] * w
+		row.Contribution = round2(entry.Scores[row.Key] * row.FinalWeight)
+		finalScore += entry.Scores[row.Key] * row.FinalWeight
 	}
+
+	// Populate GenresActive in meta.
+	meta := entry.Meta
+	meta.GenresActive = matchedGenreKeys(genreSource, e.genres)
 
 	return Result{
 		FinalScore: round2(finalScore),
 		Breakdown:  breakdown,
-		Meta:       entry.Meta,
+		Meta:       meta,
 	}, nil
+}
+
+// Weights computes per-dimension final weights without requiring scores.
+// It applies genre multipliers, renormalizes, and applies any weight overrides.
+// This is the single renormalization path — Score() delegates to it.
+// Parameters:
+//   - genres: the active genre list for this session (Entry.UserSelectedGenres when set, else Entry.Genres)
+//   - primaryGenre: optional primary genre for blended multiplier (Entry.PrimaryGenre)
+//   - skipped: dimensions to exclude from the weight pool
+//   - weightOverrides: per-dimension weight overrides applied after renormalization
+func (e *Engine) Weights(
+	genres []string,
+	primaryGenre string,
+	skipped map[DimensionKey]bool,
+	weightOverrides map[DimensionKey]float64,
+) []WeightRow {
+	matchedGenres := matchedGenreKeys(genres, e.genres)
+
+	primaryGenreLower := ""
+	if primaryGenre != "" {
+		primaryGenreLower = toLower(primaryGenre)
+	}
+
+	// Step 1: compute effective weights (base × genre multiplier).
+	effective := make(map[DimensionKey]float64, len(e.dimensions))
+	rows := make([]WeightRow, 0, len(e.dimensions))
+
+	for _, key := range e.dimensions {
+		def := e.defs[key]
+		row := WeightRow{
+			Key:           key,
+			Label:         def.Label,
+			BaseWeight:    def.Weight,
+			BiasResistant: def.BiasResistant,
+			Skipped:       skipped[key],
+		}
+
+		if skipped[key] {
+			rows = append(rows, row)
+			continue
+		}
+
+		multiplier := 1.0
+		if !def.BiasResistant {
+			var primaryMult float64
+			multiplier, primaryMult, _ = e.blendedMultiplier(key, primaryGenreLower, matchedGenres)
+			row.PrimaryGenreMultiplier = primaryMult
+		}
+		row.Multiplier = multiplier
+		effective[key] = def.Weight * multiplier
+		rows = append(rows, row)
+	}
+
+	// Step 2: renormalize.
+	normalised := renormalise(effective)
+
+	// Step 3: apply overrides.
+	finalWeights := applyOverrides(normalised, weightOverrides, skipped)
+
+	// Step 4: fill FinalWeight and WeightOverride into rows.
+	for i := range rows {
+		if rows[i].Skipped {
+			continue
+		}
+		rows[i].FinalWeight = finalWeights[rows[i].Key]
+		rows[i].WeightOverride = isOverridden(rows[i].Key, weightOverrides)
+	}
+
+	return rows
 }
 
 // validateEntry checks that the entry is consistent before calculation.
@@ -111,59 +222,6 @@ func (e *Engine) validateEntry(entry Entry) error {
 	}
 
 	return nil
-}
-
-// effectiveWeights computes base × averaged genre multiplier for each dimension,
-// excluding skipped dimensions. Returns effective weights map and initial breakdown rows.
-func (e *Engine) effectiveWeights(entry Entry) (map[DimensionKey]float64, []BreakdownRow, error) {
-	effective := make(map[DimensionKey]float64, len(e.dimensions))
-	breakdown := make([]BreakdownRow, 0, len(e.dimensions))
-
-	// Collect matched genres (lowercased for case-insensitive lookup).
-	matchedGenres := matchedGenreKeys(entry.Genres, e.genres)
-
-	// Lowercase primary genre once for consistent lookup.
-	primaryGenre := ""
-	if entry.PrimaryGenre != "" {
-		primaryGenre = toLower(entry.PrimaryGenre)
-	}
-
-	for _, key := range e.dimensions {
-		def, ok := e.defs[key]
-		if !ok {
-			return nil, nil, fmt.Errorf("dimension %q in engine order not found in defs", key)
-		}
-
-		row := BreakdownRow{
-			Key:              key,
-			Label:            def.Label,
-			BaseWeight:       def.Weight,
-			BiasResistant:    def.BiasResistant,
-			Score:            entry.Scores[key],
-			GenreMultipliers: make(map[string]float64),
-			PrimaryGenre:     entry.PrimaryGenre,
-		}
-
-		if entry.SkippedDimensions[key] {
-			row.Skipped = true
-			row.AppliedMultiplier = 0
-			breakdown = append(breakdown, row)
-			// Skipped dimensions contribute 0 to the effective weight pool.
-			continue
-		}
-
-		multiplier := 1.0
-		if !def.BiasResistant {
-			var primaryMult float64
-			multiplier, primaryMult, row.GenreMultipliers = e.blendedMultiplier(key, primaryGenre, matchedGenres)
-			row.PrimaryGenreMultiplier = primaryMult
-		}
-		row.AppliedMultiplier = multiplier
-		effective[key] = def.Weight * multiplier
-		breakdown = append(breakdown, row)
-	}
-
-	return effective, breakdown, nil
 }
 
 // combinedMultiplier averages the per-dimension multiplier across matched genres

@@ -27,6 +27,7 @@ Both modes share identical business logic. The binary entry point branches into 
 │  │                  │         │  GET  /media/{id}    │   │
 │  │                  │         │  POST /score         │   │
 │  │                  │         │  POST /score/publish │   │
+│  │                  │         │  POST /weights       │   │
 │  └────────┬─────────┘         └──────────┬──────────┘   │
 │           │                              │               │
 │           └──────────────┬───────────────┘               │
@@ -82,6 +83,12 @@ Built on `chi`. Exposes the same operations as the CLI over HTTP. Handles reques
 
 ### Scoring Engine — `internal/scoring/`
 Pure functions. No I/O, no side effects. Takes a config, a set of genres, a media type, and a map of section scores. Returns a final score and optionally a weighted breakdown. Fully unit tested.
+
+Two public entry points:
+- `Engine.Score(Entry) (Result, error)` — full scoring session with per-dimension contributions.
+- `Engine.Weights(genres, primaryGenre, skipped, overrides) []WeightRow` — weight-only path,
+  no scores required. Used by `POST /weights` for live web UI preview. `Score()` delegates to it,
+  ensuring a single renormalization path.
 
 ### Config Loader — `internal/config/`
 Reads `~/.config/kansou/config.toml`. Validates that base weights sum to 1.0. Applies defaults for any missing fields. Returns a validated `Config` struct. Fails loudly on invalid config rather than silently correcting it.
@@ -152,11 +159,15 @@ GET  /media/search?q={query}  # search AniList by name
 GET  /media/{id}              # fetch media by AniList ID
   → returns Media object
 
-POST /score               { "media_id": 154587, "scores": { ... }, "primary_genre": "Mystery" }
-  → returns FinalScore + Breakdown (primary_genre is optional)
+POST /score               { "media_id": 154587, "scores": { ... }, "selected_genres": [...], "primary_genre": "Mystery" }
+  → returns FinalScore + Breakdown (selected_genres and primary_genre are optional)
+  → breakdown rows include genre_deselected when a deselected genre had an opinion on that dimension
 
 POST /score/publish       { "media_id": 154587, "score": 8.4 }
   → writes to AniList, returns confirmation
+
+POST /weights             { "media_id": 154587, "selected_genres": [...], "primary_genre": "...", "skipped_dimensions": {...}, "weight_overrides": {...} }
+  → returns per-dimension final weights without scoring; used for live UI preview
 ```
 
 **Web UI initialisation sequence** (embedded `index.html`):
@@ -167,8 +178,10 @@ Browser loads /
   → GET /genres      ┘
   → user selects media
   → GET /media/search?q=... or GET /media/{id}
-  → user fills score form (dimensions from /dimensions, primary genre picker from /genres)
-  → POST /score
+  → user fills score form with genre checkboxes (all start checked)
+  → genre checkbox change / primary genre change / skip change → POST /weights (debounced 150ms)
+    → updates live weight preview in dimension rows
+  → POST /score (with selected_genres if any genre was deselected)
   → POST /score/publish  (optional)
 ```
 

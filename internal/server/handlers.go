@@ -44,6 +44,7 @@ type mediaResponse struct {
 	Chapters     int      `json:"chapters,omitempty"`
 	Genres       []string `json:"genres"`
 	CoverImage   string   `json:"cover_image,omitempty"`
+	BannerImage  string   `json:"banner_image,omitempty"`
 	AverageScore int      `json:"average_score"`
 	MeanScore    int      `json:"mean_score"`
 	MediaType    string   `json:"media_type"`
@@ -214,8 +215,13 @@ type scoreRequest struct {
 	// WeightOverrides maps dimension keys to per-session weight overrides.
 	// Optional — omit to use the weights defined in server config.
 	WeightOverrides map[string]float64 `json:"weight_overrides,omitempty"`
+	// SelectedGenres, if non-empty, restricts multiplier calculation to this
+	// subset of the media's AniList genres. Genres absent from this list but
+	// present in config are recorded as deselected in the breakdown. When
+	// omitted, all matched config genres participate (CLI-compatible behaviour).
+	SelectedGenres []string `json:"selected_genres,omitempty"`
 	// PrimaryGenre designates one of the media's genres as constitutive for
-	// blended multiplier calculation. Must match one of the media's AniList genres
+	// blended multiplier calculation. Must match one of the active genres
 	// (case-insensitive). Optional — omit to use contributing-only averaging with no primary.
 	PrimaryGenre string `json:"primary_genre,omitempty" example:"Mystery"`
 }
@@ -237,16 +243,16 @@ type breakdownRowResponse struct {
 	Key                    string             `json:"key"`
 	Label                  string             `json:"label"`
 	Score                  float64            `json:"score"`
-	BaseWeight             float64            `json:"base_weight"`
-	AppliedMultiplier      float64            `json:"applied_multiplier"`
-	FinalWeight            float64            `json:"final_weight"`
-	Contribution           float64            `json:"contribution"`
-	GenreMultipliers       map[string]float64 `json:"genre_multipliers,omitempty"`
-	BiasResistant          bool               `json:"bias_resistant"`
-	WeightOverride         bool               `json:"weight_override"`
-	Skipped                bool               `json:"skipped"`
-	PrimaryGenre           string             `json:"primary_genre,omitempty"`
-	PrimaryGenreMultiplier float64            `json:"primary_genre_multiplier,omitempty"`
+	BaseWeight             float64 `json:"base_weight"`
+	AppliedMultiplier      float64 `json:"applied_multiplier"`
+	FinalWeight            float64 `json:"final_weight"`
+	Contribution           float64 `json:"contribution"`
+	BiasResistant          bool    `json:"bias_resistant"`
+	WeightOverride         bool    `json:"weight_override"`
+	Skipped                bool    `json:"skipped"`
+	GenreDeselected        bool    `json:"genre_deselected,omitempty"`
+	PrimaryGenre           string  `json:"primary_genre,omitempty"`
+	PrimaryGenreMultiplier float64 `json:"primary_genre_multiplier,omitempty"`
 }
 
 // sessionMetaResponse is the JSON representation of SessionMeta.
@@ -259,6 +265,7 @@ type sessionMetaResponse struct {
 	AniListURL         string   `json:"anilist_url"`
 	AllGenres          []string `json:"all_genres"`
 	MatchedGenres      []string `json:"matched_genres"`
+	GenresActive       []string `json:"genres_active,omitempty"`
 	ConfigHash         string   `json:"config_hash"`
 	PrimaryGenre       string   `json:"primary_genre,omitempty"`
 	PrimaryGenreWeight float64  `json:"primary_genre_weight"`
@@ -310,14 +317,36 @@ func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Determine matched genres for session meta.
-	matchedGenres := matchedGenres(media.Genres, s.cfg.Genres)
+	matched := matchedGenres(media.Genres, s.cfg.Genres)
+
+	// Validate primary_genre: when selected_genres are provided, the primary must
+	// be in that set; otherwise it must be in the full AniList genre list.
+	if req.PrimaryGenre != "" {
+		validationSet := media.Genres
+		if len(req.SelectedGenres) > 0 {
+			validationSet = req.SelectedGenres
+		}
+		found := false
+		primaryLower := toLower(req.PrimaryGenre)
+		for _, g := range validationSet {
+			if toLower(g) == primaryLower {
+				found = true
+				break
+			}
+		}
+		if !found {
+			writeError(w, http.StatusBadRequest, "primary_genre "+req.PrimaryGenre+" is not in the active genre set")
+			return
+		}
+	}
 
 	entry := scoring.Entry{
-		Scores:            req.Scores,
-		SkippedDimensions: skipped,
-		WeightOverrides:   req.WeightOverrides,
-		Genres:            media.Genres,
-		PrimaryGenre:      req.PrimaryGenre,
+		Scores:             req.Scores,
+		SkippedDimensions:  skipped,
+		WeightOverrides:    req.WeightOverrides,
+		Genres:             media.Genres,
+		UserSelectedGenres: req.SelectedGenres,
+		PrimaryGenre:       req.PrimaryGenre,
 		Meta: scoring.SessionMeta{
 			MediaID:            media.ID,
 			TitleRomaji:        media.TitleRomaji,
@@ -325,7 +354,7 @@ func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 			MediaType:          media.MediaType,
 			AniListURL:         aniListURL(media),
 			AllGenres:          media.Genres,
-			MatchedGenres:      matchedGenres,
+			MatchedGenres:      matched,
 			ConfigHash:         s.cfg.DimensionsHash,
 			PrimaryGenre:       req.PrimaryGenre,
 			PrimaryGenreWeight: s.cfg.PrimaryGenreWeight,
@@ -339,6 +368,153 @@ func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, toScoreResponse(result))
+}
+
+// weightsRequest is the request body for POST /weights.
+// swagger:model weightsRequest
+type weightsRequest struct {
+	// MediaID is the AniList media ID. Used to fetch the media's genre list.
+	MediaID int `json:"media_id"`
+	// SelectedGenres, if non-empty, restricts the active genre set for weight
+	// calculation. When omitted, all matched config genres participate.
+	SelectedGenres []string `json:"selected_genres,omitempty"`
+	// PrimaryGenre designates one genre as constitutive for blended multiplier
+	// calculation. Must be present in SelectedGenres when that field is provided,
+	// otherwise must be in the media's AniList genre list.
+	PrimaryGenre string `json:"primary_genre,omitempty" example:"Mystery"`
+	// SkippedDimensions maps dimension keys to true to exclude them from the
+	// weight pool before renormalization. Optional.
+	SkippedDimensions map[string]bool `json:"skipped_dimensions,omitempty"`
+	// WeightOverrides maps dimension keys to per-session weight overrides.
+	// Optional — omit to use config weights.
+	WeightOverrides map[string]float64 `json:"weight_overrides,omitempty"`
+}
+
+// weightDimensionRow is a single row in the POST /weights response.
+// swagger:model weightDimensionRow
+type weightDimensionRow struct {
+	// Key is the dimension's config key.
+	Key string `json:"key"`
+	// Label is the human-readable display name.
+	Label string `json:"label"`
+	// BaseWeight is the configured weight before genre adjustment.
+	BaseWeight float64 `json:"base_weight"`
+	// Multiplier is the blended genre multiplier applied (1.0 when bias-resistant or no genre opinion).
+	Multiplier float64 `json:"multiplier"`
+	// FinalWeight is the weight after genre adjustment, renormalization, and overrides.
+	FinalWeight float64 `json:"final_weight"`
+	// Skipped indicates this dimension is excluded from the weight pool.
+	Skipped bool `json:"skipped"`
+	// BiasResistant indicates this dimension's multiplier is always 1.0.
+	BiasResistant bool `json:"bias_resistant"`
+	// WeightOverride indicates the final weight was set by a weight override.
+	WeightOverride bool `json:"weight_override,omitempty"`
+	// PrimaryGenreMultiplier is the raw multiplier the primary genre defines for this
+	// dimension. 0 when no primary genre is set or the dimension is bias-resistant.
+	PrimaryGenreMultiplier float64 `json:"primary_genre_multiplier,omitempty"`
+}
+
+// weightsResponse is the response body for POST /weights.
+// swagger:model weightsResponse
+type weightsResponse struct {
+	// Dimensions is the ordered list of per-dimension weight rows.
+	Dimensions []weightDimensionRow `json:"dimensions"`
+}
+
+// handleWeights computes per-dimension final weights without requiring scores.
+// Used by the web UI for live weight preview when the user adjusts genre selection.
+//
+//	@Summary		Preview dimension weights
+//	@Description	Compute per-dimension final weights for a given genre/override configuration without scoring. Used for live weight preview in the web UI.
+//	@Tags			score
+//	@Accept			json
+//	@Produce		json
+//	@Param			request	body		weightsRequest	true	"Weight preview input"
+//	@Success		200		{object}	weightsResponse
+//	@Failure		400		{object}	errorResponse
+//	@Failure		502		{object}	errorResponse
+//	@Router			/weights [post]
+func (s *Server) handleWeights(w http.ResponseWriter, r *http.Request) {
+	var req weightsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+		return
+	}
+	if req.MediaID == 0 {
+		writeError(w, http.StatusBadRequest, "media_id is required")
+		return
+	}
+
+	// Validate weight overrides.
+	for key, v := range req.WeightOverrides {
+		if _, ok := s.cfg.Dimensions[key]; !ok {
+			writeError(w, http.StatusBadRequest, "unknown dimension in weight_overrides: "+key)
+			return
+		}
+		if v <= 0 || v > 1 {
+			writeError(w, http.StatusBadRequest, "weight_overrides value for "+key+" must be > 0 and ≤ 1")
+			return
+		}
+	}
+	overrideSum := 0.0
+	for _, v := range req.WeightOverrides {
+		overrideSum += v
+	}
+	if overrideSum >= 1.0 {
+		writeError(w, http.StatusBadRequest, "sum of weight_overrides must be < 1.0")
+		return
+	}
+
+	media, err := s.al.FetchByID(req.MediaID)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	// Determine active genre source.
+	genreSource := media.Genres
+	if len(req.SelectedGenres) > 0 {
+		genreSource = req.SelectedGenres
+	}
+
+	// Validate primary_genre against the active genre set.
+	if req.PrimaryGenre != "" {
+		validationSet := media.Genres
+		if len(req.SelectedGenres) > 0 {
+			validationSet = req.SelectedGenres
+		}
+		found := false
+		primaryLower := toLower(req.PrimaryGenre)
+		for _, g := range validationSet {
+			if toLower(g) == primaryLower {
+				found = true
+				break
+			}
+		}
+		if !found {
+			writeError(w, http.StatusBadRequest, "primary_genre "+req.PrimaryGenre+" is not in the active genre set")
+			return
+		}
+	}
+
+	rows := s.engine.Weights(genreSource, req.PrimaryGenre, req.SkippedDimensions, req.WeightOverrides)
+
+	dimRows := make([]weightDimensionRow, len(rows))
+	for i, wr := range rows {
+		dimRows[i] = weightDimensionRow{
+			Key:                    wr.Key,
+			Label:                  wr.Label,
+			BaseWeight:             wr.BaseWeight,
+			Multiplier:             wr.Multiplier,
+			FinalWeight:            wr.FinalWeight,
+			Skipped:                wr.Skipped,
+			BiasResistant:          wr.BiasResistant,
+			WeightOverride:         wr.WeightOverride,
+			PrimaryGenreMultiplier: wr.PrimaryGenreMultiplier,
+		}
+	}
+
+	writeJSON(w, http.StatusOK, weightsResponse{Dimensions: dimRows})
 }
 
 // publishRequest is the request body for POST /score/publish.
@@ -433,6 +609,7 @@ func toMediaResponse(m *anilist.Media) mediaResponse {
 		Chapters:     m.Chapters,
 		Genres:       m.Genres,
 		CoverImage:   m.CoverImage,
+		BannerImage:  m.BannerImage,
 		AverageScore: m.AverageScore,
 		MeanScore:    m.MeanScore,
 		MediaType:    string(m.MediaType),
@@ -452,10 +629,10 @@ func toScoreResponse(r scoring.Result) scoreResponse {
 			AppliedMultiplier:      row.AppliedMultiplier,
 			FinalWeight:            row.FinalWeight,
 			Contribution:           row.Contribution,
-			GenreMultipliers:       row.GenreMultipliers,
 			BiasResistant:          row.BiasResistant,
 			WeightOverride:         row.WeightOverride,
 			Skipped:                row.Skipped,
+			GenreDeselected:        row.GenreDeselected,
 			PrimaryGenre:           row.PrimaryGenre,
 			PrimaryGenreMultiplier: row.PrimaryGenreMultiplier,
 		}
@@ -471,6 +648,7 @@ func toScoreResponse(r scoring.Result) scoreResponse {
 			AniListURL:         r.Meta.AniListURL,
 			AllGenres:          r.Meta.AllGenres,
 			MatchedGenres:      r.Meta.MatchedGenres,
+			GenresActive:       r.Meta.GenresActive,
 			ConfigHash:         r.Meta.ConfigHash,
 			PrimaryGenre:       r.Meta.PrimaryGenre,
 			PrimaryGenreWeight: r.Meta.PrimaryGenreWeight,

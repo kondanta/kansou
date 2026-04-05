@@ -12,11 +12,8 @@ definitions:
         type: number
       final_weight:
         type: number
-      genre_multipliers:
-        additionalProperties:
-          format: float64
-          type: number
-        type: object
+      genre_deselected:
+        type: boolean
       key:
         type: string
       label:
@@ -100,6 +97,8 @@ definitions:
         type: string
       average_score:
         type: integer
+      banner_image:
+        type: string
       chapters:
         type: integer
       cover_image:
@@ -166,7 +165,7 @@ definitions:
       primary_genre:
         description: |-
           PrimaryGenre designates one of the media's genres as constitutive for
-          blended multiplier calculation. Must match one of the media's AniList genres
+          blended multiplier calculation. Must match one of the active genres
           (case-insensitive). Optional — omit to use contributing-only averaging with no primary.
         example: Mystery
         type: string
@@ -178,6 +177,15 @@ definitions:
           Scores maps dimension keys to user scores (1.0–10.0).
           Any configured dimension absent from this map is treated as skipped (N/A).
         type: object
+      selected_genres:
+        description: |-
+          SelectedGenres, if non-empty, restricts multiplier calculation to this
+          subset of the media's AniList genres. Genres absent from this list but
+          present in config are recorded as deselected in the breakdown. When
+          omitted, all matched config genres participate (CLI-compatible behaviour).
+        items:
+          type: string
+        type: array
       weight_overrides:
         additionalProperties:
           format: float64
@@ -213,6 +221,10 @@ definitions:
         type: string
       config_hash:
         type: string
+      genres_active:
+        items:
+          type: string
+        type: array
       matched_genres:
         items:
           type: string
@@ -229,6 +241,87 @@ definitions:
         type: string
       title_romaji:
         type: string
+    type: object
+  server.weightDimensionRow:
+    properties:
+      base_weight:
+        description: BaseWeight is the configured weight before genre adjustment.
+        type: number
+      bias_resistant:
+        description: BiasResistant indicates this dimension's multiplier is always
+          1.0.
+        type: boolean
+      final_weight:
+        description: FinalWeight is the weight after genre adjustment, renormalization,
+          and overrides.
+        type: number
+      key:
+        description: Key is the dimension's config key.
+        type: string
+      label:
+        description: Label is the human-readable display name.
+        type: string
+      multiplier:
+        description: Multiplier is the blended genre multiplier applied (1.0 when
+          bias-resistant or no genre opinion).
+        type: number
+      primary_genre_multiplier:
+        description: |-
+          PrimaryGenreMultiplier is the raw multiplier the primary genre defines for this
+          dimension. 0 when no primary genre is set or the dimension is bias-resistant.
+        type: number
+      skipped:
+        description: Skipped indicates this dimension is excluded from the weight
+          pool.
+        type: boolean
+      weight_override:
+        description: WeightOverride indicates the final weight was set by a weight
+          override.
+        type: boolean
+    type: object
+  server.weightsRequest:
+    properties:
+      media_id:
+        description: MediaID is the AniList media ID. Used to fetch the media's genre
+          list.
+        type: integer
+      primary_genre:
+        description: |-
+          PrimaryGenre designates one genre as constitutive for blended multiplier
+          calculation. Must be present in SelectedGenres when that field is provided,
+          otherwise must be in the media's AniList genre list.
+        example: Mystery
+        type: string
+      selected_genres:
+        description: |-
+          SelectedGenres, if non-empty, restricts the active genre set for weight
+          calculation. When omitted, all matched config genres participate.
+        items:
+          type: string
+        type: array
+      skipped_dimensions:
+        additionalProperties:
+          type: boolean
+        description: |-
+          SkippedDimensions maps dimension keys to true to exclude them from the
+          weight pool before renormalization. Optional.
+        type: object
+      weight_overrides:
+        additionalProperties:
+          format: float64
+          type: number
+        description: |-
+          WeightOverrides maps dimension keys to per-session weight overrides.
+          Optional — omit to use config weights.
+        type: object
+    type: object
+  server.weightsResponse:
+    properties:
+      dimensions:
+        description: Dimensions is the ordered list of per-dimension weight rows.
+        items:
+          $ref: '#/definitions/server.weightDimensionRow'
+        type: array
     type: object
 host: localhost:8080
 info:
@@ -407,6 +500,37 @@ paths:
           schema:
             $ref: '#/definitions/server.errorResponse'
       summary: Publish score
+      tags:
+      - score
+  /weights:
+    post:
+      consumes:
+      - application/json
+      description: Compute per-dimension final weights for a given genre/override
+        configuration without scoring. Used for live weight preview in the web UI.
+      parameters:
+      - description: Weight preview input
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/server.weightsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.weightsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Preview dimension weights
       tags:
       - score
 swagger: "2.0"

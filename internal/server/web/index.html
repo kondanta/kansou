@@ -90,7 +90,7 @@
 
     .dim-row {
       display: grid;
-      grid-template-columns: 140px 1fr 90px;
+      grid-template-columns: 140px 1fr 90px 3.5rem;
       align-items: center;
       gap: 0.75rem;
       padding: 0.6rem 0;
@@ -117,6 +117,27 @@
 
     .genre-row { margin-top: 1rem; font-size: 0.78rem; color: #555; line-height: 1.8; }
     .genre-row span { color: #888; }
+
+    .genre-checkboxes {
+      display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1.25rem;
+    }
+    .genre-check-label {
+      display: flex; align-items: center; gap: 0.3rem;
+      font-size: 0.78rem; color: #888; cursor: pointer;
+      background: #111; border: 1px solid #2a2a2a; border-radius: 3px;
+      padding: 0.2rem 0.6rem;
+      user-select: none; transition: border-color 0.15s, color 0.15s;
+    }
+    .genre-check-label:has(input:checked) { border-color: #555; color: #ccc; }
+    .genre-check-label.unmatched { opacity: 0.4; }
+    .genre-check-label input[type="checkbox"] {
+      width: auto; margin: 0; accent-color: #4ade80;
+    }
+    .weight-preview {
+      font-size: 0.68rem; color: #444; min-width: 3.5rem; text-align: right;
+      transition: color 0.2s;
+    }
+    .weight-preview.updated { color: #4ade80; }
 
     .copy-section { margin-top: 1.5rem; }
     .copy-header { display: flex; justify-content: space-between; align-items: center;
@@ -174,6 +195,10 @@
   <div class="card">
     <h2>Score</h2>
     <p id="scoring-media" style="font-size:0.85rem;color:#aaa;margin-bottom:1rem;"></p>
+    <div id="genre-select-section" style="margin-bottom:1.25rem;">
+      <label style="margin-bottom:0.5rem;">Active genres <span style="color:#444;">(uncheck to exclude from multiplier calculation)</span></label>
+      <div id="genre-checkboxes" class="genre-checkboxes"></div>
+    </div>
     <div id="primary-genre-row" class="row" style="margin-bottom:1.25rem;">
       <div>
         <label>Primary genre <span style="color:#444;">(optional — blend ratio applied to this genre's multipliers)</span></label>
@@ -238,7 +263,8 @@
 <script>
   const API = '';  // same origin — served by kansou itself
 
-  let state = { media: null, dimensions: [], genreWeight: 0.6, result: null };
+  let state = { media: null, dimensions: [], genreWeight: 0.6, configuredGenres: new Set(), result: null };
+  let weightPreviewTimer = null;
 
   function show(name) {
     document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
@@ -305,6 +331,7 @@
       if (!genreRes.ok) { err('pick-error', genreData.error || 'Could not load genres.'); return; }
       state.dimensions = dimData.dimensions;
       state.genreWeight = genreData.primary_genre_weight ?? 0.6;
+      state.configuredGenres = new Set((genreData.genres || []).map(g => g.genre.toLowerCase()));
       renderScoreForm(media, dimData.dimensions);
       show('score');
     } catch (e) {
@@ -320,22 +347,29 @@
     document.getElementById('scoring-media').textContent =
       `${title} · ${media.media_type} · ${media.format}`;
 
-    // Primary genre selector — populated from the media's genre list.
-    const primaryEl = document.getElementById('primary-genre-row');
-    const primarySel = document.getElementById('primary-genre');
-    primarySel.innerHTML = '<option value="">None (contributing-only averaging)</option>';
+    // Genre checkboxes — all start checked; unmatched genres visually dimmed.
+    const checkboxContainer = document.getElementById('genre-checkboxes');
+    checkboxContainer.innerHTML = '';
+    const genreSection = document.getElementById('genre-select-section');
     if (media.genres?.length) {
+      genreSection.style.display = '';
       media.genres.forEach(g => {
-        const opt = document.createElement('option');
-        opt.value = g;
-        opt.textContent = g;
-        primarySel.appendChild(opt);
+        const isMatched = state.configuredGenres.has(g.toLowerCase());
+        const lbl = document.createElement('label');
+        lbl.className = 'genre-check-label' + (isMatched ? '' : ' unmatched');
+        lbl.title = isMatched ? '' : 'Not in scoring config — no effect on weights';
+        lbl.innerHTML = `<input type="checkbox" id="genre-chk-${g}" value="${g}" checked />${g}`;
+        lbl.addEventListener('change', onGenreChange);
+        checkboxContainer.appendChild(lbl);
       });
-      primaryEl.style.display = '';
     } else {
-      primaryEl.style.display = 'none';
+      genreSection.style.display = 'none';
     }
 
+    // Primary genre selector — populated from checked genres.
+    rebuildPrimaryGenreSelect();
+
+    // Dimension rows.
     const container = document.getElementById('dim-list');
     container.innerHTML = '';
     dims.forEach(d => {
@@ -348,9 +382,109 @@
         </div>
         <div class="dim-desc">${d.description}</div>
         <input class="dim-input" type="number" id="dim-${d.key}"
-               min="1" max="10" step="0.5" placeholder="skip" />
+               min="1" max="10" step="0.5" placeholder="skip"
+               oninput="scheduleWeightPreview()" />
+        <span class="weight-preview" id="wp-${d.key}" title="Live final weight">—</span>
       `;
       container.appendChild(row);
+    });
+
+    // Trigger initial weight preview.
+    scheduleWeightPreview();
+  }
+
+  function onGenreChange(e) {
+    // When a genre is unchecked, clear it as primary if selected.
+    const primarySel = document.getElementById('primary-genre');
+    if (!e.target.checked && primarySel.value.toLowerCase() === e.target.value.toLowerCase()) {
+      primarySel.value = '';
+    }
+    rebuildPrimaryGenreSelect();
+    scheduleWeightPreview();
+  }
+
+  function rebuildPrimaryGenreSelect() {
+    const primaryEl = document.getElementById('primary-genre-row');
+    const primarySel = document.getElementById('primary-genre');
+    const prevValue = primarySel.value;
+    primarySel.innerHTML = '<option value="">None (contributing-only averaging)</option>';
+    const checked = getCheckedGenres();
+    if (checked.length) {
+      checked.forEach(g => {
+        const opt = document.createElement('option');
+        opt.value = g;
+        opt.textContent = g;
+        primarySel.appendChild(opt);
+      });
+      // Restore previous selection if still valid.
+      if (checked.some(g => g === prevValue)) primarySel.value = prevValue;
+      primaryEl.style.display = '';
+    } else {
+      primaryEl.style.display = 'none';
+    }
+    primarySel.onchange = scheduleWeightPreview;
+  }
+
+  function getCheckedGenres() {
+    return Array.from(
+      document.querySelectorAll('#genre-checkboxes input[type="checkbox"]:checked')
+    ).map(cb => cb.value);
+  }
+
+  function getSkippedDimensions() {
+    const skipped = {};
+    for (const d of state.dimensions) {
+      const val = document.getElementById(`dim-${d.key}`)?.value.trim();
+      if (val === '') skipped[d.key] = true;
+    }
+    return skipped;
+  }
+
+  function scheduleWeightPreview() {
+    clearTimeout(weightPreviewTimer);
+    weightPreviewTimer = setTimeout(fetchWeightPreview, 150);
+  }
+
+  async function fetchWeightPreview() {
+    if (!state.media) return;
+    const selectedGenres = getCheckedGenres();
+    const primaryGenre = document.getElementById('primary-genre').value;
+    const skippedDimensions = getSkippedDimensions();
+    const body = {
+      media_id: state.media.id,
+      skipped_dimensions: skippedDimensions,
+    };
+    if (selectedGenres.length < (state.media.genres?.length ?? 0)) {
+      body.selected_genres = selectedGenres;
+    }
+    if (primaryGenre) body.primary_genre = primaryGenre;
+
+    try {
+      const res = await fetch(`${API}/weights`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) return; // silent — preview is best-effort
+      const data = await res.json();
+      applyWeightPreview(data.dimensions);
+    } catch (_) { /* best-effort — ignore network errors in preview */ }
+  }
+
+  function applyWeightPreview(rows) {
+    if (!rows) return;
+    rows.forEach(wr => {
+      const el = document.getElementById(`wp-${wr.key}`);
+      if (!el) return;
+      if (wr.skipped) {
+        el.textContent = 'skip';
+        el.style.color = '#555';
+      } else {
+        el.textContent = (wr.final_weight * 100).toFixed(1) + '%';
+        el.style.color = '';
+        el.classList.add('updated');
+        setTimeout(() => el.classList.remove('updated'), 600);
+      }
     });
   }
 
@@ -373,7 +507,12 @@
       return;
     }
     const primaryGenre = document.getElementById('primary-genre').value;
+    const selectedGenres = getCheckedGenres();
     const body = { media_id: state.media.id, scores };
+    // Only send selected_genres when the user has deselected at least one genre.
+    if (selectedGenres.length < (state.media.genres?.length ?? 0)) {
+      body.selected_genres = selectedGenres;
+    }
     if (primaryGenre) body.primary_genre = primaryGenre;
 
     try {
@@ -412,6 +551,7 @@
       let tag = '';
       if (row.skipped)                                          tag = '<span class="tag skipped">skipped</span>';
       else if (row.weight_override)                             tag = '<span class="tag override">overridden</span>';
+      else if (row.genre_deselected)                            tag = '<span class="tag skipped">genre filtered</span>';
       else if (row.primary_genre && !row.bias_resistant)        tag = '<span class="tag">primary</span>';
       else if (row.applied_multiplier !== 1.0)                  tag = '<span class="tag">genre</span>';
       tr.innerHTML = `
@@ -436,9 +576,14 @@
       info.innerHTML += `<div>Genres returned: <span>${meta.all_genres.join(', ')}</span></div>`;
     if (meta.matched_genres?.length) {
       const lowerPrimary = (meta.primary_genre || '').toLowerCase();
-      const annotated = meta.matched_genres.map(g =>
-        g.toLowerCase() === lowerPrimary ? `${g} [primary]` : g
-      ).join(', ');
+      const activeSet = new Set((meta.genres_active || []).map(g => g.toLowerCase()));
+      const annotated = meta.matched_genres.map(g => {
+        const lower = g.toLowerCase();
+        const isPrimary = lower === lowerPrimary;
+        const isActive = activeSet.size === 0 || activeSet.has(lower);
+        if (!isActive) return `<s style="color:#555">${g}</s>`;
+        return isPrimary ? `${g} [primary]` : g;
+      }).join(', ');
       info.innerHTML += `<div>Genres matched config: <span>${annotated}</span></div>`;
     }
 

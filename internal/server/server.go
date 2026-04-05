@@ -67,6 +67,7 @@ func (s *Server) buildRouter() *chi.Mux {
 	r.Get("/media/{id}", s.handleMediaFetch)
 	r.Post("/score", s.handleScore)
 	r.Post("/score/publish", s.handleScorePublish)
+	r.Post("/weights", s.handleWeights)
 
 	// Swagger UI.
 	r.Get("/swagger/*", httpSwagger.Handler(
