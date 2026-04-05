@@ -383,22 +383,87 @@ The `POST /score/publish` request body accepts an optional `notes` string:
 
 ---
 
-### POST /score — primary_genre field
+### POST /score — selected_genres and primary_genre fields
 
-The `POST /score` request body accepts an optional `primary_genre` string:
+The `POST /score` request body accepts optional `selected_genres` and `primary_genre` fields:
 
 ```json
 {
   "media_id": 154587,
   "scores": { "story": 9, "characters": 8.5 },
+  "selected_genres": ["Mystery"],
   "primary_genre": "Mystery"
 }
 ```
 
-- Value is passed through to the engine as `Entry.PrimaryGenre`.
-- Case-insensitive matching is applied by the engine against the media's genre list.
-- If omitted or empty, plain contributing-only averaging applies.
-- The response `meta` object includes `primary_genre` and `primary_genre_weight` for provenance.
+- `selected_genres` — when present, restricts multiplier calculation to this subset of the
+  media's AniList genres. Genres absent from this list are excluded from the active set.
+  When omitted or empty, all matched config genres participate (CLI-compatible behaviour).
+- `primary_genre` — designates one genre as constitutive for blended multiplier calculation.
+  When `selected_genres` is provided, `primary_genre` must be in that set; otherwise it must
+  be in the media's full AniList genre list. Case-insensitive matching. If omitted or empty,
+  contributing-only averaging applies with no primary.
+- The response `meta` object includes `genres_active` (the active genres that participated in
+  calculation), `primary_genre`, and `primary_genre_weight` for provenance.
+- Breakdown rows include `genre_deselected: true` when a deselected genre had a configured
+  multiplier for that dimension.
+
+---
+
+### POST /weights — live weight preview (ADR-023)
+
+Returns per-dimension final weights without requiring scores. Used by the web UI to show
+a live weight preview as the user adjusts genre selection or skips dimensions.
+
+**Request body:**
+```json
+{
+  "media_id": 154587,
+  "selected_genres": ["Mystery"],
+  "primary_genre": "Mystery",
+  "skipped_dimensions": { "value": true },
+  "weight_overrides": { "pacing": 0.05 }
+}
+```
+
+- `media_id` — required. Used to fetch the media's genre list.
+- `selected_genres` — optional. Same semantics as in `POST /score`.
+- `primary_genre` — optional. Same validation rules as in `POST /score`.
+- `skipped_dimensions` — optional. Keys mapped to `true` are excluded from the weight pool.
+- `weight_overrides` — optional. Same validation rules as in `POST /score`.
+
+**Response shape:**
+```json
+{
+  "dimensions": [
+    {
+      "key": "story",
+      "label": "Story",
+      "base_weight": 0.25,
+      "multiplier": 1.5,
+      "final_weight": 0.28,
+      "skipped": false,
+      "bias_resistant": false,
+      "weight_override": false,
+      "primary_genre_multiplier": 1.5
+    }
+  ]
+}
+```
+
+- `multiplier` — the blended genre multiplier (1.0 for bias-resistant dimensions or when no
+  matched genre has an opinion on this dimension).
+- `final_weight` — weight after genre adjustment, renormalization, and overrides. This is
+  identical to the `final_weight` field that `POST /score` would produce.
+- `primary_genre_multiplier` — the raw multiplier the primary genre defines for this
+  dimension. 0 when no primary genre is set, when the dimension is bias-resistant, or when
+  the primary genre has no configured entry for this dimension.
+
+**Validation errors** (same rules as `POST /score`):
+- Unknown key in `weight_overrides` → 400
+- `weight_overrides` value ≤ 0 or > 1 → 400
+- Sum of `weight_overrides` ≥ 1.0 → 400
+- `primary_genre` not in the active genre set → 400
 
 ---
 

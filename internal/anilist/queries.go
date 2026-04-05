@@ -25,8 +25,9 @@ query ($search: String, $type: MediaType, $perPage: Int) {
         isMediaSpoiler
       }
       coverImage {
-        medium
+        extraLarge
       }
+      bannerImage
       averageScore
       meanScore
     }
@@ -58,8 +59,9 @@ query ($id: Int) {
       isMediaSpoiler
     }
     coverImage {
-      medium
+      extraLarge
     }
+    bannerImage
     averageScore
     meanScore
   }

@@ -28,8 +28,10 @@ type Media struct {
 	Genres []string
 	// Tags is the list of AniList content tags.
 	Tags []Tag
-	// CoverImage is the URL of the medium-size cover image.
+	// CoverImage is the URL of the extra-large cover image.
 	CoverImage string
+	// BannerImage is the URL of the banner image (may be empty).
+	BannerImage string
 	// AverageScore is the AniList community average score (0–100).
 	AverageScore int
 	// MeanScore is the AniList mean score (0–100).

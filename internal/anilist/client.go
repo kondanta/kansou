@@ -309,9 +309,10 @@ type gqlMedia struct {
 		IsMediaSpoiler bool   `json:"isMediaSpoiler"`
 	} `json:"tags"`
 	CoverImage struct {
-		Medium string `json:"medium"`
+		ExtraLarge string `json:"extraLarge"`
 	} `json:"coverImage"`
-	AverageScore int `json:"averageScore"`
+	BannerImage  string `json:"bannerImage"`
+	AverageScore int    `json:"averageScore"`
 	MeanScore    int `json:"meanScore"`
 }
 
@@ -336,7 +337,8 @@ func (g *gqlMedia) toMedia() *Media {
 		Chapters:     g.Chapters,
 		Genres:       g.Genres,
 		Tags:         tags,
-		CoverImage:   g.CoverImage.Medium,
+		CoverImage:   g.CoverImage.ExtraLarge,
+		BannerImage:  g.BannerImage,
 		AverageScore: g.AverageScore,
 		MeanScore:    g.MeanScore,
 		MediaType:    mediaTypeFromFormat(g.Format),
