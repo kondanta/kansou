@@ -8,6 +8,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -22,10 +23,11 @@ import (
 	"github.com/kondanta/kansou/internal/anilist"
 	"github.com/kondanta/kansou/internal/config"
 	"github.com/kondanta/kansou/internal/scoring"
+	kansouweb "github.com/kondanta/kansou/web"
 )
 
 //go:embed web/index.html
-var indexHTML []byte
+var legacyHTML []byte
 
 // Server holds the dependencies for the REST server.
 type Server struct {
@@ -54,11 +56,9 @@ func (s *Server) buildRouter() *chi.Mux {
 	r.Use(corsMiddleware(s.cfg.Server.CORSAllowedOrigins))
 	r.Use(requestLogger)
 
-	// Test UI — served at root.
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write(indexHTML) //nolint:errcheck
-	})
+	// UI — served at root. Prefers the built Vue app; falls back to the
+	// legacy single-file UI when dist hasn't been built yet.
+	r.Handle("/*", spaHandler(kansouweb.DistDirFS))
 
 	r.Get("/health", s.handleHealth)
 	r.Get("/dimensions", s.handleDimensions)
@@ -75,6 +75,41 @@ func (s *Server) buildRouter() *chi.Mux {
 	))
 
 	return r
+}
+
+// spaHandler serves the Vue SPA from distFS.
+// For any path where the file doesn't exist it serves dist/index.html so that
+// Vue Router's client-side routing works. When dist/index.html itself is absent
+// (i.e. just build-ui hasn't been run yet) it falls back to legacyHTML.
+func spaHandler(distFS fs.FS) http.HandlerFunc {
+	fileServer := http.FileServer(http.FS(distFS))
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Strip leading slash for fs.FS open calls.
+		path := r.URL.Path
+		if len(path) > 0 && path[0] == '/' {
+			path = path[1:]
+		}
+		if path == "" {
+			path = "index.html"
+		}
+
+		_, err := distFS.Open(path)
+		if err == nil {
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+
+		// Path not found — SPA fallback to index.html.
+		idx, err := distFS.Open("index.html")
+		if err != nil {
+			// dist not built yet — serve legacy UI.
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Write(legacyHTML) //nolint:errcheck
+			return
+		}
+		idx.Close()
+		http.ServeFileFS(w, r, distFS, "index.html")
+	}
 }
 
 // ListenAndServe starts the HTTP server on the configured port.

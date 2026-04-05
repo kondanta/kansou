@@ -34,6 +34,12 @@ kansou/
 │   ├── scoring/             # Scoring engine: weights, multipliers, formula
 │   ├── logger/              # Structured logging setup (log/slog wrappers)
 │   └── server/              # REST server (chi router + handlers)
+│       └── web/
+│           └── index.html   # Legacy single-file UI (fallback)
+├── web/                     # package web — embeds the compiled Vue UI
+│   ├── embed.go             # //go:embed + exports DistDirFS
+│   └── tribbie/             # git submodule: github.com/sasalx/tribbie
+│       └── dist/            # Vite build output (populated by `just build-ui`)
 ├── docs/
 │   ├── REQUIREMENTS.md
 │   ├── ADR.md
@@ -47,6 +53,10 @@ kansou/
 ```
 
 `internal/` is intentional. Nothing inside it is importable by external packages. Keep it that way.
+
+`web/` is a thin Go package (`package web`) whose sole responsibility is embedding the compiled
+Vue UI and exporting `DistDirFS fs.FS`. It has no business logic. `internal/server` imports it.
+The Vue source lives in the `web/tribbie/` submodule; only the compiled `dist/` is embedded.
 
 ---
 

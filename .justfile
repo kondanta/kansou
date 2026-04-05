@@ -6,9 +6,20 @@ swag_out := "docs/swagger"
 default:
     @just --list
 
-# Build the binary
+# Build the Go binary only (no UI rebuild)
 build:
     go build -o {{binary}} {{main}}
+
+# Build the Vue UI via Docker — no local Node/pnpm required
+build-ui:
+    docker run --rm \
+      -v "$(pwd)/web/tribbie:/app" \
+      -w /app \
+      node:22-alpine \
+      sh -c "corepack enable pnpm && pnpm install && VITE_API_BASE_URL= pnpm exec vite build"
+
+# Full build: Vue UI then Go binary
+build-all: build-ui build
 
 # Build with version stamped from the nearest git tag (clean semver, no commit hash)
 build-release:
