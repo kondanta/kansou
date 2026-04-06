@@ -19,6 +19,7 @@ build-ui:
       -w /app \
       node:22-alpine \
       sh -c "corepack enable pnpm && pnpm install && VITE_API_BASE_URL= pnpm exec vite build"
+    touch web/dist/.gitkeep
 
 # Full build: Vue UI then Go binary
 build-all: build-ui build
