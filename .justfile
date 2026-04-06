@@ -12,8 +12,10 @@ build:
 
 # Build the Vue UI via Docker — no local Node/pnpm required
 build-ui:
+    git submodule update --init --recursive
     docker run --rm \
       -v "$(pwd)/web/tribbie:/app" \
+      -v "$(pwd)/web/dist:/app/dist" \
       -w /app \
       node:22-alpine \
       sh -c "corepack enable pnpm && pnpm install && VITE_API_BASE_URL= pnpm exec vite build"

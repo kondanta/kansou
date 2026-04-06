@@ -9,12 +9,12 @@ import (
 	"io/fs"
 )
 
-//go:embed all:tribbie/dist
+//go:embed all:dist
 var dist embed.FS
 
 // DistDirFS is the embedded Vue UI rooted at the dist directory.
 // Import this from internal/server to serve the frontend.
-var DistDirFS = mustSubFS(dist, "tribbie/dist")
+var DistDirFS = mustSubFS(dist, "dist")
 
 // mustSubFS returns the sub-filesystem rooted at dir.
 // Panics if dir does not exist — this would indicate a broken embed path

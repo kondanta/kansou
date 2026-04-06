@@ -37,9 +37,9 @@ kansou/
 │       └── web/
 │           └── index.html   # Legacy single-file UI (fallback)
 ├── web/                     # package web — embeds the compiled Vue UI
-│   ├── embed.go             # //go:embed + exports DistDirFS
-│   └── tribbie/             # git submodule: github.com/sasalx/tribbie
-│       └── dist/            # Vite build output (populated by `just build-ui`)
+│   ├── embed.go             # //go:embed all:dist + exports DistDirFS
+│   ├── dist/                # Vite build output (populated by `just build-ui`, gitignored except .gitkeep)
+│   └── tribbie/             # git submodule: github.com/sasalx/tribbie (source only)
 ├── docs/
 │   ├── REQUIREMENTS.md
 │   ├── ADR.md
