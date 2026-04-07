@@ -156,6 +156,11 @@ type BreakdownRow struct {
 	// this dimension (1.0 if the primary genre has no opinion on it). Zero when
 	// no primary genre was specified or the dimension is bias-resistant.
 	PrimaryGenreMultiplier float64
+	// SecondaryGenresMultiplier is the contributing-only average multiplier across
+	// all non-primary matched genres for this dimension. Zero when no primary genre
+	// is set, when there are no non-primary genres (ADR-025), or when the dimension
+	// is bias-resistant.
+	SecondaryGenresMultiplier float64
 }
 
 // Result is the output of Engine.Score(). The Breakdown is always fully
@@ -200,4 +205,9 @@ type WeightRow struct {
 	// this dimension (0 when no primary genre is set or the dimension is
 	// bias-resistant; 0 also when the primary genre has no config entry for it).
 	PrimaryGenreMultiplier float64
+	// SecondaryGenresMultiplier is the contributing-only average multiplier across
+	// all non-primary matched genres for this dimension. Zero when no primary genre
+	// is set, when there are no non-primary genres (ADR-025), or when the dimension
+	// is bias-resistant.
+	SecondaryGenresMultiplier float64
 }

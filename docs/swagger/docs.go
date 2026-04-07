@@ -359,6 +359,9 @@ const docTemplate = `{
                 "score": {
                     "type": "number"
                 },
+                "secondary_genres_multiplier": {
+                    "type": "number"
+                },
                 "skipped": {
                     "type": "boolean"
                 },
@@ -678,6 +681,10 @@ const docTemplate = `{
                 },
                 "primary_genre_multiplier": {
                     "description": "PrimaryGenreMultiplier is the raw multiplier the primary genre defines for this\ndimension. 0 when no primary genre is set or the dimension is bias-resistant.",
+                    "type": "number"
+                },
+                "secondary_genres_multiplier": {
+                    "description": "SecondaryGenresMultiplier is the contributing-only average multiplier across\nall non-primary matched genres. 0 when no primary genre is set, when there are\nno non-primary genres (ADR-025), or when the dimension is bias-resistant.",
                     "type": "number"
                 },
                 "skipped": {

@@ -170,12 +170,13 @@ POST /weights             { "media_id": 154587, "selected_genres": [...], "prima
   → returns per-dimension final weights without scoring; used for live UI preview
 ```
 
-**Embedded UI:** `package web` (`web/embed.go`) embeds `web/tribbie/dist` via
-`//go:embed all:tribbie/dist` and exports `DistDirFS fs.FS`. `internal/server`
-imports `kansouweb "github.com/kondanta/kansou/web"` and passes `kansouweb.DistDirFS`
-to `spaHandler`. When `dist/` has not been built yet, `spaHandler` falls back to
-the legacy `internal/server/web/index.html`. Build the Vue app with `just build-ui`
-(Docker, no local Node required) before `go build` or `just build-all`.
+**Embedded UI:** `package web` (`web/embed.go`) embeds `web/dist/` via
+`//go:embed all:dist` and exports `DistDirFS fs.FS`. The Vue source lives in the
+`web/tribbie/` submodule; `just build-ui` (Docker, no local Node required) builds it
+and writes the output to `web/dist/`. `internal/server` imports
+`kansouweb "github.com/kondanta/kansou/web"` and passes `kansouweb.DistDirFS`
+to `spaHandler`. When `dist/` has not been built yet (only `.gitkeep` present),
+`spaHandler` falls back to the legacy `internal/server/web/index.html`.
 
 **Web UI initialisation sequence** (Vue SPA):
 

@@ -204,6 +204,10 @@ Per-dimension provenance includes:
 - Which genres fired a multiplier for this dimension and at what value
 - The averaged multiplier actually applied
 - Effective weight (`base_weight × multiplier`) before renormalization
+- Primary genre's raw multiplier for this dimension (`primary_genre_multiplier`)
+- Contributing-only average of non-primary genres (`secondary_genres_multiplier`);
+  together with `primary_genre_multiplier` and `primary_genre_weight` fully reconstructs
+  the blend formula
 - Whether the dimension is bias-resistant
 - Whether a `--weight` override was applied
 - Whether the dimension was skipped

@@ -253,8 +253,9 @@ type breakdownRowResponse struct {
 	WeightOverride         bool    `json:"weight_override"`
 	Skipped                bool    `json:"skipped"`
 	GenreDeselected        bool    `json:"genre_deselected,omitempty"`
-	PrimaryGenre           string  `json:"primary_genre,omitempty"`
-	PrimaryGenreMultiplier float64 `json:"primary_genre_multiplier,omitempty"`
+	PrimaryGenre              string  `json:"primary_genre,omitempty"`
+	PrimaryGenreMultiplier    float64 `json:"primary_genre_multiplier,omitempty"`
+	SecondaryGenresMultiplier float64 `json:"secondary_genres_multiplier,omitempty"`
 }
 
 // sessionMetaResponse is the JSON representation of SessionMeta.
@@ -413,6 +414,10 @@ type weightDimensionRow struct {
 	// PrimaryGenreMultiplier is the raw multiplier the primary genre defines for this
 	// dimension. 0 when no primary genre is set or the dimension is bias-resistant.
 	PrimaryGenreMultiplier float64 `json:"primary_genre_multiplier,omitempty"`
+	// SecondaryGenresMultiplier is the contributing-only average multiplier across
+	// all non-primary matched genres. 0 when no primary genre is set, when there are
+	// no non-primary genres (ADR-025), or when the dimension is bias-resistant.
+	SecondaryGenresMultiplier float64 `json:"secondary_genres_multiplier,omitempty"`
 }
 
 // weightsResponse is the response body for POST /weights.
@@ -518,7 +523,8 @@ func (s *Server) handleWeights(w http.ResponseWriter, r *http.Request) {
 			Skipped:                wr.Skipped,
 			BiasResistant:          wr.BiasResistant,
 			WeightOverride:         wr.WeightOverride,
-			PrimaryGenreMultiplier: wr.PrimaryGenreMultiplier,
+			PrimaryGenreMultiplier:    wr.PrimaryGenreMultiplier,
+			SecondaryGenresMultiplier: wr.SecondaryGenresMultiplier,
 		}
 	}
 
@@ -651,8 +657,9 @@ func toScoreResponse(r scoring.Result) scoreResponse {
 			WeightOverride:         row.WeightOverride,
 			Skipped:                row.Skipped,
 			GenreDeselected:        row.GenreDeselected,
-			PrimaryGenre:           row.PrimaryGenre,
-			PrimaryGenreMultiplier: row.PrimaryGenreMultiplier,
+			PrimaryGenre:              row.PrimaryGenre,
+			PrimaryGenreMultiplier:    row.PrimaryGenreMultiplier,
+			SecondaryGenresMultiplier: row.SecondaryGenresMultiplier,
 		}
 	}
 	return scoreResponse{

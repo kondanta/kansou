@@ -68,14 +68,15 @@ func (e *Engine) Score(entry Entry) (Result, error) {
 			Label:                  wr.Label,
 			Score:                  entry.Scores[wr.Key],
 			BaseWeight:             wr.BaseWeight,
-			AppliedMultiplier:      wr.Multiplier,
-			EffectiveWeight:        wr.EffectiveWeight,
-			FinalWeight:            wr.FinalWeight,
-			BiasResistant:          wr.BiasResistant,
-			WeightOverride:         wr.WeightOverride,
-			Skipped:                wr.Skipped,
-			PrimaryGenre:           entry.PrimaryGenre,
-			PrimaryGenreMultiplier: wr.PrimaryGenreMultiplier,
+			AppliedMultiplier:         wr.Multiplier,
+			EffectiveWeight:           wr.EffectiveWeight,
+			FinalWeight:               wr.FinalWeight,
+			BiasResistant:             wr.BiasResistant,
+			WeightOverride:            wr.WeightOverride,
+			Skipped:                   wr.Skipped,
+			PrimaryGenre:              entry.PrimaryGenre,
+			PrimaryGenreMultiplier:    wr.PrimaryGenreMultiplier,
+			SecondaryGenresMultiplier: wr.SecondaryGenresMultiplier,
 		}
 	}
 
@@ -178,9 +179,10 @@ func (e *Engine) Weights(
 
 		multiplier := 1.0
 		if !def.BiasResistant {
-			var primaryMult float64
-			multiplier, primaryMult, _ = e.blendedMultiplier(key, primaryGenreLower, matchedGenres)
+			var primaryMult, secondaryGenresMult float64
+			multiplier, primaryMult, secondaryGenresMult, _ = e.blendedMultiplier(key, primaryGenreLower, matchedGenres)
 			row.PrimaryGenreMultiplier = primaryMult
+			row.SecondaryGenresMultiplier = secondaryGenresMult
 		}
 		row.Multiplier = multiplier
 		row.EffectiveWeight = def.Weight * multiplier
@@ -272,16 +274,17 @@ func combinedMultiplier(
 // blendedMultiplier calculates the effective multiplier for a dimension, applying
 // a primary-genre blend when a primary genre is specified (ADR-022).
 // When primaryGenre is empty or primaryGenreWeight is 0, falls back to combinedMultiplier.
-// Returns (finalMultiplier, primaryGenreMultiplier, perGenreContributions).
+// Returns (finalMultiplier, primaryGenreMultiplier, secondaryMultiplier, perGenreContributions).
 // primaryGenreMultiplier is the raw multiplier from the primary genre alone (0 if N/A).
+// secondaryMultiplier is the contributing-only average of non-primary genres (0 if N/A).
 func (e *Engine) blendedMultiplier(
 	key DimensionKey,
 	primaryGenre string, // already lowercased; empty if not set
 	matchedGenres []string,
-) (float64, float64, map[string]float64) {
+) (float64, float64, float64, map[string]float64) {
 	if primaryGenre == "" || e.primaryGenreWeight == 0 {
 		m, contrib := combinedMultiplier(key, matchedGenres, e.genres)
-		return m, 0, contrib
+		return m, 0, 0, contrib
 	}
 
 	// Primary multiplier: what the primary genre says for this dimension.
@@ -309,7 +312,7 @@ func (e *Engine) blendedMultiplier(
 	// a counterintuitive inversion where designating a primary genre hurts it.
 	// See ADR-025.
 	if len(secondary) == 0 {
-		return effectivePrimaryMult, configuredPrimaryMult, nil
+		return effectivePrimaryMult, configuredPrimaryMult, 0, nil
 	}
 
 	secondaryMult, contrib := combinedMultiplier(key, secondary, e.genres)
@@ -326,7 +329,7 @@ func (e *Engine) blendedMultiplier(
 		contrib[primaryGenre] = configuredPrimaryMult
 	}
 
-	return final, configuredPrimaryMult, contrib
+	return final, configuredPrimaryMult, secondaryMult, contrib
 }
 
 // renormalise returns a new weight map scaled so values sum to 1.0.

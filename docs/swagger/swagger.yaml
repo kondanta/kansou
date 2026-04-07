@@ -26,6 +26,8 @@ definitions:
         type: number
       score:
         type: number
+      secondary_genres_multiplier:
+        type: number
       skipped:
         type: boolean
       weight_override:
@@ -276,6 +278,12 @@ definitions:
         description: |-
           PrimaryGenreMultiplier is the raw multiplier the primary genre defines for this
           dimension. 0 when no primary genre is set or the dimension is bias-resistant.
+        type: number
+      secondary_genres_multiplier:
+        description: |-
+          SecondaryGenresMultiplier is the contributing-only average multiplier across
+          all non-primary matched genres. 0 when no primary genre is set, when there are
+          no non-primary genres (ADR-025), or when the dimension is bias-resistant.
         type: number
       skipped:
         description: Skipped indicates this dimension is excluded from the weight

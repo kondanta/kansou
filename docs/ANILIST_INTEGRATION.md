@@ -414,6 +414,11 @@ The `POST /score` request body accepts optional `selected_genres` and `primary_g
   reproduces its `final_weight`.
 - Breakdown rows include `effective_weight` (`base_weight × applied_multiplier` pre-renorm) on
   each row.
+- Breakdown rows include `secondary_genres_multiplier` — the contributing-only average of all
+  non-primary matched genres for that dimension. Zero when no primary genre is set, when the
+  primary is the sole active genre (ADR-025), or when the dimension is bias-resistant. Together
+  with `primary_genre_multiplier` and `meta.primary_genre_weight` this fully reconstructs the
+  blend: `applied = (primary × blend) + (secondary_genres × (1 − blend))`.
 - Breakdown rows include `genre_deselected: true` when a deselected genre had a configured
   multiplier for that dimension.
 
@@ -478,6 +483,10 @@ a live weight preview as the user adjusts genre selection or skips dimensions.
 - `primary_genre_multiplier` — the raw multiplier the primary genre defines for this
   dimension. 0 when no primary genre is set, when the dimension is bias-resistant, or when
   the primary genre has no configured entry for this dimension.
+- `secondary_genres_multiplier` — contributing-only average of all non-primary matched genres
+  for this dimension. 0 when no primary is set, when the primary is the sole active genre
+  (ADR-025), or when the dimension is bias-resistant. Used with `primary_genre_multiplier` and
+  `primary_genre_weight` to reconstruct the full blend formula.
 
 **Validation errors** (same rules as `POST /score`):
 - Unknown key in `weight_overrides` → 400
