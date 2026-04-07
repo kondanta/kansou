@@ -203,6 +203,7 @@ Per-dimension provenance includes:
 - Base weight before genre adjustment
 - Which genres fired a multiplier for this dimension and at what value
 - The averaged multiplier actually applied
+- Effective weight (`base_weight × multiplier`) before renormalization
 - Whether the dimension is bias-resistant
 - Whether a `--weight` override was applied
 - Whether the dimension was skipped
@@ -213,6 +214,8 @@ Session-level provenance includes:
 - Which genres matched a config block
 - Which genres were active (participated in calculation) — equals matched genres
   when no `selected_genres` restriction was applied
+- Sum of all effective weights before renormalization (`effective_weight_sum`);
+  dividing any dimension's `effective_weight` by this value reproduces its `final_weight`
 - A SHA256 hash of the serialised dimensions config at time of scoring
 
 **FR-03f — Per-session weight override**

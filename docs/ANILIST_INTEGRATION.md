@@ -408,7 +408,12 @@ The `POST /score` request body accepts optional `selected_genres` and `primary_g
   be in the media's full AniList genre list. Case-insensitive matching. If omitted or empty,
   contributing-only averaging applies with no primary.
 - The response `meta` object includes `genres_active` (the active genres that participated in
-  calculation), `primary_genre`, and `primary_genre_weight` for provenance.
+  calculation), `primary_genre`, `primary_genre_weight`, and `effective_weight_sum` for provenance.
+- `meta.effective_weight_sum` is the sum of all per-dimension `base_weight × applied_multiplier`
+  values before renormalization. Dividing any breakdown row's `effective_weight` by this value
+  reproduces its `final_weight`.
+- Breakdown rows include `effective_weight` (`base_weight × applied_multiplier` pre-renorm) on
+  each row.
 - Breakdown rows include `genre_deselected: true` when a deselected genre had a configured
   multiplier for that dimension.
 
@@ -440,13 +445,15 @@ a live weight preview as the user adjusts genre selection or skips dimensions.
 ```json
 {
   "primary_genre_weight": 0.6,
+  "effective_weight_sum": 1.065,
   "dimensions": [
     {
       "key": "story",
       "label": "Story",
       "base_weight": 0.25,
       "multiplier": 1.5,
-      "final_weight": 0.28,
+      "effective_weight": 0.275,
+      "final_weight": 0.258,
       "skipped": false,
       "bias_resistant": false,
       "weight_override": false,
@@ -460,8 +467,12 @@ a live weight preview as the user adjusts genre selection or skips dimensions.
   primary genre's multiplier contributes 60 % and the secondary average contributes 40 %.
   Always present; reflects the current config value regardless of whether a primary genre
   was supplied in the request.
+- `effective_weight_sum` — sum of all dimensions' `effective_weight` values before
+  renormalization. `dimension.effective_weight / effective_weight_sum === dimension.final_weight`.
 - `multiplier` — the blended genre multiplier (1.0 for bias-resistant dimensions or when no
   matched genre has an opinion on this dimension).
+- `effective_weight` — `base_weight × multiplier` before renormalization. The intermediate
+  value in the weight pool prior to the step that forces all weights to sum to 1.0.
 - `final_weight` — weight after genre adjustment, renormalization, and overrides. This is
   identical to the `final_weight` field that `POST /score` would produce.
 - `primary_genre_multiplier` — the raw multiplier the primary genre defines for this
