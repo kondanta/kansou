@@ -69,6 +69,7 @@ func (e *Engine) Score(entry Entry) (Result, error) {
 			Score:                  entry.Scores[wr.Key],
 			BaseWeight:             wr.BaseWeight,
 			AppliedMultiplier:      wr.Multiplier,
+			EffectiveWeight:        wr.EffectiveWeight,
 			FinalWeight:            wr.FinalWeight,
 			BiasResistant:          wr.BiasResistant,
 			WeightOverride:         wr.WeightOverride,
@@ -124,6 +125,9 @@ func (e *Engine) Score(entry Entry) (Result, error) {
 	meta := entry.Meta
 	meta.MatchedGenres = allMatched
 	meta.GenresActive = matchedGenreKeys(genreSource, e.genres)
+	for _, row := range breakdown {
+		meta.EffectiveWeightSum += row.EffectiveWeight
+	}
 
 	return Result{
 		FinalScore: round2(finalScore),
@@ -179,7 +183,8 @@ func (e *Engine) Weights(
 			row.PrimaryGenreMultiplier = primaryMult
 		}
 		row.Multiplier = multiplier
-		effective[key] = def.Weight * multiplier
+		row.EffectiveWeight = def.Weight * multiplier
+		effective[key] = row.EffectiveWeight
 		rows = append(rows, row)
 	}
 

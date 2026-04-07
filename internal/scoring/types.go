@@ -106,6 +106,10 @@ type SessionMeta struct {
 	// PrimaryGenreWeight is the configured blend ratio that was active during
 	// this session (copied from config at score time for provenance).
 	PrimaryGenreWeight float64
+	// EffectiveWeightSum is the sum of all per-dimension effective weights
+	// (base × multiplier) before renormalization. Dividing any dimension's
+	// effective weight by this value reproduces its final weight.
+	EffectiveWeightSum float64
 }
 
 // BreakdownRow is the full audit trail for a single dimension's contribution
@@ -123,6 +127,8 @@ type BreakdownRow struct {
 	// AppliedMultiplier is the averaged multiplier actually used
 	// (1.0 for bias-resistant dimensions or when no genres matched).
 	AppliedMultiplier float64
+	// EffectiveWeight is BaseWeight × AppliedMultiplier before renormalization.
+	EffectiveWeight float64
 	// FinalWeight is the weight after genre adjustment and renormalization.
 	// Zero if skipped.
 	FinalWeight float64
@@ -176,6 +182,10 @@ type WeightRow struct {
 	// Multiplier is the blended genre multiplier applied to this dimension
 	// (1.0 for bias-resistant dimensions or when no genres have an opinion).
 	Multiplier float64
+	// EffectiveWeight is BaseWeight × Multiplier before renormalization.
+	// It represents this dimension's raw share of the weight pool prior to
+	// the normalization step that forces all weights to sum to 1.0.
+	EffectiveWeight float64
 	// FinalWeight is the weight after genre adjustment, renormalization, and
 	// any weight overrides. This is the value used in the final score formula.
 	FinalWeight float64

@@ -246,6 +246,7 @@ type breakdownRowResponse struct {
 	Score                  float64 `json:"score"`
 	BaseWeight             float64 `json:"base_weight"`
 	AppliedMultiplier      float64 `json:"applied_multiplier"`
+	EffectiveWeight        float64 `json:"effective_weight"`
 	FinalWeight            float64 `json:"final_weight"`
 	Contribution           float64 `json:"contribution"`
 	BiasResistant          bool    `json:"bias_resistant"`
@@ -268,8 +269,9 @@ type sessionMetaResponse struct {
 	MatchedGenres      []string `json:"matched_genres"`
 	GenresActive       []string `json:"genres_active,omitempty"`
 	ConfigHash         string   `json:"config_hash"`
-	PrimaryGenre       string   `json:"primary_genre,omitempty"`
-	PrimaryGenreWeight float64  `json:"primary_genre_weight"`
+	PrimaryGenre         string  `json:"primary_genre,omitempty"`
+	PrimaryGenreWeight   float64 `json:"primary_genre_weight"`
+	EffectiveWeightSum   float64 `json:"effective_weight_sum"`
 }
 
 // handleScore calculates a weighted score for the given media entry.
@@ -398,6 +400,8 @@ type weightDimensionRow struct {
 	BaseWeight float64 `json:"base_weight"`
 	// Multiplier is the blended genre multiplier applied (1.0 when bias-resistant or no genre opinion).
 	Multiplier float64 `json:"multiplier"`
+	// EffectiveWeight is BaseWeight × Multiplier before renormalization.
+	EffectiveWeight float64 `json:"effective_weight"`
 	// FinalWeight is the weight after genre adjustment, renormalization, and overrides.
 	FinalWeight float64 `json:"final_weight"`
 	// Skipped indicates this dimension is excluded from the weight pool.
@@ -417,6 +421,9 @@ type weightsResponse struct {
 	// PrimaryGenreWeight is the blend ratio applied when a primary genre is set (0–1).
 	// A value of 0.6 means 60 % primary, 40 % secondary average.
 	PrimaryGenreWeight float64 `json:"primary_genre_weight"`
+	// EffectiveWeightSum is the sum of all per-dimension effective weights before renormalization.
+	// Dividing any dimension's effective_weight by this value reproduces its final_weight.
+	EffectiveWeightSum float64 `json:"effective_weight_sum"`
 	// Dimensions is the ordered list of per-dimension weight rows.
 	Dimensions []weightDimensionRow `json:"dimensions"`
 }
@@ -506,6 +513,7 @@ func (s *Server) handleWeights(w http.ResponseWriter, r *http.Request) {
 			Label:                  wr.Label,
 			BaseWeight:             wr.BaseWeight,
 			Multiplier:             wr.Multiplier,
+			EffectiveWeight:        wr.EffectiveWeight,
 			FinalWeight:            wr.FinalWeight,
 			Skipped:                wr.Skipped,
 			BiasResistant:          wr.BiasResistant,
@@ -514,8 +522,14 @@ func (s *Server) handleWeights(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	effectiveSum := 0.0
+	for _, wr := range rows {
+		effectiveSum += wr.EffectiveWeight
+	}
+
 	writeJSON(w, http.StatusOK, weightsResponse{
 		PrimaryGenreWeight: s.cfg.PrimaryGenreWeight,
+		EffectiveWeightSum: effectiveSum,
 		Dimensions:         dimRows,
 	})
 }
@@ -630,6 +644,7 @@ func toScoreResponse(r scoring.Result) scoreResponse {
 			Score:                  row.Score,
 			BaseWeight:             row.BaseWeight,
 			AppliedMultiplier:      row.AppliedMultiplier,
+			EffectiveWeight:        row.EffectiveWeight,
 			FinalWeight:            row.FinalWeight,
 			Contribution:           row.Contribution,
 			BiasResistant:          row.BiasResistant,
@@ -655,6 +670,7 @@ func toScoreResponse(r scoring.Result) scoreResponse {
 			ConfigHash:         r.Meta.ConfigHash,
 			PrimaryGenre:       r.Meta.PrimaryGenre,
 			PrimaryGenreWeight: r.Meta.PrimaryGenreWeight,
+			EffectiveWeightSum: r.Meta.EffectiveWeightSum,
 		},
 	}
 }

@@ -10,6 +10,8 @@ definitions:
         type: boolean
       contribution:
         type: number
+      effective_weight:
+        type: number
       final_weight:
         type: number
       genre_deselected:
@@ -221,6 +223,8 @@ definitions:
         type: string
       config_hash:
         type: string
+      effective_weight_sum:
+        type: number
       genres_active:
         items:
           type: string
@@ -251,6 +255,9 @@ definitions:
         description: BiasResistant indicates this dimension's multiplier is always
           1.0.
         type: boolean
+      effective_weight:
+        description: EffectiveWeight is BaseWeight × Multiplier before renormalization.
+        type: number
       final_weight:
         description: FinalWeight is the weight after genre adjustment, renormalization,
           and overrides.
@@ -322,6 +329,16 @@ definitions:
         items:
           $ref: '#/definitions/server.weightDimensionRow'
         type: array
+      effective_weight_sum:
+        description: |-
+          EffectiveWeightSum is the sum of all per-dimension effective weights before renormalization.
+          Dividing any dimension's effective_weight by this value reproduces its final_weight.
+        type: number
+      primary_genre_weight:
+        description: |-
+          PrimaryGenreWeight is the blend ratio applied when a primary genre is set (0–1).
+          A value of 0.6 means 60 % primary, 40 % secondary average.
+        type: number
     type: object
 host: localhost:8080
 info:

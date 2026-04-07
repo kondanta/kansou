@@ -335,6 +335,9 @@ const docTemplate = `{
                 "contribution": {
                     "type": "number"
                 },
+                "effective_weight": {
+                    "type": "number"
+                },
                 "final_weight": {
                     "type": "number"
                 },
@@ -607,6 +610,9 @@ const docTemplate = `{
                 "config_hash": {
                     "type": "string"
                 },
+                "effective_weight_sum": {
+                    "type": "number"
+                },
                 "genres_active": {
                     "type": "array",
                     "items": {
@@ -649,6 +655,10 @@ const docTemplate = `{
                 "bias_resistant": {
                     "description": "BiasResistant indicates this dimension's multiplier is always 1.0.",
                     "type": "boolean"
+                },
+                "effective_weight": {
+                    "description": "EffectiveWeight is BaseWeight × Multiplier before renormalization.",
+                    "type": "number"
                 },
                 "final_weight": {
                     "description": "FinalWeight is the weight after genre adjustment, renormalization, and overrides.",
@@ -725,6 +735,14 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/server.weightDimensionRow"
                     }
+                },
+                "effective_weight_sum": {
+                    "description": "EffectiveWeightSum is the sum of all per-dimension effective weights before renormalization.\nDividing any dimension's effective_weight by this value reproduces its final_weight.",
+                    "type": "number"
+                },
+                "primary_genre_weight": {
+                    "description": "PrimaryGenreWeight is the blend ratio applied when a primary genre is set (0–1).\nA value of 0.6 means 60 % primary, 40 % secondary average.",
+                    "type": "number"
                 }
             }
         }
