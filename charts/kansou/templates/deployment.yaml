@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kansou.fullname" . }}
+  labels:
+    {{- include "kansou.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "kansou.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kansou.labels" . | nindent 8 }}
+      {{- if .Values.config }}
+      annotations:
+        # Restart pods automatically when config.toml changes.
+        checksum/config: {{ .Values.config | sha256sum }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "kansou.serviceAccountName" . }}
+      containers:
+        - name: kansou
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - serve
+            {{- if .Values.config }}
+            - --config
+            - /etc/kansou/config.toml
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          env:
+            - name: ANILIST_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "kansou.fullname" . }}
+                  key: ANILIST_TOKEN
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          {{- if .Values.config }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/kansou
+              readOnly: true
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- if .Values.config }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "kansou.fullname" . }}
+      {{- end }}
