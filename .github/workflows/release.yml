@@ -10,11 +10,51 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  # ── Vue UI build ──────────────────────────────────────────────────────────────
+  # Builds the tribbie frontend natively on the runner.
+  # Output is uploaded as an artifact and consumed by each binary build job.
+  build-ui:
+    name: Build Vue UI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: web/tribbie/pnpm-lock.yaml
+
+      - name: Enable pnpm
+        run: corepack enable pnpm
+
+      - name: Install dependencies
+        working-directory: web/tribbie
+        run: pnpm install
+
+      - name: Build Vue UI
+        working-directory: web/tribbie
+        run: VITE_API_BASE_URL= pnpm exec vite build
+
+      - name: Copy dist to web/dist
+        run: |
+          cp -r web/tribbie/dist/. web/dist/
+          touch web/dist/.gitkeep
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist/
+          if-no-files-found: error
+
   # ── Binary build ─────────────────────────────────────────────────────────────
   # All three targets cross-compile on ubuntu-latest via GOARCH/GOARM.
   # CGO is disabled — fully static binaries with no runtime dependencies.
   build-binary:
     name: Binary (${{ matrix.artifact }})
+    needs: build-ui
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -31,6 +71,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist/
 
       - uses: actions/setup-go@v5
         with:
