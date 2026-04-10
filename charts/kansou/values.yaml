@@ -182,13 +182,13 @@ config: |
   port = 8080
   cors_allowed_origins = []
 
-resources: {}
-  # requests:
-  #   cpu: 100m
-  #   memory: 64Mi
-  # limits:
-  #   cpu: 200m
-  #   memory: 128Mi
+resources:
+  requests:
+    cpu: 100m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
 
 serviceAccount:
   create: true
