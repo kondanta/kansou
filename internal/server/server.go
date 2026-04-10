@@ -123,8 +123,11 @@ func (s *Server) ListenAndServe(portOverride int) error {
 
 	addr := fmt.Sprintf(":%d", port)
 	srv := &http.Server{
-		Addr:    addr,
-		Handler: s.router,
+		Addr:         addr,
+		Handler:      s.router,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
 
 	stop := make(chan os.Signal, 1)
