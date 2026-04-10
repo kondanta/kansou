@@ -83,13 +83,17 @@ func (e *Engine) Score(entry Entry) (Result, error) {
 	// allMatched is the full set of entry genres that have a config entry.
 	// Used for both MatchedGenres provenance and the GenreDeselected post-pass.
 	allMatched := matchedGenreKeys(entry.Genres, e.genres)
+	// activeMatched is the matched subset of the active genre source (selected
+	// or full). Precomputed once and reused for both the deselected post-pass
+	// and meta.GenresActive to avoid calling matchedGenreKeys twice.
+	activeMatched := matchedGenreKeys(genreSource, e.genres)
 
 	// GenreDeselected post-pass: mark dimensions where a deselected genre
 	// had a configured multiplier. Only runs when the caller supplied a
 	// restricted genre set.
 	if len(entry.UserSelectedGenres) > 0 {
-		activeSet := make(map[string]bool)
-		for _, g := range matchedGenreKeys(entry.UserSelectedGenres, e.genres) {
+		activeSet := make(map[string]bool, len(activeMatched))
+		for _, g := range activeMatched {
 			activeSet[g] = true
 		}
 		for i := range breakdown {
@@ -125,7 +129,7 @@ func (e *Engine) Score(entry Entry) (Result, error) {
 	// config genre map, so no external caller needs to pre-compute them.
 	meta := entry.Meta
 	meta.MatchedGenres = allMatched
-	meta.GenresActive = matchedGenreKeys(genreSource, e.genres)
+	meta.GenresActive = activeMatched
 	for _, row := range breakdown {
 		meta.EffectiveWeightSum += row.EffectiveWeight
 	}

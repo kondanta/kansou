@@ -139,6 +139,9 @@ func ParseMediaURL(rawURL string) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("media ID %q in URL is not a valid integer", parts[1])
 	}
+	if id <= 0 {
+		return 0, fmt.Errorf("media ID %q in URL must be a positive integer", parts[1])
+	}
 	return id, nil
 }
 

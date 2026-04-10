@@ -309,6 +309,10 @@ func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "score for "+key+" must be a finite number")
 			return
 		}
+		if v < 1 || v > 10 {
+			writeError(w, http.StatusBadRequest, "score for "+key+" must be between 1 and 10")
+			return
+		}
 	}
 
 	// Fetch media to get genres and title for provenance.
