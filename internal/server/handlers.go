@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"math"
 	"net/http"
 	"sort"
 	"strconv"
@@ -302,6 +303,12 @@ func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 	if len(req.Scores) == 0 {
 		writeError(w, http.StatusBadRequest, "scores map is required and must not be empty")
 		return
+	}
+	for key, v := range req.Scores {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			writeError(w, http.StatusBadRequest, "score for "+key+" must be a finite number")
+			return
+		}
 	}
 
 	// Fetch media to get genres and title for provenance.
