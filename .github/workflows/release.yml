@@ -23,7 +23,7 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          package_json_file: web/tribbie/package.json
+          version: 9
 
       - uses: actions/setup-node@v4
         with:
