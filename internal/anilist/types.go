@@ -62,6 +62,26 @@ type PublishResult struct {
 	TitleRomaji string
 }
 
+// UpstreamError wraps an HTTP-level failure from the AniList API — a non-200
+// response or a network error. Handlers use errors.As to distinguish these
+// infrastructure failures from user-facing errors (not found, token missing)
+// so that internal details are logged server-side rather than returned to the client.
+//
+// StatusCode is exported for logging/diagnostics. err is intentionally
+// unexported: callers access the message via Error() and the wrapped cause via
+// Unwrap(), keeping the internal error string out of the public API surface.
+type UpstreamError struct {
+	// StatusCode is the HTTP status returned by AniList, or 0 for network errors.
+	StatusCode int
+	err        error
+}
+
+// Error implements the error interface.
+func (e *UpstreamError) Error() string { return e.err.Error() }
+
+// Unwrap allows errors.Is / errors.As to inspect the wrapped error.
+func (e *UpstreamError) Unwrap() error { return e.err }
+
 // mediaTypeFromFormat derives MediaType from the AniList format string.
 // Anime formats: TV, TV_SHORT, MOVIE, SPECIAL, OVA, ONA, MUSIC.
 // All others are treated as Manga.

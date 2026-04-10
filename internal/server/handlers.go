@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strconv"
@@ -76,7 +77,7 @@ func (s *Server) handleMediaSearch(w http.ResponseWriter, r *http.Request) {
 
 	results, err := s.al.SearchByNameMulti(q, mediaType)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
+		handleAnilistErr(w, err)
 		return
 	}
 
@@ -109,7 +110,7 @@ func (s *Server) handleMediaFetch(w http.ResponseWriter, r *http.Request) {
 
 	media, err := s.al.FetchByID(id)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
+		handleAnilistErr(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toMediaResponse(media))
@@ -306,7 +307,7 @@ func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 	// Fetch media to get genres and title for provenance.
 	media, err := s.al.FetchByID(req.MediaID)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
+		handleAnilistErr(w, err)
 		return
 	}
 
@@ -463,7 +464,7 @@ func (s *Server) handleWeights(w http.ResponseWriter, r *http.Request) {
 
 	media, err := s.al.FetchByID(req.MediaID)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
+		handleAnilistErr(w, err)
 		return
 	}
 
@@ -546,7 +547,7 @@ func (s *Server) handleScorePublish(w http.ResponseWriter, r *http.Request) {
 
 	pub, err := s.al.PublishScore(req.MediaID, req.Score, req.Notes)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
+		handleAnilistErr(w, err)
 		return
 	}
 
@@ -588,6 +589,19 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 // writeError writes a JSON error envelope with the given status and message.
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, errorResponse{Error: msg})
+}
+
+// handleAnilistErr logs infrastructure-level AniList failures server-side and
+// returns a generic 502 to the client. User-facing errors (not found, token
+// missing, GraphQL validation) are passed through as-is.
+func handleAnilistErr(w http.ResponseWriter, err error) {
+	var upstreamErr *anilist.UpstreamError
+	if errors.As(err, &upstreamErr) {
+		slog.Error("anilist upstream error", "err", err)
+		writeError(w, http.StatusBadGateway, "AniList is currently unavailable")
+		return
+	}
+	writeError(w, http.StatusBadGateway, err.Error())
 }
 
 // toMediaResponse converts an anilist.Media to a mediaResponse.

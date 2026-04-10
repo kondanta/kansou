@@ -255,15 +255,15 @@ func (c *Client) do(query string, variables map[string]any, withAuth bool) (*htt
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("AniList is currently unreachable: %w", err)
+		return nil, &UpstreamError{StatusCode: 0, err: fmt.Errorf("AniList is currently unreachable: %w", err)}
 	}
 	if resp.StatusCode != http.StatusOK {
 		body, err := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
 		resp.Body.Close()
 		if err != nil {
-			return nil, fmt.Errorf("AniList returned HTTP %d (could not read error body: %w)", resp.StatusCode, err)
+			return nil, &UpstreamError{StatusCode: resp.StatusCode, err: fmt.Errorf("AniList returned HTTP %d (could not read error body: %w)", resp.StatusCode, err)}
 		}
-		return nil, fmt.Errorf("AniList returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, &UpstreamError{StatusCode: resp.StatusCode, err: fmt.Errorf("AniList returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))}
 	}
 	return resp, nil
 }
