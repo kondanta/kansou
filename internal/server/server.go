@@ -18,6 +18,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/httprate"
 	httpSwagger "github.com/swaggo/http-swagger"
 
 	"github.com/kondanta/kansou/internal/anilist"
@@ -28,6 +29,16 @@ import (
 
 //go:embed web/index.html
 var legacyHTML []byte
+
+// Rate limits for AniList-proxying endpoints (requests per minute, per IP).
+// These are safety rails against runaway scripts or frontend bugs — not
+// intended to trip during normal use.
+const (
+	rateLimitSearch  = 30 // /media/search  — user-initiated, typed queries
+	rateLimitFetch   = 30 // /media/{id}    — direct ID lookup
+	rateLimitScore   = 20 // /score         — deliberate scoring action
+	rateLimitPublish = 5  // /score/publish — write to AniList, must be intentional
+)
 
 // Server holds the dependencies for the REST server.
 type Server struct {
@@ -64,10 +75,10 @@ func (s *Server) buildRouter() *chi.Mux {
 	r.Get("/health", s.handleHealth)
 	r.Get("/dimensions", s.handleDimensions)
 	r.Get("/genres", s.handleGenres)
-	r.Get("/media/search", s.handleMediaSearch)
-	r.Get("/media/{id}", s.handleMediaFetch)
-	r.Post("/score", s.handleScore)
-	r.Post("/score/publish", s.handleScorePublish)
+	r.With(httprate.LimitByIP(rateLimitSearch, time.Minute)).Get("/media/search", s.handleMediaSearch)
+	r.With(httprate.LimitByIP(rateLimitFetch, time.Minute)).Get("/media/{id}", s.handleMediaFetch)
+	r.With(httprate.LimitByIP(rateLimitScore, time.Minute)).Post("/score", s.handleScore)
+	r.With(httprate.LimitByIP(rateLimitPublish, time.Minute)).Post("/score/publish", s.handleScorePublish)
 	r.Post("/weights", s.handleWeights)
 
 	// Swagger UI.

@@ -25,6 +25,30 @@ httpRoute:
   #   - kansou.example.com
   path: "/"
 
+# clientTrafficPolicy configures an Envoy Gateway ClientTrafficPolicy to ensure
+# correct X-Forwarded-For handling for per-IP rate limiting.
+#
+# By default Envoy appends to X-Forwarded-For rather than overwriting it, so a
+# client can spoof the header to bypass rate limits (httprate reads the leftmost
+# value). Setting numTrustedHops: 1 tells Envoy to strip client-supplied XFF
+# values and set the header to the real client IP before forwarding to kansou.
+#
+# Note: ClientTrafficPolicy targets a Gateway, not a single route — enabling
+# this affects XFF handling for all services behind the same Gateway. This is
+# generally desirable but worth knowing in a shared-gateway setup.
+#
+# Requires: gateway.envoyproxy.io CRDs (Envoy Gateway) installed in the cluster.
+clientTrafficPolicy:
+  enabled: false
+  # targetGateway must reference the same Gateway used in httpRoute.
+  targetGateway:
+    name: ""
+    namespace: ""
+  # numTrustedHops tells Envoy how many proxy hops to trust when deriving the
+  # real client IP. Set to 1 for a single Envoy Gateway with no additional
+  # proxies in front of it.
+  numTrustedHops: 1
+
 # ANILIST_TOKEN injected as an environment variable.
 # Set this via --set anilistToken=<token> or a values override file.
 # Never commit a real token here.

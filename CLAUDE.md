@@ -69,6 +69,7 @@ The Vue source lives in the `web/tribbie/` submodule; only the compiled `dist/` 
   - `github.com/go-chi/chi/v5` — HTTP router
   - `github.com/BurntSushi/toml` — Config parsing
   - `github.com/swaggo/swag` + `github.com/swaggo/http-swagger` — Swagger generation
+  - `github.com/go-chi/httprate` — Per-IP rate limiting on AniList-proxying endpoints
   - Raw `net/http` for AniList GraphQL — no GraphQL client library (see ADR-004)
 
 If you think a new dependency is justified, stop and ask. Do not `go get` anything not on this list.

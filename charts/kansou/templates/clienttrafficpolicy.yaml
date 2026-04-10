@@ -1,0 +1,19 @@
+{{- if .Values.clientTrafficPolicy.enabled }}
+{{- if not .Values.clientTrafficPolicy.targetGateway.name }}{{ fail "clientTrafficPolicy.targetGateway.name is required when clientTrafficPolicy.enabled is true" }}{{- end }}
+{{- if not .Values.clientTrafficPolicy.targetGateway.namespace }}{{ fail "clientTrafficPolicy.targetGateway.namespace is required when clientTrafficPolicy.enabled is true" }}{{- end }}
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: ClientTrafficPolicy
+metadata:
+  name: {{ include "kansou.fullname" . }}
+  labels:
+    {{- include "kansou.labels" . | nindent 4 }}
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: {{ .Values.clientTrafficPolicy.targetGateway.name }}
+      namespace: {{ .Values.clientTrafficPolicy.targetGateway.namespace }}
+  clientIPDetection:
+    xForwardedFor:
+      numTrustedHops: {{ .Values.clientTrafficPolicy.numTrustedHops }}
+{{- end }}
