@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"sort"
 	"strconv"
@@ -285,12 +286,12 @@ type sessionMetaResponse struct {
 //	@Param			request	body		scoreRequest	true	"Scoring input"
 //	@Success		200		{object}	scoreResponse
 //	@Failure		400		{object}	errorResponse
+//	@Failure		413		{object}	errorResponse
 //	@Failure		502		{object}	errorResponse
 //	@Router			/score [post]
 func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 	var req scoreRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+	if !decodeBody(w, r, &req) {
 		return
 	}
 	if req.MediaID == 0 {
@@ -429,12 +430,12 @@ type weightsResponse struct {
 //	@Param			request	body		weightsRequest	true	"Weight preview input"
 //	@Success		200		{object}	weightsResponse
 //	@Failure		400		{object}	errorResponse
+//	@Failure		413		{object}	errorResponse
 //	@Failure		502		{object}	errorResponse
 //	@Router			/weights [post]
 func (s *Server) handleWeights(w http.ResponseWriter, r *http.Request) {
 	var req weightsRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+	if !decodeBody(w, r, &req) {
 		return
 	}
 	if req.MediaID == 0 {
@@ -526,12 +527,12 @@ type publishResponse struct {
 //	@Param			request	body		publishRequest	true	"Publish input"
 //	@Success		200		{object}	publishResponse
 //	@Failure		400		{object}	errorResponse
+//	@Failure		413		{object}	errorResponse
 //	@Failure		502		{object}	errorResponse
 //	@Router			/score/publish [post]
 func (s *Server) handleScorePublish(w http.ResponseWriter, r *http.Request) {
 	var req publishRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+	if !decodeBody(w, r, &req) {
 		return
 	}
 	if req.MediaID == 0 {
@@ -557,6 +558,25 @@ func (s *Server) handleScorePublish(w http.ResponseWriter, r *http.Request) {
 }
 
 // --- helpers ---
+
+// maxRequestBodyBytes is the hard limit applied to all POST request bodies.
+const maxRequestBodyBytes = 1 << 20 // 1 MB
+
+// decodeBody reads at most maxRequestBodyBytes from r.Body and decodes JSON into v.
+// Returns false and writes the appropriate error response (400 or 413) on failure.
+func decodeBody(w http.ResponseWriter, r *http.Request, v any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
+	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			writeError(w, http.StatusRequestEntityTooLarge, "request body too large (limit 1 MB)")
+		} else {
+			writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+		}
+		return false
+	}
+	return true
+}
 
 // writeJSON serialises v as JSON and writes it to w with the given status code.
 func writeJSON(w http.ResponseWriter, status int, v any) {
