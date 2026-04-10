@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	apiEndpoint = "https://graphql.anilist.co"
-	tokenEnvVar = "ANILIST_TOKEN"
+	apiEndpoint        = "https://graphql.anilist.co"
+	tokenEnvVar        = "ANILIST_TOKEN"
+	maxErrorBodyBytes  = 64 << 10 // 64 KB — enough for any AniList error payload
 )
 
 // Client is a thin net/http wrapper for the AniList GraphQL API.
@@ -257,8 +258,11 @@ func (c *Client) do(query string, variables map[string]any, withAuth bool) (*htt
 		return nil, fmt.Errorf("AniList is currently unreachable: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
 		resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("AniList returned HTTP %d (could not read error body: %w)", resp.StatusCode, err)
+		}
 		return nil, fmt.Errorf("AniList returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	return resp, nil
