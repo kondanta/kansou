@@ -53,6 +53,7 @@ func (s *Server) buildRouter() *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
+	r.Use(securityHeaders)
 	r.Use(corsMiddleware(s.cfg.Server.CORSAllowedOrigins))
 	r.Use(requestLogger)
 

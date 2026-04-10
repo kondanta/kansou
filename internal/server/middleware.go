@@ -37,6 +37,17 @@ func corsMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 	}
 }
 
+// securityHeaders sets conservative security headers on every response.
+// X-Content-Type-Options prevents MIME sniffing.
+// X-Frame-Options prevents the UI from being embedded in an iframe (clickjacking).
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		next.ServeHTTP(w, r)
+	})
+}
+
 // requestLogger returns a middleware that logs each request using slog.
 // It records the HTTP method, path, status code, response size, latency,
 // and the chi request ID.
