@@ -1,4 +1,6 @@
 {{- if .Values.httpRoute.enabled }}
+{{- if not .Values.httpRoute.gateway.name }}{{ fail "httpRoute.gateway.name is required when httpRoute.enabled is true" }}{{- end }}
+{{- if not .Values.httpRoute.gateway.namespace }}{{ fail "httpRoute.gateway.namespace is required when httpRoute.enabled is true" }}{{- end }}
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
