@@ -21,14 +21,15 @@ jobs:
         with:
           submodules: recursive
 
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/tribbie/package.json
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'pnpm'
           cache-dependency-path: web/tribbie/pnpm-lock.yaml
-
-      - name: Enable pnpm
-        run: corepack enable pnpm
 
       - name: Install dependencies
         working-directory: web/tribbie
