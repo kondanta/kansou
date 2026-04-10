@@ -320,25 +320,10 @@ func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 		req.WeightOverrides = map[string]float64{}
 	}
 
-	// Validate primary_genre: when selected_genres are provided, the primary must
-	// be in that set; otherwise it must be in the full AniList genre list.
-	if req.PrimaryGenre != "" {
-		validationSet := media.Genres
-		if len(req.SelectedGenres) > 0 {
-			validationSet = req.SelectedGenres
-		}
-		found := false
-		primaryLower := strings.ToLower(req.PrimaryGenre)
-		for _, g := range validationSet {
-			if strings.ToLower(g) == primaryLower {
-				found = true
-				break
-			}
-		}
-		if !found {
-			writeError(w, http.StatusBadRequest, "primary_genre "+req.PrimaryGenre+" is not in the active genre set")
-			return
-		}
+	// Validate primary_genre: must be present in the active genre set.
+	if req.PrimaryGenre != "" && !containsGenreCaseInsensitive(activeGenres(media.Genres, req.SelectedGenres), req.PrimaryGenre) {
+		writeError(w, http.StatusBadRequest, "primary_genre "+req.PrimaryGenre+" is not in the active genre set")
+		return
 	}
 
 	entry := scoring.Entry{
@@ -458,6 +443,7 @@ func (s *Server) handleWeights(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate weight overrides.
+	overrideSum := 0.0
 	for key, v := range req.WeightOverrides {
 		if _, ok := s.cfg.Dimensions[key]; !ok {
 			writeError(w, http.StatusBadRequest, "unknown dimension in weight_overrides: "+key)
@@ -467,9 +453,6 @@ func (s *Server) handleWeights(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "weight_overrides value for "+key+" must be > 0 and ≤ 1")
 			return
 		}
-	}
-	overrideSum := 0.0
-	for _, v := range req.WeightOverrides {
 		overrideSum += v
 	}
 	if overrideSum >= 1.0 {
@@ -484,52 +467,20 @@ func (s *Server) handleWeights(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Determine active genre source.
-	genreSource := media.Genres
-	if len(req.SelectedGenres) > 0 {
-		genreSource = req.SelectedGenres
-	}
+	genreSource := activeGenres(media.Genres, req.SelectedGenres)
 
 	// Validate primary_genre against the active genre set.
-	if req.PrimaryGenre != "" {
-		validationSet := media.Genres
-		if len(req.SelectedGenres) > 0 {
-			validationSet = req.SelectedGenres
-		}
-		found := false
-		primaryLower := strings.ToLower(req.PrimaryGenre)
-		for _, g := range validationSet {
-			if strings.ToLower(g) == primaryLower {
-				found = true
-				break
-			}
-		}
-		if !found {
-			writeError(w, http.StatusBadRequest, "primary_genre "+req.PrimaryGenre+" is not in the active genre set")
-			return
-		}
+	if req.PrimaryGenre != "" && !containsGenreCaseInsensitive(genreSource, req.PrimaryGenre) {
+		writeError(w, http.StatusBadRequest, "primary_genre "+req.PrimaryGenre+" is not in the active genre set")
+		return
 	}
 
 	rows := s.engine.Weights(genreSource, req.PrimaryGenre, req.SkippedDimensions, req.WeightOverrides)
 
 	dimRows := make([]weightDimensionRow, len(rows))
-	for i, wr := range rows {
-		dimRows[i] = weightDimensionRow{
-			Key:                    wr.Key,
-			Label:                  wr.Label,
-			BaseWeight:             wr.BaseWeight,
-			Multiplier:             wr.Multiplier,
-			EffectiveWeight:        wr.EffectiveWeight,
-			FinalWeight:            wr.FinalWeight,
-			Skipped:                wr.Skipped,
-			BiasResistant:          wr.BiasResistant,
-			WeightOverride:         wr.WeightOverride,
-			PrimaryGenreMultiplier:    wr.PrimaryGenreMultiplier,
-			SecondaryGenresMultiplier: wr.SecondaryGenresMultiplier,
-		}
-	}
-
 	effectiveSum := 0.0
-	for _, wr := range rows {
+	for i, wr := range rows {
+		dimRows[i] = toWeightDimensionRow(wr)
 		effectiveSum += wr.EffectiveWeight
 	}
 
@@ -689,4 +640,41 @@ func aniListURL(m *anilist.Media) string {
 		t = "manga"
 	}
 	return "https://anilist.co/" + t + "/" + strconv.Itoa(m.ID)
+}
+
+// activeGenres returns the effective genre set: selectedGenres if provided,
+// otherwise all mediaGenres.
+func activeGenres(mediaGenres, selectedGenres []string) []string {
+	if len(selectedGenres) > 0 {
+		return selectedGenres
+	}
+	return mediaGenres
+}
+
+// containsGenreCaseInsensitive reports whether target appears in genres (case-insensitive).
+func containsGenreCaseInsensitive(genres []string, target string) bool {
+	lower := strings.ToLower(target)
+	for _, g := range genres {
+		if strings.ToLower(g) == lower {
+			return true
+		}
+	}
+	return false
+}
+
+// toWeightDimensionRow converts a scoring.WeightRow to a weightDimensionRow for JSON serialisation.
+func toWeightDimensionRow(wr scoring.WeightRow) weightDimensionRow {
+	return weightDimensionRow{
+		Key:                       wr.Key,
+		Label:                     wr.Label,
+		BaseWeight:                wr.BaseWeight,
+		Multiplier:                wr.Multiplier,
+		EffectiveWeight:           wr.EffectiveWeight,
+		FinalWeight:               wr.FinalWeight,
+		Skipped:                   wr.Skipped,
+		BiasResistant:             wr.BiasResistant,
+		WeightOverride:            wr.WeightOverride,
+		PrimaryGenreMultiplier:    wr.PrimaryGenreMultiplier,
+		SecondaryGenresMultiplier: wr.SecondaryGenresMultiplier,
+	}
 }
