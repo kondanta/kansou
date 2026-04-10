@@ -10,6 +10,11 @@ default:
 build:
     go build -o {{binary}} {{main}}
 
+# Reset and refetch the tribbie submodule from scratch
+reset-submodule:
+    rm -rf web/tribbie
+    git submodule add --force https://github.com/sasalx/tribbie web/tribbie
+
 # Build the Vue UI via Docker — no local Node/pnpm required
 build-ui:
     git submodule update --init --recursive
