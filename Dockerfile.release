@@ -1,7 +1,11 @@
 # Copies a pre-built binary into the image — no compilation here.
 # Build stage only selects the correct binary for TARGETPLATFORM.
+# Copies a pre-built binary into the image — no compilation here.
+# Build stage only selects the correct binary for TARGETPLATFORM.
 FROM alpine:3.19
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata \
+    && addgroup -g 1000 kansou \
+    && adduser -D -u 1000 -G kansou kansou
 
 WORKDIR /app
 
@@ -14,6 +18,7 @@ RUN case "$TARGETPLATFORM" in \
       *) echo "unsupported platform: $TARGETPLATFORM" && exit 1 ;; \
     esac && chmod +x /app/kansou && rm -f /tmp/kansou-*
 
+USER kansou
 EXPOSE 8080
 ENTRYPOINT ["/app/kansou"]
 CMD ["serve"]
