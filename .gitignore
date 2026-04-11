@@ -19,3 +19,11 @@ web/dist/*
 .vscode/
 *.swp
 *.swo
+
+
+# APM dependencies
+apm_modules/
+.claude/
+# Ignore some stuff
+.github/
+!.github/workflows
