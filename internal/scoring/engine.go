@@ -120,7 +120,7 @@ func (e *Engine) Score(entry Entry) (Result, error) {
 		if row.Skipped {
 			continue
 		}
-		row.Contribution = round2(entry.Scores[row.Key] * row.FinalWeight)
+		row.Contribution = entry.Scores[row.Key] * row.FinalWeight
 		finalScore += entry.Scores[row.Key] * row.FinalWeight
 	}
 
