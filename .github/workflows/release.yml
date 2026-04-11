@@ -32,7 +32,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: web/tribbie
-        run: pnpm install
+        run: pnpm install --no-frozen-lockfile
 
       - name: Build Vue UI
         working-directory: web/tribbie
