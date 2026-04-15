@@ -17,7 +17,11 @@ reset-submodule:
 
 # Build the Vue UI via Docker — no local Node/pnpm required
 build-ui:
-    git submodule update --init --recursive
+    @if [ -d web/tribbie/.git ]; then \
+        git -C web/tribbie fetch --depth 1 origin HEAD && git -C web/tribbie reset --hard FETCH_HEAD; \
+    else \
+        rm -rf web/tribbie && git clone --depth 1 https://github.com/sasalx/tribbie web/tribbie; \
+    fi
     docker run --rm \
       -v "$(pwd)/web/tribbie:/app" \
       -v "$(pwd)/web/dist:/app/dist" \
