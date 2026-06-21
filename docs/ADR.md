@@ -1161,3 +1161,126 @@ if len(secondary) == 0:
   participated. This is determined from `SessionMeta.GenresActive` — if the
   only active matched genre is the primary itself, no blend occurred.
 - The blend formula (ADR-022) is unchanged when real secondaries exist.
+
+---
+
+## ADR-026 — Live config editing via `--live-config` flag
+
+**Status:** Accepted
+
+**Date:** 2026
+
+**Context:**
+The server reads config once at startup in `PersistentPreRunE` and builds a
+single `*scoring.Engine`. There is no way to change dimension weights, genre
+multipliers, or the primary genre blend ratio without editing the TOML file and
+restarting the server. For a Kubernetes deployment using a ConfigMap mount this
+means a full redeploy for every config change.
+
+The web UI (tribbie) needs to expose config editing — specifically the
+scoring-related fields (dimensions, genre multipliers, `primary_genre_weight`,
+`max_multiplier`) — without requiring a restart. This is an opt-in capability:
+deployments that do not want runtime config mutation stay on the static config
+path unchanged.
+
+**Decision:**
+Introduce a `--live-config` flag on `kansou serve`. When set:
+
+1. The server registers `GET /config` and `POST /config` endpoints (both are
+   absent when the flag is not set).
+2. The in-memory config+engine pair is held in an `atomic.Value` as a
+   `*configSnapshot` struct (containing `*config.Config` and `*scoring.Engine`
+   together). All handlers load the snapshot atomically at request start and
+   operate on a consistent pair for the duration of the request.
+3. `POST /config` accepts a full replacement of the mutable config surface,
+   validates it (existing weight-sum check and all other existing validation
+   logic unchanged), atomically swaps the in-memory snapshot, then writes the
+   new config to the TOML file on disk. If the file is not writable, the swap
+   is rejected and a 500 is returned with a message indicating the file is not
+   writable.
+4. At startup, when `--live-config` is set, the server probes writability of
+   the config file before accepting requests. If the probe fails, the server
+   exits immediately with a clear error.
+
+**Editable surface:**
+Only scoring-related config is mutable via `POST /config`:
+- Dimensions: add, remove, or edit any of `label`, `description`, `weight`,
+  `bias_resistant`. The `key` is the stable identifier and cannot be changed
+  (rename = delete + add).
+- Genre multipliers: add, remove, or edit per-dimension multiplier maps.
+- `primary_genre_weight`: the blend ratio for ADR-022.
+- `max_multiplier`: the ceiling from ADR-017.
+
+Infrastructure config (`server.port`, `cors.allowed_origins`) is not exposed
+and cannot be changed at runtime.
+
+**`GET /config` response:**
+Returns the full mutable config surface in the same shape that `POST /config`
+accepts, plus a `config_hash` field (SHA-256 of the current config). This
+allows the UI to detect config drift between a GET and a subsequent POST.
+
+**Validation:**
+`POST /config` runs the same strict validation as the config loader — dimension
+weights must sum to 1.0 (±0.001). No auto-normalization. If the weights do not
+sum correctly the request is rejected with a 400 and a clear message. The UI is
+responsible for maintaining the weight sum invariant before submission.
+
+**TOML write-back:**
+The BurntSushi/toml encoder is used to write the updated config to disk. Comments
+and custom formatting in the original file are not preserved after the first
+write. `config.example.toml` remains the annotated human-readable reference.
+This is acceptable: once `--live-config` is enabled, the UI is the primary
+editing surface and the TOML file becomes a serialization artifact.
+
+**Atomicity:**
+`atomic.Value` holds a `*configSnapshot`. Readers call `Load()` — no lock
+contention. `POST /config` constructs the new snapshot (validates, rebuilds
+engine), writes to disk, then calls `Store()`. A write failure aborts before
+`Store()` — the in-memory state never diverges from the on-disk state.
+
+**Access control:**
+No application-level auth. The server is deployed locally or on a private
+network. If exposed to the internet, reverse-proxy-level auth (e.g. Authentik
+forward auth) is applied at the ingress layer. This is consistent with the rest
+of the server — no auth is implemented in the application (see ADR-003).
+
+**Deployment note:**
+`--live-config` requires the config file to be on a writable mount. A Kubernetes
+ConfigMap mount is read-only and incompatible with this flag — use a PVC instead.
+Docker and bare-metal deployments can use any writable path. Deployments that do
+not use `--live-config` are unaffected and can continue using read-only mounts.
+
+**Alternatives considered:**
+- **File watcher (fsnotify):** detects external edits to the TOML and reloads
+  automatically. Rejected — adds a new dependency, introduces a background
+  goroutine, and the trigger (external file edits) is not the use case. The
+  API endpoint is a more explicit and controllable trigger.
+- **Per-request config reload from disk:** re-read the TOML on every `/score`
+  and `/weights` call. Rejected — disk I/O on every request is unnecessary;
+  config changes are rare events, not a hot path.
+- **Config in SQLite:** store the mutable config in a database. Rejected for
+  two reasons. First, normalized tables would require schema migrations
+  (`ALTER TABLE`) whenever the config schema evolves — a maintenance burden
+  that TOML avoids entirely (struct change + encoder handles it). Second,
+  the only way to avoid migrations in SQLite is to store the config as a
+  single blob, which makes SQLite a complex wrapper around a flat file —
+  no benefit over TOML, plus a new dependency (`modernc.org/sqlite` or
+  `mattn/go-sqlite3`). BurntSushi/toml is already in the stack. Even after
+  `--live-config` makes the TOML file machine-generated, it remains plain
+  text inspectable with `cat` and requires no tooling to read.
+- **Partial patch (`PATCH /config`):** accept only changed fields. Rejected in
+  favour of full replacement — full replacement has straightforward validation
+  semantics and the payload is small. Expressing "delete this dimension" in a
+  partial patch requires a separate convention.
+
+**Consequences:**
+- `cmd/root.go` `App` struct gains a `liveConfig bool` field and replaces the
+  direct `*config.Config` + `*scoring.Engine` fields with an `atomic.Value`
+  holding `*configSnapshot` when `--live-config` is set. The static path
+  (flag not set) is unchanged.
+- `internal/server/` gains a new handler file for the config endpoints.
+- `GET /config` and `POST /config` require Swagger annotations.
+- `docs/CONFIG.md` must document the `--live-config` flag and the editable
+  surface.
+- `docs/CLI.md` must document the `--live-config` flag on `kansou serve`.
+- `config.example.toml` is unaffected — it remains the annotated reference.
