@@ -32,6 +32,8 @@ type App struct {
 	AniList *anilist.Client
 	// Engine is the scoring engine wired with the current config.
 	Engine *scoring.Engine
+	// Config path is the resolved path to the loaded config file.
+	ConfigPath string
 }
 
 // Execute builds the command tree and runs it. Called from main.
@@ -71,6 +73,11 @@ scoring session, and publishes the final weighted score back to AniList.`,
 		}
 		slog.Debug("config loaded", "dimensions", len(cfg.Dimensions))
 		app.Config = cfg
+		resolved, err := config.ResolvePath(configPath)
+		if err != nil {
+			return fmt.Errorf("resolving config path: %w", err)
+		}
+		app.ConfigPath = resolved
 		app.AniList = anilist.NewClient()
 		app.Engine = newEngine(cfg)
 		return nil
@@ -86,7 +93,12 @@ scoring session, and publishes the final weighted score back to AniList.`,
 	}
 }
 
-// newEngine constructs a scoring.Engine from the loaded config.
+// newEngine converts config dimensions into a scoring.Engine.
+// Duplicated in internal/server/config_handlers.go — a shared package would
+// either pollute internal/config or internal/scoring with the other's types,
+// and a one-function adapter package would create naming confusion with the
+// scoring engine itself. If scoring.DimensionDef or config.DimensionDef fields
+// change, update both copies.
 func newEngine(cfg *config.Config) *scoring.Engine {
 	dims := make(map[string]scoring.DimensionDef, len(cfg.Dimensions))
 	for key, d := range cfg.Dimensions {

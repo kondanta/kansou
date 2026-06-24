@@ -149,9 +149,10 @@ type dimensionsResponse struct {
 //	@Success		200	{object}	dimensionsResponse
 //	@Router			/dimensions [get]
 func (s *Server) handleDimensions(w http.ResponseWriter, r *http.Request) {
-	items := make([]dimensionItem, 0, len(s.cfg.DimensionOrder))
-	for _, key := range s.cfg.DimensionOrder {
-		d := s.cfg.Dimensions[key]
+	snap := s.getSnapshot()
+	items := make([]dimensionItem, 0, len(snap.cfg.DimensionOrder))
+	for _, key := range snap.cfg.DimensionOrder {
+		d := snap.cfg.Dimensions[key]
 		items = append(items, dimensionItem{
 			Key:         key,
 			Label:       d.Label,
@@ -160,7 +161,7 @@ func (s *Server) handleDimensions(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, dimensionsResponse{
-		ConfigHash: s.cfg.DimensionsHash,
+		ConfigHash: snap.cfg.DimensionsHash,
 		Dimensions: items,
 	})
 }
@@ -193,8 +194,9 @@ type genresResponse struct {
 //	@Success		200	{object}	genresResponse
 //	@Router			/genres [get]
 func (s *Server) handleGenres(w http.ResponseWriter, r *http.Request) {
-	items := make([]genreMultiplierItem, 0, len(s.cfg.Genres))
-	for genre, multipliers := range s.cfg.Genres {
+	snap := s.getSnapshot()
+	items := make([]genreMultiplierItem, 0, len(snap.cfg.Genres))
+	for genre, multipliers := range snap.cfg.Genres {
 		items = append(items, genreMultiplierItem{
 			Genre:       genre,
 			Multipliers: multipliers,
@@ -203,7 +205,7 @@ func (s *Server) handleGenres(w http.ResponseWriter, r *http.Request) {
 	// Sort for deterministic output.
 	sort.Slice(items, func(i, j int) bool { return items[i].Genre < items[j].Genre })
 	writeJSON(w, http.StatusOK, genresResponse{
-		PrimaryGenreWeight: s.cfg.PrimaryGenreWeight,
+		PrimaryGenreWeight: snap.cfg.PrimaryGenreWeight,
 		Genres:             items,
 	})
 }
@@ -244,18 +246,18 @@ type scoreResponse struct {
 // breakdownRowResponse is the JSON representation of a single BreakdownRow.
 // swagger:model breakdownRowResponse
 type breakdownRowResponse struct {
-	Key                    string  `json:"key"`
-	Label                  string  `json:"label"`
-	Score                  float64 `json:"score"`
-	BaseWeight             float64 `json:"base_weight"`
-	AppliedMultiplier      float64 `json:"applied_multiplier"`
-	EffectiveWeight        float64 `json:"effective_weight"`
-	FinalWeight            float64 `json:"final_weight"`
-	Contribution           float64 `json:"contribution"`
-	BiasResistant          bool    `json:"bias_resistant"`
-	WeightOverride         bool    `json:"weight_override"`
-	Skipped                bool    `json:"skipped"`
-	GenreDeselected        bool    `json:"genre_deselected,omitempty"`
+	Key                       string  `json:"key"`
+	Label                     string  `json:"label"`
+	Score                     float64 `json:"score"`
+	BaseWeight                float64 `json:"base_weight"`
+	AppliedMultiplier         float64 `json:"applied_multiplier"`
+	EffectiveWeight           float64 `json:"effective_weight"`
+	FinalWeight               float64 `json:"final_weight"`
+	Contribution              float64 `json:"contribution"`
+	BiasResistant             bool    `json:"bias_resistant"`
+	WeightOverride            bool    `json:"weight_override"`
+	Skipped                   bool    `json:"skipped"`
+	GenreDeselected           bool    `json:"genre_deselected,omitempty"`
 	PrimaryGenre              string  `json:"primary_genre,omitempty"`
 	PrimaryGenreMultiplier    float64 `json:"primary_genre_multiplier,omitempty"`
 	SecondaryGenresMultiplier float64 `json:"secondary_genres_multiplier,omitempty"`
@@ -273,9 +275,9 @@ type sessionMetaResponse struct {
 	MatchedGenres      []string `json:"matched_genres"`
 	GenresActive       []string `json:"genres_active,omitempty"`
 	ConfigHash         string   `json:"config_hash"`
-	PrimaryGenre         string  `json:"primary_genre,omitempty"`
-	PrimaryGenreWeight   float64 `json:"primary_genre_weight"`
-	EffectiveWeightSum   float64 `json:"effective_weight_sum"`
+	PrimaryGenre       string   `json:"primary_genre,omitempty"`
+	PrimaryGenreWeight float64  `json:"primary_genre_weight"`
+	EffectiveWeightSum float64  `json:"effective_weight_sum"`
 }
 
 // handleScore calculates a weighted score for the given media entry.
@@ -293,9 +295,13 @@ type sessionMetaResponse struct {
 //	@Router			/score [post]
 func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 	var req scoreRequest
+
 	if !decodeBody(w, r, &req) {
 		return
 	}
+
+	snap := s.getSnapshot()
+
 	if req.MediaID == 0 {
 		writeError(w, http.StatusBadRequest, "media_id is required")
 		return
@@ -324,7 +330,7 @@ func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 
 	// Any configured dimension absent from req.Scores is implicitly skipped.
 	skipped := make(map[string]bool)
-	for _, key := range s.cfg.DimensionOrder {
+	for _, key := range snap.cfg.DimensionOrder {
 		if _, ok := req.Scores[key]; !ok {
 			skipped[key] = true
 		}
@@ -353,13 +359,13 @@ func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 			MediaType:          media.MediaType,
 			AniListURL:         aniListURL(media),
 			AllGenres:          media.Genres,
-			ConfigHash:         s.cfg.DimensionsHash,
+			ConfigHash:         snap.cfg.DimensionsHash,
 			PrimaryGenre:       req.PrimaryGenre,
-			PrimaryGenreWeight: s.cfg.PrimaryGenreWeight,
+			PrimaryGenreWeight: snap.cfg.PrimaryGenreWeight,
 		},
 	}
 
-	result, err := s.engine.Score(entry)
+	result, err := snap.engine.Score(entry)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -455,10 +461,12 @@ func (s *Server) handleWeights(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	snap := s.getSnapshot()
+
 	// Validate weight overrides.
 	overrideSum := 0.0
 	for key, v := range req.WeightOverrides {
-		if _, ok := s.cfg.Dimensions[key]; !ok {
+		if _, ok := snap.cfg.Dimensions[key]; !ok {
 			writeError(w, http.StatusBadRequest, "unknown dimension in weight_overrides: "+key)
 			return
 		}
@@ -488,7 +496,7 @@ func (s *Server) handleWeights(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows := s.engine.Weights(genreSource, req.PrimaryGenre, req.SkippedDimensions, req.WeightOverrides)
+	rows := snap.engine.Weights(genreSource, req.PrimaryGenre, req.SkippedDimensions, req.WeightOverrides)
 
 	dimRows := make([]weightDimensionRow, len(rows))
 	effectiveSum := 0.0
@@ -498,7 +506,7 @@ func (s *Server) handleWeights(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, weightsResponse{
-		PrimaryGenreWeight: s.cfg.PrimaryGenreWeight,
+		PrimaryGenreWeight: snap.cfg.PrimaryGenreWeight,
 		EffectiveWeightSum: effectiveSum,
 		Dimensions:         dimRows,
 	})
@@ -641,18 +649,18 @@ func toScoreResponse(r scoring.Result) scoreResponse {
 	rows := make([]breakdownRowResponse, len(r.Breakdown))
 	for i, row := range r.Breakdown {
 		rows[i] = breakdownRowResponse{
-			Key:                    row.Key,
-			Label:                  row.Label,
-			Score:                  row.Score,
-			BaseWeight:             row.BaseWeight,
-			AppliedMultiplier:      row.AppliedMultiplier,
-			EffectiveWeight:        row.EffectiveWeight,
-			FinalWeight:            row.FinalWeight,
-			Contribution:           row.Contribution,
-			BiasResistant:          row.BiasResistant,
-			WeightOverride:         row.WeightOverride,
-			Skipped:                row.Skipped,
-			GenreDeselected:        row.GenreDeselected,
+			Key:                       row.Key,
+			Label:                     row.Label,
+			Score:                     row.Score,
+			BaseWeight:                row.BaseWeight,
+			AppliedMultiplier:         row.AppliedMultiplier,
+			EffectiveWeight:           row.EffectiveWeight,
+			FinalWeight:               row.FinalWeight,
+			Contribution:              row.Contribution,
+			BiasResistant:             row.BiasResistant,
+			WeightOverride:            row.WeightOverride,
+			Skipped:                   row.Skipped,
+			GenreDeselected:           row.GenreDeselected,
 			PrimaryGenre:              row.PrimaryGenre,
 			PrimaryGenreMultiplier:    row.PrimaryGenreMultiplier,
 			SecondaryGenresMultiplier: row.SecondaryGenresMultiplier,

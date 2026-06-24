@@ -38,6 +38,7 @@ kansou serve [flags]
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--port` | `8080` | Port to listen on (overrides config) |
+| `--live-config` | `false` | Enable `GET /config` and `POST /config` for runtime config editing.
 
 **Behaviour:**
 - Loads config from the default path or `--config`

@@ -323,3 +323,117 @@ func stableSort(s []string) {
 		s[j+1] = key
 	}
 }
+
+// ProbeWritable verififes that the directory containing path is writable by creating and immediatly deleting a temporary file.ProbeWritable
+func ProbeWritable(path string) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".kansou-write-probe-*")
+	if err != nil {
+		return fmt.Errorf("config file location is not writable: %w", err)
+	}
+
+	tmp.Close()
+	os.Remove(tmp.Name()) //nolint:errcheck
+	return nil
+}
+
+// Write serializes cfg to TOML and writes it atomically to path.
+// Comments and custom formatting are not preserved-- config.example.toml is the
+// annotated reference.
+func Write(path string, cfg *Config) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".kansou-config-*.toml")
+	if err != nil {
+		return fmt.Errorf("creating temp config file: %w", err)
+	}
+
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath) //nolint:errcheck
+
+	if err := toml.NewEncoder(tmp).Encode(toRaw(cfg)); err != nil {
+		tmp.Close()
+		return fmt.Errorf("encoding config: %w", err)
+
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("closing temp config file: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("writing config file: %w", err)
+	}
+
+	return nil
+}
+
+// toRaw converts a validated Config back to the rawConfig TOML structure.
+// Server config is preserved so non-editable fields survive a round-trip.
+func toRaw(cfg *Config) rawConfig {
+	pgw := cfg.PrimaryGenreWeight
+	return rawConfig{
+		Dimensions:         cfg.Dimensions,
+		Genres:             cfg.Genres,
+		MaxMultiplier:      cfg.MaxMultiplier,
+		PrimaryGenreWeight: &pgw,
+		Server:             cfg.Server,
+	}
+}
+
+// Hash returns a SHA256 hex digest of the full mutable config surface:
+// dimensions, genres, primary_genre_weight, and max_multiplier
+func Hash(cfg *Config) string {
+	h := sha256.New()
+
+	for _, key := range cfg.DimensionOrder {
+		d := cfg.Dimensions[key]
+		fmt.Fprintf(h, "dim:%s:label=%s:desc=%s:weight=%.6f:bias=%v\n",
+			key, d.Label, d.Description, d.Weight, d.BiasResistant)
+	}
+
+	genreKeys := make([]string, 0, len(cfg.Genres))
+	for g := range cfg.Genres {
+		genreKeys = append(genreKeys, g)
+	}
+
+	stableSort(genreKeys)
+	for _, genre := range genreKeys {
+		mults := cfg.Genres[genre]
+		dimKeys := make([]string, 0, len(mults))
+		for d := range mults {
+			dimKeys = append(dimKeys, d)
+		}
+		stableSort(dimKeys)
+		for _, dim := range dimKeys {
+			fmt.Fprintf(h, "genre=%s:dim=%s:mult=%.6f\n", genre, dim, mults[dim])
+		}
+
+	}
+
+	fmt.Fprintf(h, "pgw=%.6f\n", cfg.PrimaryGenreWeight)
+	fmt.Fprintf(h, "maxmult=%.6f\n", cfg.MaxMultiplier)
+
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+// Expose resolvePath
+func ResolvePath(path string) (string, error) {
+	return resolvePath(path)
+}
+
+func Rebuild(
+	base *Config,
+	dimensions map[string]DimensionDef,
+	genres map[string]map[string]float64,
+	primaryGenreWeight float64,
+	maxMultiplier float64,
+) (*Config, error) {
+	pgw := primaryGenreWeight
+	raw := &rawConfig{
+		Dimensions:         dimensions,
+		Genres:             genres,
+		MaxMultiplier:      maxMultiplier,
+		PrimaryGenreWeight: &pgw,
+		Server:             base.Server,
+	}
+
+	return build(raw)
+}
