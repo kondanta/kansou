@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -40,32 +41,45 @@ const (
 	rateLimitPublish = 5  // /score/publish — write to AniList, must be intentional
 )
 
+// configSnapshot holds the config and engine as an atomic pair
+type configSnapshot struct {
+	cfg    *config.Config
+	engine *scoring.Engine
+}
+
 // Server holds the dependencies for the REST server.
 type Server struct {
-	cfg    *config.Config
-	al     *anilist.Client
-	engine *scoring.Engine
-	router *chi.Mux
+	snapshot   atomic.Value
+	liveConfig bool
+	configPath string
+	al         *anilist.Client
+	router     *chi.Mux
 }
 
 // New constructs a Server wired with the provided dependencies.
-func New(cfg *config.Config, al *anilist.Client, eng *scoring.Engine) *Server {
+func New(cfg *config.Config, al *anilist.Client, eng *scoring.Engine, liveConfig bool, configPath string) *Server {
 	s := &Server{
-		cfg:    cfg,
-		al:     al,
-		engine: eng,
+		al:         al,
+		liveConfig: liveConfig,
+		configPath: configPath,
 	}
+	s.snapshot.Store(&configSnapshot{cfg: cfg, engine: eng})
 	s.router = s.buildRouter()
 	return s
 }
 
+func (s *Server) getSnapshot() *configSnapshot {
+	return s.snapshot.Load().(*configSnapshot)
+}
+
 // buildRouter registers all routes and middleware.
 func (s *Server) buildRouter() *chi.Mux {
+	snap := s.getSnapshot()
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
 	r.Use(securityHeaders)
-	r.Use(corsMiddleware(s.cfg.Server.CORSAllowedOrigins))
+	r.Use(corsMiddleware(snap.cfg.Server.CORSAllowedOrigins))
 	r.Use(requestLogger)
 
 	// UI — served at root. Prefers the built Vue app; falls back to the
@@ -85,6 +99,11 @@ func (s *Server) buildRouter() *chi.Mux {
 	r.Get("/swagger/*", httpSwagger.Handler(
 		httpSwagger.URL("/swagger/doc.json"),
 	))
+
+	if s.liveConfig {
+		r.Get("/config", s.handleGetConfig)
+		r.Post("/config", s.handlePostConfig)
+	}
 
 	return r
 }
@@ -128,7 +147,8 @@ func spaHandler(distFS fs.FS) http.HandlerFunc {
 // It handles SIGINT and SIGTERM with a graceful shutdown, waiting up to
 // 10 seconds for in-flight requests to complete.
 func (s *Server) ListenAndServe(portOverride int) error {
-	port := s.cfg.Server.Port
+	snap := s.getSnapshot()
+	port := snap.cfg.Server.Port
 	if portOverride > 0 {
 		port = portOverride
 	}

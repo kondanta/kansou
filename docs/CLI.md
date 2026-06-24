@@ -38,6 +38,7 @@ kansou serve [flags]
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--port` | `8080` | Port to listen on (overrides config) |
+| `--live-config` | `false` | Enable `GET /config` and `POST /config` for runtime config editing. Requires a writable config file path (PVC on k8s; ConfigMap mounts are incompatible). |
 
 **Behaviour:**
 - Loads config from the default path or `--config`

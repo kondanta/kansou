@@ -20,6 +20,70 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/config": {
+            "get": {
+                "description": "Returns the current scoring config (dimensions, genres, weights). Only available when --live-config is set.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "config"
+                ],
+                "summary": "Get config",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.configPayload"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Replaces the scoring config (dimensions, genres, weights) and reloads the engine atomically. Writes the new config to disk. Only available when --live-config is set.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "config"
+                ],
+                "summary": "Update config",
+                "parameters": [
+                    {
+                        "description": "New config (config_hash is ignored)",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.configPayload"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.configPayload"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/dimensions": {
             "get": {
                 "description": "Returns the ordered list of scoring dimensions defined in server config. Use the returned keys in the scores map when calling POST /score.",
@@ -217,6 +281,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/server.errorResponse"
                         }
                     },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
                     "502": {
                         "description": "Bad Gateway",
                         "schema": {
@@ -263,6 +333,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/server.errorResponse"
                         }
                     },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
                     "502": {
                         "description": "Bad Gateway",
                         "schema": {
@@ -305,6 +381,12 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
                         "schema": {
                             "$ref": "#/definitions/server.errorResponse"
                         }
@@ -367,6 +449,59 @@ const docTemplate = `{
                 },
                 "weight_override": {
                     "type": "boolean"
+                }
+            }
+        },
+        "server.configDimensionEntry": {
+            "type": "object",
+            "properties": {
+                "bias_resistant": {
+                    "type": "boolean"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "weight": {
+                    "type": "number"
+                }
+            }
+        },
+        "server.configPayload": {
+            "type": "object",
+            "properties": {
+                "config_hash": {
+                    "type": "string"
+                },
+                "dimension_order": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "dimensions": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/server.configDimensionEntry"
+                    }
+                },
+                "genres": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "number",
+                            "format": "float64"
+                        }
+                    }
+                },
+                "max_multiplier": {
+                    "type": "number"
+                },
+                "primary_genre_weight": {
+                    "type": "number"
                 }
             }
         },

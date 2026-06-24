@@ -357,6 +357,243 @@ func TestLoad_DefaultConfig_MaxMultiplier(t *testing.T) {
 	}
 }
 
+func TestWrite_RoundTrip(t *testing.T) {
+	content := `
+[dimensions.story]
+label = "Story"
+description = "Narrative quality"
+weight = 0.60
+bias_resistant = false
+
+[dimensions.enjoyment]
+label = "Enjoyment"
+description = "Fun factor"
+weight = 0.40
+bias_resistant = true
+
+[genres.action]
+story = 1.2
+
+[server]
+port = 9090
+`
+	path := writeTOML(t, content)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	if err := Write(path, cfg); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	reloaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+
+	if len(reloaded.Dimensions) != len(cfg.Dimensions) {
+		t.Errorf("dimensions: got %d, want %d", len(reloaded.Dimensions), len(cfg.Dimensions))
+	}
+	if reloaded.Dimensions["story"].Label != "Story" {
+		t.Errorf("story label: got %q, want %q", reloaded.Dimensions["story"].Label, "Story")
+	}
+	if !reloaded.Dimensions["enjoyment"].BiasResistant {
+		t.Error("enjoyment: expected bias_resistant=true after round-trip")
+	}
+	if _, ok := reloaded.Genres["action"]; !ok {
+		t.Error("genre 'action' missing after round-trip")
+	}
+	if reloaded.Server.Port != 9090 {
+		t.Errorf("server port: got %d, want 9090", reloaded.Server.Port)
+	}
+}
+
+func TestHash_IsStable(t *testing.T) {
+	content := `
+[dimensions.story]
+label = "Story"
+description = "Narrative"
+weight = 0.60
+[dimensions.enjoyment]
+label = "Enjoyment"
+description = "Fun"
+weight = 0.40
+[genres.action]
+story = 1.2
+`
+	cfg, err := Load(writeTOML(t, content))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	h1 := Hash(cfg)
+	h2 := Hash(cfg)
+	if h1 != h2 {
+		t.Error("Hash is not deterministic: same *Config produced different hashes on successive calls")
+	}
+}
+
+func TestHash_ChangesOnMutation(t *testing.T) {
+	base := `
+[dimensions.story]
+label = "Story"
+description = "Narrative"
+weight = 0.60
+[dimensions.enjoyment]
+label = "Enjoyment"
+description = "Fun"
+weight = 0.40
+`
+	cases := []struct {
+		name    string
+		mutated string
+	}{
+		{
+			name: "weight change",
+			mutated: `
+[dimensions.story]
+label = "Story"
+description = "Narrative"
+weight = 0.70
+[dimensions.enjoyment]
+label = "Enjoyment"
+description = "Fun"
+weight = 0.30
+`,
+		},
+		{
+			name: "label change",
+			mutated: `
+[dimensions.story]
+label = "Story (changed)"
+description = "Narrative"
+weight = 0.60
+[dimensions.enjoyment]
+label = "Enjoyment"
+description = "Fun"
+weight = 0.40
+`,
+		},
+		{
+			name:    "primary_genre_weight change",
+			mutated: "primary_genre_weight = 0.7\n" + base,
+		},
+		{
+			name:    "max_multiplier change",
+			mutated: "max_multiplier = 3.0\n" + base,
+		},
+		{
+			name:    "genre added",
+			mutated: base + "[genres.action]\nstory = 1.2\n",
+		},
+	}
+
+	baseCfg, err := Load(writeTOML(t, base))
+	if err != nil {
+		t.Fatalf("load base: %v", err)
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			mutated, err := Load(writeTOML(t, tc.mutated))
+			if err != nil {
+				t.Fatalf("load mutated: %v", err)
+			}
+			if Hash(baseCfg) == Hash(mutated) {
+				t.Error("expected hash to differ after mutation")
+			}
+		})
+	}
+}
+
+func TestRebuild_Valid(t *testing.T) {
+	base := `
+[dimensions.story]
+label = "Story"
+description = "Narrative"
+weight = 0.60
+[dimensions.enjoyment]
+label = "Enjoyment"
+description = "Fun"
+weight = 0.40
+[server]
+port = 9090
+`
+	cfg, err := Load(writeTOML(t, base))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	dims := map[string]DimensionDef{
+		"story": {Label: "Story (updated)", Description: "Narrative", Weight: 0.70},
+		"enjoyment": {Label: "Enjoyment", Description: "Fun", Weight: 0.30, BiasResistant: true},
+	}
+	rebuilt, err := Rebuild(cfg, dims, nil, DefaultPrimaryGenreWeight, DefaultMaxMultiplier)
+	if err != nil {
+		t.Fatalf("rebuild: %v", err)
+	}
+	if rebuilt.Dimensions["story"].Label != "Story (updated)" {
+		t.Errorf("label: got %q, want %q", rebuilt.Dimensions["story"].Label, "Story (updated)")
+	}
+	if rebuilt.Dimensions["story"].Weight != 0.70 {
+		t.Errorf("weight: got %.2f, want 0.70", rebuilt.Dimensions["story"].Weight)
+	}
+	// Server config must be preserved from base.
+	if rebuilt.Server.Port != 9090 {
+		t.Errorf("server port: got %d, want 9090 (should be preserved from base)", rebuilt.Server.Port)
+	}
+}
+
+func TestRebuild_InvalidWeights(t *testing.T) {
+	cfg, err := Load(writeTOML(t, "[dimensions.story]\nlabel=\"S\"\nweight=1.0\n"))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	dims := map[string]DimensionDef{
+		"story":     {Label: "S", Weight: 0.60},
+		"enjoyment": {Label: "E", Weight: 0.60}, // sum = 1.20, invalid
+	}
+	_, err = Rebuild(cfg, dims, nil, DefaultPrimaryGenreWeight, DefaultMaxMultiplier)
+	if err == nil {
+		t.Error("expected error for weights summing to 1.20, got nil")
+	}
+}
+
+func TestRebuild_UnknownGenreDimension(t *testing.T) {
+	cfg, err := Load(writeTOML(t, "[dimensions.story]\nlabel=\"S\"\nweight=1.0\n"))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	dims := map[string]DimensionDef{
+		"story": {Label: "S", Weight: 1.0},
+	}
+	genres := map[string]map[string]float64{
+		"action": {"nonexistent_dim": 1.2},
+	}
+	_, err = Rebuild(cfg, dims, genres, DefaultPrimaryGenreWeight, DefaultMaxMultiplier)
+	if err == nil {
+		t.Error("expected error for genre referencing unknown dimension, got nil")
+	}
+}
+
+func TestProbeWritable_WritableDir(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := ProbeWritable(path); err != nil {
+		t.Errorf("expected writable dir to succeed, got: %v", err)
+	}
+}
+
+func TestProbeWritable_ReadOnlyDir(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0444); err != nil {
+		t.Skipf("cannot set dir read-only: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0755) }) //nolint:errcheck
+	path := filepath.Join(dir, "config.toml")
+	if err := ProbeWritable(path); err == nil {
+		t.Error("expected error for read-only dir, got nil")
+	}
+}
+
 // itoa converts an int to its decimal string representation without importing strconv.
 func itoa(n int) string {
 	if n == 0 {

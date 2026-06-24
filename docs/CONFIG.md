@@ -321,3 +321,66 @@ removed dimensions are ignored after the dimension is removed).
 
 The `--weight` flag on `score add` overrides dimension weights for a single
 session without modifying config. See `docs/CLI.md` for usage.
+
+---
+
+## Runtime Config Editing (`--live-config`)
+
+The `--live-config` flag on `kansou serve` enables two additional endpoints:
+
+- `GET /config` — returns the current mutable config surface as JSON
+- `POST /config` — replaces the mutable config surface, reloads the scoring
+  engine atomically, and writes the updated config to disk
+
+Both endpoints are absent when the flag is not set.
+
+### Editable fields
+
+| Field | Description |
+|-------|-------------|
+| `dimensions` (add/remove/edit) | `label`, `description`, `weight`, `bias_resistant` per dimension |
+| `genres` (add/remove/edit) | Per-dimension multiplier maps |
+| `primary_genre_weight` | Blend ratio for the primary genre feature (ADR-022) |
+| `max_multiplier` | Ceiling for all genre multiplier values |
+
+Fields not listed here (`server.port`, `server.cors_allowed_origins`) are not
+exposed by these endpoints and cannot be changed at runtime.
+
+### Validation
+
+`POST /config` runs the same strict validation as the config loader:
+dimension weights must sum to 1.0 (±0.001), genre blocks may only reference
+dimension keys present in the submitted dimensions map, and all multiplier
+values must be > 0.0 and ≤ `max_multiplier`. No auto-normalization. On any
+validation failure the request is rejected with HTTP 400 and the in-memory
+config is unchanged.
+
+### TOML write-back
+
+After a successful `POST /config`, the updated config is written atomically
+to the config file on disk (encode to a temp file, then `os.Rename` into
+place). Comments and custom formatting from the original file are not
+preserved after the first write. `config.example.toml` remains the annotated
+human-readable reference.
+
+### Writability requirement
+
+`--live-config` requires the config file path to be on a writable filesystem.
+At startup, the server probes writability by creating and deleting a temporary
+file in the same directory as the config file. If the probe fails, the server
+exits immediately with a clear error before accepting any requests.
+
+Kubernetes deployment notes:
+- **ConfigMap mounts** are read-only and incompatible with `--live-config`.
+- **PVC (PersistentVolumeClaim)** mounts are writable and work correctly.
+- Docker and bare-metal deployments can use any writable path.
+
+Deployments that do not use `--live-config` are unaffected and can continue
+using read-only config file mounts.
+
+### `config_hash`
+
+`GET /config` returns a `config_hash` field — a SHA-256 digest of the full
+mutable config surface. The UI can compare this value between a GET and a
+subsequent POST to detect config drift (e.g. if another client wrote a
+`POST /config` in the meantime).

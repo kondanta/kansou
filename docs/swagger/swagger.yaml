@@ -33,6 +33,41 @@ definitions:
       weight_override:
         type: boolean
     type: object
+  server.configDimensionEntry:
+    properties:
+      bias_resistant:
+        type: boolean
+      description:
+        type: string
+      label:
+        type: string
+      weight:
+        type: number
+    type: object
+  server.configPayload:
+    properties:
+      config_hash:
+        type: string
+      dimension_order:
+        items:
+          type: string
+        type: array
+      dimensions:
+        additionalProperties:
+          $ref: '#/definitions/server.configDimensionEntry'
+        type: object
+      genres:
+        additionalProperties:
+          additionalProperties:
+            format: float64
+            type: number
+          type: object
+        type: object
+      max_multiplier:
+        type: number
+      primary_genre_weight:
+        type: number
+    type: object
   server.dimensionItem:
     properties:
       description:
@@ -358,6 +393,51 @@ info:
   title: kansou API
   version: "1.0"
 paths:
+  /config:
+    get:
+      description: Returns the current scoring config (dimensions, genres, weights).
+        Only available when --live-config is set.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.configPayload'
+      summary: Get config
+      tags:
+      - config
+    post:
+      consumes:
+      - application/json
+      description: Replaces the scoring config (dimensions, genres, weights) and reloads
+        the engine atomically. Writes the new config to disk. Only available when
+        --live-config is set.
+      parameters:
+      - description: New config (config_hash is ignored)
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/server.configPayload'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.configPayload'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Update config
+      tags:
+      - config
   /dimensions:
     get:
       description: Returns the ordered list of scoring dimensions defined in server
@@ -489,6 +569,10 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/server.errorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/server.errorResponse'
         "502":
           description: Bad Gateway
           schema:
@@ -520,6 +604,10 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/server.errorResponse'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/server.errorResponse'
         "502":
           description: Bad Gateway
           schema:
@@ -549,6 +637,10 @@ paths:
             $ref: '#/definitions/server.weightsResponse'
         "400":
           description: Bad Request
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "413":
+          description: Request Entity Too Large
           schema:
             $ref: '#/definitions/server.errorResponse'
         "502":
