@@ -1168,7 +1168,7 @@ if len(secondary) == 0:
 
 **Status:** Accepted
 
-**Date:** 2026
+**Date:** 2026-06-24
 
 **Context:**
 The server reads config once at startup in `PersistentPreRunE` and builds a
@@ -1274,13 +1274,16 @@ not use `--live-config` are unaffected and can continue using read-only mounts.
   partial patch requires a separate convention.
 
 **Consequences:**
-- `cmd/root.go` `App` struct gains a `liveConfig bool` field and replaces the
-  direct `*config.Config` + `*scoring.Engine` fields with an `atomic.Value`
-  holding `*configSnapshot` when `--live-config` is set. The static path
-  (flag not set) is unchanged.
-- `internal/server/` gains a new handler file for the config endpoints.
+- `cmd/root.go` `App` struct gains a `ConfigPath string` field (the resolved
+  path to the loaded config file, used by the serve command to pass to the
+  server and the writability probe).
+- `internal/server/Server` struct replaces the direct `cfg *config.Config`
+  and `engine *scoring.Engine` fields with an `atomic.Value` holding
+  `*configSnapshot` (a `cfg`+`engine` pair). All handlers load the snapshot
+  atomically via `getSnapshot()` at request start. The static path (flag not
+  set) is unchanged — the `atomic.Value` is always used, just never swapped.
+- `internal/server/` gains `config_handlers.go` with the GET and POST handlers.
 - `GET /config` and `POST /config` require Swagger annotations.
-- `docs/CONFIG.md` must document the `--live-config` flag and the editable
-  surface.
-- `docs/CLI.md` must document the `--live-config` flag on `kansou serve`.
+- `docs/CONFIG.md` documents the `--live-config` flag and the editable surface.
+- `docs/CLI.md` documents the `--live-config` flag on `kansou serve`.
 - `config.example.toml` is unaffected — it remains the annotated reference.
