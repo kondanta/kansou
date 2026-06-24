@@ -1,0 +1,17 @@
+{{- if .Values.liveConfig.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "kansou.fullname" . }}-config
+  labels:
+    {{- include "kansou.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.liveConfig.persistence.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.liveConfig.persistence.size }}
+  {{- if .Values.liveConfig.persistence.storageClassName }}
+  storageClassName: {{ .Values.liveConfig.persistence.storageClassName }}
+  {{- end }}
+{{- end }}

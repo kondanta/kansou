@@ -49,6 +49,22 @@ clientTrafficPolicy:
   # proxies in front of it.
   numTrustedHops: 1
 
+# liveConfig enables GET /config and POST /config endpoints for runtime config editing.
+# When enabled, config is stored on a PVC so that POST /config changes survive pod
+# restarts. An init container seeds the PVC from the ConfigMap on first run only —
+# subsequent starts preserve whatever is on the PVC.
+#
+# Note: updating values.config after enabling liveConfig will NOT automatically
+# propagate to the running pod — the PVC takes precedence. To apply a new base
+# config, delete the PVC and redeploy.
+liveConfig:
+  enabled: false
+  persistence:
+    size: 1Mi
+    # storageClassName: ""  # leave empty to use the cluster default StorageClass
+    storageClassName: ""
+    accessMode: ReadWriteOnce
+
 # ANILIST_TOKEN injected as an environment variable.
 # Set this via --set anilistToken=<token> or a values override file.
 # Never commit a real token here.
