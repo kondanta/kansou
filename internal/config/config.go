@@ -324,7 +324,10 @@ func stableSort(s []string) {
 	}
 }
 
-// ProbeWritable verififes that the directory containing path is writable by creating and immediatly deleting a temporary file.ProbeWritable
+// ProbeWritable verifies that the directory containing path is writable
+// by creating and immediately deleting a temporary file. It is called at
+// startup when --live-config is set so the server fails fast before
+// accepting requests on an unwritable config location.
 func ProbeWritable(path string) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, ".kansou-write-probe-*")
@@ -414,11 +417,18 @@ func Hash(cfg *Config) string {
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
-// Expose resolvePath
+// ResolvePath expands ~ and applies the default config path if path is empty.
+// It is the exported equivalent of the private resolvePath, used by cmd/ to
+// record the resolved path for --live-config's writability probe and disk writes.
 func ResolvePath(path string) (string, error) {
 	return resolvePath(path)
 }
 
+// Rebuild constructs a validated Config from the caller-supplied mutable fields,
+// preserving non-editable fields (server port, CORS origins) from base.
+// It runs the same validation as Load — weight sums, genre key references, and
+// multiplier bounds — and returns an error on any violation without auto-correcting.
+// Used by POST /config to validate and apply an incoming config replacement.
 func Rebuild(
 	base *Config,
 	dimensions map[string]DimensionDef,
