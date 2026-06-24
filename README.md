@@ -186,6 +186,7 @@ kansou media find --url https://anilist.co/anime/457
 ```bash
 kansou serve
 kansou serve --port 3000
+kansou serve --live-config          # enables GET /config and POST /config
 ```
 
 | Method | Path | Description |
@@ -197,6 +198,10 @@ kansou serve --port 3000
 | `GET` | `/media/{id}` | Fetch media by AniList ID |
 | `POST` | `/score` | Calculate a weighted score |
 | `POST` | `/score/publish` | Publish a score to AniList |
+| `GET` | `/config` † | Return current mutable config as JSON (with `config_hash`) |
+| `POST` | `/config` † | Replace mutable config, reload engine, write config to disk |
+
+† Only available when `--live-config` is set. Requires a writable config file path. See [`docs/CONFIG.md`](docs/CONFIG.md#runtime-config-editing---live-config).
 
 Swagger UI: `http://localhost:8080/swagger/index.html`
 
