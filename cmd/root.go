@@ -32,7 +32,7 @@ type App struct {
 	AniList *anilist.Client
 	// Engine is the scoring engine wired with the current config.
 	Engine *scoring.Engine
-	// Config path is the resolved path to the loaded config file.
+	// ConfigPath is the resolved path to the loaded config file.
 	ConfigPath string
 }
 
