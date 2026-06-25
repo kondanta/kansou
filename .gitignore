@@ -25,5 +25,6 @@ web/dist/*
 apm_modules/
 .claude/
 # Ignore some stuff
-.github/
+.github/*
 !.github/workflows
+!.github/workflows/**
