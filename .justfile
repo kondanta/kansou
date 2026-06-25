@@ -13,8 +13,8 @@ build:
 
 # Download the pre-built tribbie UI from its GitHub release
 build-ui:
-    gh release download "{{tribbie_version}}" --repo sasalx/tribbie --pattern "tribbie-{{tribbie_version}}.zip" --output /tmp/tribbie.zip
-    rm -rf web/dist && mkdir -p web/dist
+    gh release download "{{tribbie_version}}" --repo sasalx/tribbie --pattern "tribbie-{{tribbie_version}}.zip" --output /tmp/tribbie.zip --clobber
+    mkdir -p web/dist
     unzip -o /tmp/tribbie.zip -d web/dist/
     touch web/dist/.gitkeep
     rm /tmp/tribbie.zip
