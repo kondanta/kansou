@@ -9,7 +9,7 @@ RUN CGO_ENABLED=0 go build \
       -ldflags "-s -w" \
       -o kansou .
 
-FROM alpine:3.19
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates tzdata \
     && addgroup -g 1000 kansou \
     && adduser -D -u 1000 -G kansou kansou
