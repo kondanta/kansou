@@ -13,8 +13,10 @@
     'github>kondanta/kansou//.renovate/semanticCommits.json5',
   ],
   rebaseWhen: 'behind-base-branch',
-  dependencyDashboardTitle: 'SirMergington\'s Estate 🤖',
-  reviewers: ['kondanta'],
+  dependencyDashboardTitle: "SirMergington's Estate 🤖",
+  reviewers: [
+    'kondanta',
+  ],
   suppressNotifications: [
     'prEditedNotification',
     'prIgnoreNotification',
@@ -28,8 +30,12 @@
   customManagers: [
     {
       customType: 'regex',
-      fileMatch: ['^TRIBBIE_VERSION$'],
-      matchStrings: ['(?<currentValue>v[\\d.]+)'],
+      managerFilePatterns: [
+        '/^TRIBBIE_VERSION$/',
+      ],
+      matchStrings: [
+        '(?<currentValue>v[\\d.]+)',
+      ],
       depNameTemplate: 'sasalx/tribbie',
       datasourceTemplate: 'github-releases',
     },
