@@ -29,20 +29,34 @@
   ignorePaths: [],
   packageRules: [
     {
-      matchPackageNames: ['golang', 'go', 'actions/setup-go'],
+      matchPackageNames: [
+        'golang',
+        'go',
+        'actions/setup-go',
+      ],
       groupName: 'go',
     },
     {
-      matchPackagePatterns: ['^docker/'],
-      matchManagers: ['github-actions'],
+      matchManagers: [
+        'github-actions',
+      ],
       groupName: 'docker github actions',
+      matchPackageNames: [
+        '/^docker//',
+      ],
     },
     {
-      matchPackageNames: ['pnpm', 'pnpm/action-setup'],
+      matchPackageNames: [
+        'pnpm',
+        'pnpm/action-setup',
+      ],
       groupName: 'pnpm',
     },
     {
-      matchPackageNames: ['node', 'actions/setup-node'],
+      matchPackageNames: [
+        'node',
+        'actions/setup-node',
+      ],
       groupName: 'node',
     },
   ],
