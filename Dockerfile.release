@@ -2,7 +2,7 @@
 # Build stage only selects the correct binary for TARGETPLATFORM.
 # Copies a pre-built binary into the image — no compilation here.
 # Build stage only selects the correct binary for TARGETPLATFORM.
-FROM alpine:3.19
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates tzdata \
     && addgroup -g 1000 kansou \
     && adduser -D -u 1000 -G kansou kansou
