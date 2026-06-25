@@ -383,7 +383,6 @@ definitions:
           A value of 0.6 means 60 % primary, 40 % secondary average.
         type: number
     type: object
-host: localhost:8080
 info:
   contact:
     name: kansou

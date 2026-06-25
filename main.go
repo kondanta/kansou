@@ -3,7 +3,6 @@
 // @description     Personal anime/manga scoring tool with AniList integration.
 // @contact.name    kansou
 // @license.name    MIT
-// @host            localhost:8080
 // @BasePath        /
 
 // kansou is a personal anime/manga scoring CLI and REST server.
