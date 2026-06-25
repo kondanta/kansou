@@ -27,6 +27,26 @@ spec:
         fsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
+      {{- if and .Values.config .Values.liveConfig.enabled }}
+      initContainers:
+        - name: config-seed
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # Only seed on first run; preserve POST /config changes on subsequent pod starts.
+          command: ["/bin/sh", "-c", "[ -f /etc/kansou/config.toml ] || cp /config-source/config.toml /etc/kansou/config.toml"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: config-source
+              mountPath: /config-source
+              readOnly: true
+            - name: config
+              mountPath: /etc/kansou
+      {{- end }}
       containers:
         - name: kansou
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -42,6 +62,9 @@ spec:
             {{- if .Values.config }}
             - --config
             - /etc/kansou/config.toml
+            {{- end }}
+            {{- if .Values.liveConfig.enabled }}
+            - --live-config
             {{- end }}
           ports:
             - name: http
@@ -69,13 +92,24 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /etc/kansou
+              {{- if not .Values.liveConfig.enabled }}
               readOnly: true
+              {{- end }}
           {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       {{- if .Values.config }}
       volumes:
+        {{- if .Values.liveConfig.enabled }}
+        - name: config-source
+          configMap:
+            name: {{ include "kansou.fullname" . }}
+        - name: config
+          persistentVolumeClaim:
+            claimName: {{ include "kansou.fullname" . }}-config
+        {{- else }}
         - name: config
           configMap:
             name: {{ include "kansou.fullname" . }}
+        {{- end }}
       {{- end }}
