@@ -29,7 +29,7 @@
   ignorePaths: [],
   packageRules: [
     {
-      matchPackageNames: ['golang', 'actions/setup-go'],
+      matchPackageNames: ['golang', 'go', 'actions/setup-go'],
       groupName: 'go',
     },
     {
