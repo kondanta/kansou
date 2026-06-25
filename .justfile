@@ -1,6 +1,7 @@
-binary   := "kansou"
-main     := "."
-swag_out := "docs/swagger"
+binary          := "kansou"
+main            := "."
+swag_out        := "docs/swagger"
+tribbie_version := `cat TRIBBIE_VERSION`
 
 # List available recipes
 default:
@@ -10,13 +11,16 @@ default:
 build:
     go build -o {{binary}} {{main}}
 
-# Reset and refetch the tribbie submodule from scratch
-reset-submodule:
-    rm -rf web/tribbie
-    git submodule add --force https://github.com/sasalx/tribbie web/tribbie
-
-# Build the Vue UI via Docker — no local Node/pnpm required
+# Download the pre-built tribbie UI from its GitHub release
 build-ui:
+    gh release download "{{tribbie_version}}" --repo sasalx/tribbie --pattern "tribbie-{{tribbie_version}}.zip" --output /tmp/tribbie.zip --clobber
+    mkdir -p web/dist
+    unzip -o /tmp/tribbie.zip -d web/dist/
+    touch web/dist/.gitkeep
+    rm /tmp/tribbie.zip
+
+# Build the Vue UI from tribbie HEAD via Docker — for local testing against latest
+build-ui-head:
     @if [ -d web/tribbie/.git ]; then \
         git -C web/tribbie fetch --depth 1 origin HEAD && git -C web/tribbie reset --hard FETCH_HEAD; \
     else \
