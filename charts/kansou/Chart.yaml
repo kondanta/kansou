@@ -3,4 +3,4 @@ name: kansou
 description: Anime/manga scoring server
 type: application
 version: 0.1.1       # chart version — bump this when the chart changes
-appVersion: "0.1.0"  # application version — matches the kansou binary release tag
+appVersion: "1.4.0"
