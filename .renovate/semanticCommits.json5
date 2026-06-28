@@ -39,6 +39,11 @@
       commitMessageTopic: "action {{depName}}",
     },
     {
+      matchManagers: ["github-actions"],
+      matchUpdateTypes: ["major"],
+      commitMessagePrefix: "ci(github-action):",
+    },
+    {
       matchDatasources: ["github-releases"],
       semanticCommitScope: "github-release",
       commitMessageTopic: "release {{depName}}",
