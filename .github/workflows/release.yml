@@ -185,8 +185,7 @@ jobs:
       - name: Package chart
         run: |
           helm package charts/kansou \
-            --version "${GITHUB_REF_NAME#v}" \
-            --app-version "${GITHUB_REF_NAME}"
+            --app-version "${GITHUB_REF_NAME#v}"
 
       - name: Push chart
         run: helm push kansou-*.tgz oci://ghcr.io/${{ github.repository_owner }}/charts

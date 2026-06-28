@@ -10,7 +10,14 @@
       "include-component-in-tag": false,
       "include-v-in-tag": true,
       "include-v-in-release-name": true,
-      "always-update": true
+      "always-update": true,
+      "extra-files": [
+        {
+          "type": "yaml",
+          "path": "charts/kansou/Chart.yaml",
+          "jsonpath": "$.appVersion"
+        }
+      ]
     }
   },
   "changelog-sections": [
