@@ -44,6 +44,9 @@ Swagger UI is available at /swagger/index.html.`,
 	}
 
 	cmd.Flags().IntVar(&port, "port", 0, "port to listen on (overrides config)")
-	cmd.Flags().BoolVar(&liveConfig, "live-config", false, "enable GET /config and POST /config endpoints for runtime config editing")
+	cmd.Flags().BoolVar(
+		&liveConfig, "live-config", false,
+		"enable GET /config and POST /config endpoints for runtime config editing",
+	)
 	return cmd
 }

@@ -17,7 +17,7 @@ func writeTOML(t *testing.T, content string) string {
 	if _, err := f.WriteString(content); err != nil {
 		t.Fatalf("writing temp file: %v", err)
 	}
-	f.Close()
+	_ = f.Close()
 	return f.Name()
 }
 
@@ -524,7 +524,7 @@ port = 9090
 	}
 
 	dims := map[string]DimensionDef{
-		"story": {Label: "Story (updated)", Description: "Narrative", Weight: 0.70},
+		"story":     {Label: "Story (updated)", Description: "Narrative", Weight: 0.70},
 		"enjoyment": {Label: "Enjoyment", Description: "Fun", Weight: 0.30, BiasResistant: true},
 	}
 	rebuilt, err := Rebuild(cfg, dims, nil, DefaultPrimaryGenreWeight, DefaultMaxMultiplier)

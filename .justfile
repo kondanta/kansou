@@ -61,8 +61,12 @@ vet:
 swagger:
     swag init -g main.go --parseDependency --output {{swag_out}}
 
-# Run the full definition-of-done check: build + test + vet
-check: build test vet
+# Run the linter
+lint:
+    golangci-lint run ./...
+
+# Run the full definition-of-done check: build + test + vet + lint
+ci: build test vet lint
     @echo "✓ all checks passed"
 
 # Remove build artifact

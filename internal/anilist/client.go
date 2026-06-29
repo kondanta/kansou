@@ -15,9 +15,9 @@ import (
 )
 
 const (
-	apiEndpoint        = "https://graphql.anilist.co"
-	tokenEnvVar        = "ANILIST_TOKEN"
-	maxErrorBodyBytes  = 64 << 10 // 64 KB — enough for any AniList error payload
+	apiEndpoint       = "https://graphql.anilist.co"
+	tokenEnvVar       = "ANILIST_TOKEN"
+	maxErrorBodyBytes = 64 << 10 // 64 KB — enough for any AniList error payload
 )
 
 // Client is a thin net/http wrapper for the AniList GraphQL API.
@@ -59,7 +59,7 @@ func (c *Client) SearchByNameMulti(search, mediaType string) ([]Media, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result struct {
 		Data struct {
@@ -99,7 +99,7 @@ func (c *Client) FetchByID(id int) (*Media, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result struct {
 		Data struct {
@@ -177,7 +177,7 @@ func (c *Client) PublishScore(mediaID int, score float64, notes string) (*Publis
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result struct {
 		Data struct {
@@ -214,7 +214,7 @@ func (c *Client) fetchExistingNotes(mediaID int) string {
 	if err != nil {
 		return ""
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result struct {
 		Data struct {
@@ -262,7 +262,7 @@ func (c *Client) do(query string, variables map[string]any, withAuth bool) (*htt
 	}
 	if resp.StatusCode != http.StatusOK {
 		body, err := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if err != nil {
 			return nil, &UpstreamError{StatusCode: resp.StatusCode, err: fmt.Errorf("AniList returned HTTP %d (could not read error body: %w)", resp.StatusCode, err)}
 		}

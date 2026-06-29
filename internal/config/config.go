@@ -305,7 +305,7 @@ func hashDimensions(dims map[string]DimensionDef, order []string) string {
 	h := sha256.New()
 	for _, key := range order {
 		d := dims[key]
-		fmt.Fprintf(h, "%s:%.6f:%v\n", key, d.Weight, d.BiasResistant)
+		_, _ = fmt.Fprintf(h, "%s:%.6f:%v\n", key, d.Weight, d.BiasResistant)
 	}
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
@@ -335,7 +335,7 @@ func ProbeWritable(path string) error {
 		return fmt.Errorf("config file location is not writable: %w", err)
 	}
 
-	tmp.Close()
+	_ = tmp.Close()
 	os.Remove(tmp.Name()) //nolint:errcheck
 	return nil
 }
@@ -354,7 +354,7 @@ func Write(path string, cfg *Config) error {
 	defer os.Remove(tmpPath) //nolint:errcheck
 
 	if err := toml.NewEncoder(tmp).Encode(toRaw(cfg)); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return fmt.Errorf("encoding config: %w", err)
 
 	}
@@ -388,7 +388,7 @@ func Hash(cfg *Config) string {
 
 	for _, key := range cfg.DimensionOrder {
 		d := cfg.Dimensions[key]
-		fmt.Fprintf(h, "dim:%s:label=%s:desc=%s:weight=%.6f:bias=%v\n",
+		_, _ = fmt.Fprintf(h, "dim:%s:label=%s:desc=%s:weight=%.6f:bias=%v\n",
 			key, d.Label, d.Description, d.Weight, d.BiasResistant)
 	}
 
@@ -406,13 +406,13 @@ func Hash(cfg *Config) string {
 		}
 		stableSort(dimKeys)
 		for _, dim := range dimKeys {
-			fmt.Fprintf(h, "genre=%s:dim=%s:mult=%.6f\n", genre, dim, mults[dim])
+			_, _ = fmt.Fprintf(h, "genre=%s:dim=%s:mult=%.6f\n", genre, dim, mults[dim])
 		}
 
 	}
 
-	fmt.Fprintf(h, "pgw=%.6f\n", cfg.PrimaryGenreWeight)
-	fmt.Fprintf(h, "maxmult=%.6f\n", cfg.MaxMultiplier)
+	_, _ = fmt.Fprintf(h, "pgw=%.6f\n", cfg.PrimaryGenreWeight)
+	_, _ = fmt.Fprintf(h, "maxmult=%.6f\n", cfg.MaxMultiplier)
 
 	return fmt.Sprintf("%x", h.Sum(nil))
 }

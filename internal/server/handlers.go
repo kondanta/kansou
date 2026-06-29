@@ -602,7 +602,7 @@ func decodeBody(w http.ResponseWriter, r *http.Request, v any) bool {
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v) //nolint:errcheck — write errors on closed connections are not actionable
+	json.NewEncoder(w).Encode(v) //nolint:errcheck // write errors on closed connections are not actionable
 }
 
 // writeError writes a JSON error envelope with the given status and message.
