@@ -77,6 +77,9 @@ type Config struct {
 	PrimaryGenreWeight float64
 	// Server holds REST server configuration.
 	Server ServerConfig
+	// MaxHistory controls how many scoring sessions are kept per media entry.
+	// 0 = keep only the latest; N = keep N most recent; -1 = keep all forever.
+	MaxHistory int
 	// DimensionsHash is the SHA256 hex digest of the serialised dimensions
 	// config at load time. Carried through scoring results for provenance.
 	DimensionsHash string
@@ -92,6 +95,7 @@ type rawConfig struct {
 	// "explicitly 0.0" — 0.0 is a valid user value meaning "disable blending".
 	PrimaryGenreWeight *float64     `toml:"primary_genre_weight"`
 	Server             ServerConfig `toml:"server"`
+	MaxHistory         int          `toml:"max_history"`
 }
 
 // Load reads the config file at path, validates it, and returns a Config.
@@ -111,7 +115,7 @@ func Load(path string) (*Config, error) {
 	if !found {
 		slog.Info("no config file found, using built-in defaults", "path", resolved)
 		cfg := defaults()
-		cfg.DimensionsHash = hashDimensions(cfg.Dimensions, cfg.DimensionOrder)
+		cfg.DimensionsHash = HashDimensions(cfg.Dimensions, cfg.DimensionOrder)
 		return cfg, nil
 	}
 
@@ -155,7 +159,7 @@ func parseFile(path string) (*rawConfig, bool, error) {
 func build(raw *rawConfig) (*Config, error) {
 	if len(raw.Dimensions) == 0 {
 		def := defaults()
-		def.DimensionsHash = hashDimensions(def.Dimensions, def.DimensionOrder)
+		def.DimensionsHash = HashDimensions(def.Dimensions, def.DimensionOrder)
 		return def, nil
 	}
 
@@ -212,12 +216,13 @@ func build(raw *rawConfig) (*Config, error) {
 		Genres:             genres,
 		MaxMultiplier:      maxMult,
 		PrimaryGenreWeight: primaryGenreWeight,
+		MaxHistory:         raw.MaxHistory,
 		Server: ServerConfig{
 			Port:               port,
 			CORSAllowedOrigins: raw.Server.CORSAllowedOrigins,
 		},
 	}
-	cfg.DimensionsHash = hashDimensions(cfg.Dimensions, cfg.DimensionOrder)
+	cfg.DimensionsHash = HashDimensions(cfg.Dimensions, cfg.DimensionOrder)
 	return cfg, nil
 }
 
@@ -299,9 +304,11 @@ func dimensionOrder(dims map[string]DimensionDef) []string {
 	return keys
 }
 
-// hashDimensions returns a SHA256 hex digest of the dimension keys and weights
-// in order. Used for provenance in scoring results.
-func hashDimensions(dims map[string]DimensionDef, order []string) string {
+// HashDimensions returns a SHA256 hex digest of the dimension keys and weights
+// in order. Used for provenance in scoring results and for detecting dimension-level
+// config changes. This is a partial hash — it covers keys, weights, and bias_resistant
+// only. Use Hash() for the full config hash that also covers genre multipliers and scalars.
+func HashDimensions(dims map[string]DimensionDef, order []string) string {
 	h := sha256.New()
 	for _, key := range order {
 		d := dims[key]
@@ -378,6 +385,7 @@ func toRaw(cfg *Config) rawConfig {
 		MaxMultiplier:      cfg.MaxMultiplier,
 		PrimaryGenreWeight: &pgw,
 		Server:             cfg.Server,
+		MaxHistory:         cfg.MaxHistory,
 	}
 }
 
