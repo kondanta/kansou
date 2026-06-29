@@ -52,7 +52,10 @@ scoring session, and publishes the final weighted score back to AniList.`,
 		SilenceErrors: true,
 	}
 
-	rootCmd.PersistentFlags().StringVar(&configPath, "config", "", "path to config file (default: ~/.config/kansou/config.toml)")
+	rootCmd.PersistentFlags().StringVar(
+		&configPath, "config", "",
+		"path to config file (default: ~/.config/kansou/config.toml)",
+	)
 	rootCmd.Flags().Bool("version", false, "print version and exit")
 
 	rootCmd.RunE = func(cmd *cobra.Command, args []string) error {

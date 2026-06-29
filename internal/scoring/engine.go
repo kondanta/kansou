@@ -64,10 +64,10 @@ func (e *Engine) Score(entry Entry) (Result, error) {
 	breakdown := make([]BreakdownRow, len(weightRows))
 	for i, wr := range weightRows {
 		breakdown[i] = BreakdownRow{
-			Key:                    wr.Key,
-			Label:                  wr.Label,
-			Score:                  entry.Scores[wr.Key],
-			BaseWeight:             wr.BaseWeight,
+			Key:                       wr.Key,
+			Label:                     wr.Label,
+			Score:                     entry.Scores[wr.Key],
+			BaseWeight:                wr.BaseWeight,
 			AppliedMultiplier:         wr.Multiplier,
 			EffectiveWeight:           wr.EffectiveWeight,
 			FinalWeight:               wr.FinalWeight,

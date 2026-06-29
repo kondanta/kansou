@@ -138,7 +138,7 @@ func spaHandler(distFS fs.FS) http.HandlerFunc {
 			w.Write(legacyHTML) //nolint:errcheck
 			return
 		}
-		idx.Close()
+		_ = idx.Close()
 		http.ServeFileFS(w, r, distFS, "index.html")
 	}
 }

@@ -6,7 +6,7 @@ package config
 // users may define any dimensions they like in their config file.
 func defaults() *Config {
 	order := []string{
-		"story", "enjoyment", "characters", "production", "pacing", "world_building", "value",
+		"story", "enjoyment", "characters", "production", "pacing", "world_building", "value", //nolint:goconst
 	}
 	dims := map[string]DimensionDef{
 		"story": {
