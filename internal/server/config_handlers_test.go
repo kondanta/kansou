@@ -50,7 +50,7 @@ func minimalEngine(cfg *config.Config) *scoring.Engine {
 func newTestServer(cfg *config.Config, liveConfig bool, configPath string) *Server {
 	al := anilist.NewClient()
 	eng := minimalEngine(cfg)
-	return New(cfg, al, eng, liveConfig, configPath)
+	return New(cfg, al, eng, liveConfig, configPath, nil, nil)
 }
 
 // writeConfigFile writes a minimal valid TOML to a temp file and returns its path.
