@@ -17,6 +17,17 @@
 max_multiplier = 2.0
 
 # ---------------------------------------------------------------
+# Scoring history retention (requires KANSOU_DB_TYPE to be set)
+#
+# How many previous scores to keep per media entry.
+#   0  = keep only the latest (previous score is soft-deleted on each rescore)
+#   N  = keep the N most recent (e.g. max_history = 5)
+#  -1  = keep all scores forever
+# ---------------------------------------------------------------
+
+max_history = 0
+
+# ---------------------------------------------------------------
 # Primary genre blend ratio (ADR-022)
 #
 # When --primary-genre is passed to `score add` (or primary_genre is
@@ -193,18 +204,21 @@ world_building = 1.2
 pacing = 1.1
 
 # ---------------------------------------------------------------
-# Server (kansou serve)
+# Server (kansou serve) — DEPRECATED
 #
-# Port is overridable at runtime with --port flag.
-# Flag takes precedence over this value.
+# Port and CORS are now configured via environment variables:
+#   KANSOU_PORT          — port to listen on (default: 8080)
+#   KANSOU_CORS_ORIGINS  — comma-separated allowed origins
+#
+# The [server] block below is ignored at runtime. It will be removed
+# in the next major version. Remove it from your config.toml to
+# silence the deprecation warning.
 # ---------------------------------------------------------------
 
-[server]
-port = 8080
-
-# CORS allowed origins. Add your frontend origin here.
-cors_allowed_origins = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://localhost:8080",
-]
+# [server]
+# port = 8080
+# cors_allowed_origins = [
+#     "http://localhost:3000",
+#     "http://localhost:5173",
+#     "http://localhost:8080",
+# ]
