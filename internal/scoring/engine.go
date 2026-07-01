@@ -130,6 +130,7 @@ func (e *Engine) Score(entry Entry) (Result, error) {
 	meta := entry.Meta
 	meta.MatchedGenres = allMatched
 	meta.GenresActive = activeMatched
+	meta.UserSelectedGenres = entry.UserSelectedGenres
 	for _, row := range breakdown {
 		meta.EffectiveWeightSum += row.EffectiveWeight
 	}

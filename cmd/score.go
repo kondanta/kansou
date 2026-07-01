@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -140,6 +141,7 @@ func (a *App) runScoreAdd(
 			TitleRomaji:        media.TitleRomaji,
 			TitleEnglish:       media.TitleEnglish,
 			MediaType:          media.MediaType,
+			Format:             media.Format,
 			AniListURL:         fmt.Sprintf("https://anilist.co/%s/%d", strings.ToLower(string(media.MediaType)), media.ID),
 			AllGenres:          media.Genres,
 			ConfigHash:         a.Config.DimensionsHash,
@@ -151,6 +153,12 @@ func (a *App) runScoreAdd(
 	result, err := a.Engine.Score(entry)
 	if err != nil {
 		return err
+	}
+
+	if a.Store != nil {
+		if saveErr := a.Store.SaveScore(context.Background(), result, a.Config, a.Config.MaxHistory); saveErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: saving score to database: %v\n", saveErr)
+		}
 	}
 
 	fmt.Println("──────────────────────────────")
