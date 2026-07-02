@@ -314,7 +314,7 @@ func (s *SQLiteStore) SaveScore(ctx context.Context, result scoring.Result, cfg 
 		result.FinalScore,
 		primaryGenreStr,
 		primaryGenreWeightPtr,
-		result.Meta.ConfigHash,
+		config.Hash(cfg),
 		string(snapshotBytes),
 		userSelectedGenresStr,
 	)

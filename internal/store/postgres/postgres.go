@@ -317,7 +317,7 @@ func (s *PostgresStore) SaveScore(ctx context.Context, result scoring.Result, cf
 		result.FinalScore,
 		primaryGenreStr,
 		primaryGenreWeightPtr,
-		result.Meta.ConfigHash,
+		config.Hash(cfg),
 		snapshotBytes,
 		userSelectedGenresBytes,
 	).Scan(&scoreID); err != nil {
