@@ -160,6 +160,7 @@ scoring session, and publishes the final weighted score back to AniList.`,
 	rootCmd.AddCommand(app.scoreCmd())
 	rootCmd.AddCommand(app.serveCmd())
 	rootCmd.AddCommand(app.dbCmd())
+	rootCmd.AddCommand(app.statsCmd())
 
 	exitCode := 0
 	if err := rootCmd.Execute(); err != nil {
