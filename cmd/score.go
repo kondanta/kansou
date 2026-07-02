@@ -374,6 +374,10 @@ func parseWeightFlag(flag string, dims map[string]config.DimensionDef) (map[stri
 	return result, nil
 }
 
+// biasResistantMark annotates a bias-resistant dimension's multiplier column
+// in breakdown tables (CLI and AniList notes).
+const biasResistantMark = "  *"
+
 // printBreakdown renders the full per-dimension breakdown table to stdout.
 func printBreakdown(result scoring.Result) {
 	sep := strings.Repeat("─", 78)
@@ -406,7 +410,7 @@ func printBreakdown(result scoring.Result) {
 			annotations = " [genre adjusted]"
 		}
 		if row.BiasResistant && !row.Skipped {
-			mult += "  *"
+			mult += biasResistantMark
 			biasNote = true
 		}
 
@@ -551,7 +555,7 @@ func formatNote(result scoring.Result) string {
 		}
 		suffix := ""
 		if row.BiasResistant {
-			suffix = "  *"
+			suffix = biasResistantMark
 		}
 		fmt.Fprintf(&b, "%-15s  %5.1f  %6s  %6s  %6s  %.2f%s\n",
 			row.Label, row.Score,
