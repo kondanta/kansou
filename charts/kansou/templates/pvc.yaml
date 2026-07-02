@@ -15,3 +15,21 @@ spec:
   storageClassName: {{ .Values.liveConfig.persistence.storageClassName }}
   {{- end }}
 {{- end }}
+{{- if eq .Values.db.type "sqlite" }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "kansou.fullname" . }}-db
+  labels:
+    {{- include "kansou.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.db.sqlite.persistence.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.db.sqlite.persistence.size }}
+  {{- if .Values.db.sqlite.persistence.storageClassName }}
+  storageClassName: {{ .Values.db.sqlite.persistence.storageClassName }}
+  {{- end }}
+{{- end }}

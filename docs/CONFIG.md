@@ -72,6 +72,25 @@ section — every command that requires a database returns a clear error
 (`"... requires a database — set KANSOU_DB_TYPE to enable"`) rather than
 silently doing nothing.
 
+### Deploying with Helm
+
+The chart in `charts/kansou/` sets the environment variables above from
+`values.yaml` — you don't set them directly in a Kubernetes deployment.
+
+| Chart value | Maps to |
+|---|---|
+| `db.type` | `KANSOU_DB_TYPE` (`""`, `sqlite`, or `postgres`) |
+| `db.sqlite.path` | `KANSOU_DB_PATH`. Must live under `/data` — the chart mounts a PVC (`db.sqlite.persistence`) there when `db.type: sqlite`. |
+| `db.postgres.host` / `port` / `database` / `user` | `POSTGRES_HOST` / `POSTGRES_PORT` / `POSTGRES_DB` / `POSTGRES_USER` |
+| `db.postgres.password` | `POSTGRES_PASSWORD`, stored in the chart's Secret, never a plain env value |
+| `corsAllowedOrigins` | `KANSOU_CORS_ORIGINS` (joined with commas) |
+| `service.port` | `KANSOU_PORT` |
+
+Leaving `db.type` empty deploys kansou stateless, same as an unset
+`KANSOU_DB_TYPE` locally. The chart refuses to render if `db.type` is set to
+anything other than `""`, `sqlite`, or `postgres`, or if `db.postgres.password`
+is missing while `db.type: postgres`.
+
 ---
 
 ## `max_history`

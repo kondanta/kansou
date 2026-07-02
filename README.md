@@ -268,6 +268,36 @@ Full reference, including `max_history` retention semantics: [`docs/CONFIG.md`](
 
 ---
 
+## Helm Chart
+
+A chart is published at `oci://ghcr.io/kondanta/charts/kansou`:
+
+```bash
+helm install kansou oci://ghcr.io/kondanta/charts/kansou \
+  --version <chart-version> \
+  --set anilistToken=<token>
+```
+
+Persistent scoring history is opt-in via `db.type`:
+
+```bash
+# SQLite, backed by a PVC mounted at /data
+--set db.type=sqlite
+
+# Postgres
+--set db.type=postgres \
+--set db.postgres.host=<host> \
+--set db.postgres.user=<user> \
+--set db.postgres.database=<db> \
+--set db.postgres.password=<password>
+```
+
+See [`charts/kansou/values.yaml`](charts/kansou/values.yaml) for the full set of
+values, and [`docs/CONFIG.md`](docs/CONFIG.md#deploying-with-helm) for how they
+map to the environment variables above.
+
+---
+
 ## Development
 
 ```

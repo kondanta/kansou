@@ -1,3 +1,6 @@
+{{- if not (has .Values.db.type (list "" "sqlite" "postgres")) }}
+{{- fail (printf "db.type must be \"\", \"sqlite\", or \"postgres\", got %q" .Values.db.type) }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -76,6 +79,34 @@ spec:
                 secretKeyRef:
                   name: {{ include "kansou.fullname" . }}
                   key: ANILIST_TOKEN
+            - name: KANSOU_PORT
+              value: {{ .Values.service.port | quote }}
+            {{- if .Values.corsAllowedOrigins }}
+            - name: KANSOU_CORS_ORIGINS
+              value: {{ join "," .Values.corsAllowedOrigins | quote }}
+            {{- end }}
+            {{- if eq .Values.db.type "sqlite" }}
+            - name: KANSOU_DB_TYPE
+              value: "sqlite"
+            - name: KANSOU_DB_PATH
+              value: {{ .Values.db.sqlite.path | quote }}
+            {{- else if eq .Values.db.type "postgres" }}
+            - name: KANSOU_DB_TYPE
+              value: "postgres"
+            - name: POSTGRES_HOST
+              value: {{ .Values.db.postgres.host | quote }}
+            - name: POSTGRES_PORT
+              value: {{ .Values.db.postgres.port | quote }}
+            - name: POSTGRES_USER
+              value: {{ .Values.db.postgres.user | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.db.postgres.database | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "kansou.fullname" . }}
+                  key: POSTGRES_PASSWORD
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /health
@@ -88,18 +119,25 @@ spec:
               port: http
             initialDelaySeconds: 3
             periodSeconds: 5
-          {{- if .Values.config }}
+          {{- if or .Values.config (eq .Values.db.type "sqlite") }}
           volumeMounts:
+            {{- if .Values.config }}
             - name: config
               mountPath: /etc/kansou
               {{- if not .Values.liveConfig.enabled }}
               readOnly: true
               {{- end }}
+            {{- end }}
+            {{- if eq .Values.db.type "sqlite" }}
+            - name: db-data
+              mountPath: /data
+            {{- end }}
           {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-      {{- if .Values.config }}
+      {{- if or .Values.config (eq .Values.db.type "sqlite") }}
       volumes:
+        {{- if .Values.config }}
         {{- if .Values.liveConfig.enabled }}
         - name: config-source
           configMap:
@@ -111,5 +149,11 @@ spec:
         - name: config
           configMap:
             name: {{ include "kansou.fullname" . }}
+        {{- end }}
+        {{- end }}
+        {{- if eq .Values.db.type "sqlite" }}
+        - name: db-data
+          persistentVolumeClaim:
+            claimName: {{ include "kansou.fullname" . }}-db
         {{- end }}
       {{- end }}
