@@ -68,6 +68,17 @@ definitions:
       primary_genre_weight:
         type: number
     type: object
+  server.dbInfoResponse:
+    properties:
+      db:
+        description: DB is "sqlite", "postgres", or null in DBless mode.
+        type: string
+      live_config:
+        description: |-
+          LiveConfig is only present in DBless mode — it is not meaningful in DB
+          mode, where config is always writable via POST /config.
+        type: boolean
+    type: object
   server.dimensionItem:
     properties:
       description:
@@ -117,6 +128,21 @@ definitions:
           values.
         type: object
     type: object
+  server.genreStatsResponse:
+    properties:
+      genre_breakdown:
+        items:
+          $ref: '#/definitions/store.GenreStat'
+        type: array
+      genre_dimension_affinity:
+        items:
+          $ref: '#/definitions/store.GenreDimensionAffinity'
+        type: array
+      score_by_genre:
+        items:
+          $ref: '#/definitions/store.GenreScore'
+        type: array
+    type: object
   server.genresResponse:
     properties:
       genres:
@@ -129,6 +155,38 @@ definitions:
         description: PrimaryGenreWeight is the configured blend ratio for primary
           genre support.
         type: number
+    type: object
+  server.historyListItem:
+    properties:
+      anilist_id:
+        type: integer
+      final_score:
+        type: number
+      format:
+        type: string
+      media_type:
+        type: string
+      score_id:
+        type: integer
+      scored_at:
+        type: string
+      title_romaji:
+        type: string
+    type: object
+  server.historyStatsResponse:
+    properties:
+      config_impact:
+        items:
+          $ref: '#/definitions/store.ConfigImpactStat'
+        type: array
+      most_rescored:
+        items:
+          $ref: '#/definitions/store.RescoredStat'
+        type: array
+      outliers:
+        items:
+          $ref: '#/definitions/store.OutlierStat'
+        type: array
     type: object
   server.mediaResponse:
     properties:
@@ -383,6 +441,309 @@ definitions:
           A value of 0.6 means 60 % primary, 40 % secondary average.
         type: number
     type: object
+  stats.Summary:
+    properties:
+      lastPruneAt:
+        description: LastPruneAt is nil if `kansou db prune` has never run.
+        type: string
+      leastConsistentDim:
+        $ref: '#/definitions/store.DimensionVarianceStat'
+      mostConsistentDim:
+        $ref: '#/definitions/store.DimensionVarianceStat'
+      mostRescored:
+        allOf:
+        - $ref: '#/definitions/store.RescoredStat'
+        description: MostRescored is nil unless some entry has been scored more than
+          once.
+      outlierCount:
+        type: integer
+      overallConsistency:
+        $ref: '#/definitions/store.ConsistencyStat'
+      topGenre:
+        $ref: '#/definitions/store.GenreStat'
+      topScoringGenre:
+        $ref: '#/definitions/store.GenreScore'
+    type: object
+  store.ConfigImpactStat:
+    properties:
+      avgScore:
+        format: float64
+        type: number
+      configHash:
+        type: string
+      entryCount:
+        type: integer
+      firstScoredAt:
+        type: string
+      lastScoredAt:
+        type: string
+    type: object
+  store.ConsistencyStat:
+    properties:
+      avgStdDev:
+        format: float64
+        type: number
+      count:
+        type: integer
+    type: object
+  store.DimensionAvg:
+    properties:
+      avgScore:
+        format: float64
+        type: number
+      dimensionKey:
+        type: string
+      label:
+        type: string
+    type: object
+  store.DimensionCorrelationStat:
+    properties:
+      correlation:
+        description: Pearson -1.0 to 1.0
+        format: float64
+        type: number
+      dimensionA:
+        type: string
+      dimensionB:
+        type: string
+    type: object
+  store.DimensionScoreRow:
+    properties:
+      appliedMultiplier:
+        format: float64
+        type: number
+      baseWeight:
+        format: float64
+        type: number
+      biasResistant:
+        type: boolean
+      contribution:
+        description: nil if skipped
+        format: float64
+        type: number
+      dimensionKey:
+        type: string
+      finalWeight:
+        format: float64
+        type: number
+      genreDeselected:
+        description: |-
+          GenreDeselected is true when a deselected genre would have contributed
+          to this dimension's multiplier.
+        type: boolean
+      label:
+        type: string
+      primaryGenreMultiplier:
+        description: |-
+          PrimaryGenreMultiplier is the raw multiplier the primary genre defined for
+          this dimension at scoring time. 0 when no primary genre was set or the
+          dimension is bias-resistant.
+        format: float64
+        type: number
+      score:
+        description: nil if skipped
+        format: float64
+        type: number
+      secondaryGenresMultiplier:
+        description: |-
+          SecondaryGenresMultiplier is the contributing-only average multiplier
+          across non-primary matched genres at scoring time. 0 when no primary genre
+          was set, there were no secondary genres, or the dimension is bias-resistant.
+        format: float64
+        type: number
+      skipped:
+        type: boolean
+      weightOverride:
+        type: boolean
+    type: object
+  store.DimensionStatsResponse:
+    properties:
+      correlation_insufficient:
+        description: CorrelationInsufficient is true when no pairs met the minimum
+          threshold.
+        type: boolean
+      dimensionCorrelation:
+        items:
+          $ref: '#/definitions/store.DimensionCorrelationStat'
+        type: array
+      dimensionVariance:
+        items:
+          $ref: '#/definitions/store.DimensionVarianceStat'
+        type: array
+      scoringConsistency:
+        $ref: '#/definitions/store.ConsistencyStat'
+      skippedDimensions:
+        items:
+          $ref: '#/definitions/store.SkippedDimStat'
+        type: array
+      weightOverrides:
+        items:
+          $ref: '#/definitions/store.WeightOverrideStat'
+        type: array
+    type: object
+  store.DimensionVarianceStat:
+    properties:
+      avgScore:
+        format: float64
+        type: number
+      count:
+        type: integer
+      dimensionKey:
+        type: string
+      label:
+        type: string
+      stdDev:
+        format: float64
+        type: number
+    type: object
+  store.GenreDimensionAffinity:
+    properties:
+      dimensions:
+        items:
+          $ref: '#/definitions/store.DimensionAvg'
+        type: array
+      genre:
+        type: string
+    type: object
+  store.GenreScore:
+    properties:
+      avgScore:
+        format: float64
+        type: number
+      count:
+        type: integer
+      genre:
+        type: string
+    type: object
+  store.GenreStat:
+    properties:
+      count:
+        type: integer
+      genre:
+        type: string
+      percentage:
+        format: float64
+        type: number
+    type: object
+  store.MatchedGenreRow:
+    properties:
+      genre:
+        type: string
+      isPrimary:
+        type: boolean
+    type: object
+  store.OutlierStat:
+    properties:
+      anilistID:
+        type: integer
+      deviation:
+        description: how many std devs from personal avg
+        format: float64
+        type: number
+      dimensionKey:
+        type: string
+      label:
+        type: string
+      personalAvg:
+        format: float64
+        type: number
+      score:
+        format: float64
+        type: number
+      scoreID:
+        type: integer
+      scoredAt:
+        type: string
+      titleRomaji:
+        type: string
+    type: object
+  store.RescoredStat:
+    properties:
+      anilistID:
+        type: integer
+      firstScoredAt:
+        type: string
+      lastScoredAt:
+        type: string
+      latestScore:
+        format: float64
+        type: number
+      scoreCount:
+        type: integer
+      titleRomaji:
+        type: string
+    type: object
+  store.Score:
+    properties:
+      activeGenres:
+        items:
+          $ref: '#/definitions/store.MatchedGenreRow'
+        type: array
+      anilistID:
+        type: integer
+      breakdown:
+        items:
+          $ref: '#/definitions/store.DimensionScoreRow'
+        type: array
+      configHash:
+        type: string
+      deletedAt:
+        type: string
+      finalScore:
+        format: float64
+        type: number
+      format:
+        type: string
+      genres:
+        items:
+          type: string
+        type: array
+      id:
+        type: integer
+      isLatest:
+        type: boolean
+      mediaType:
+        type: string
+      primaryGenre:
+        type: string
+      primaryGenreWeight:
+        format: float64
+        type: number
+      scoredAt:
+        type: string
+      titleEnglish:
+        type: string
+      titleRomaji:
+        type: string
+      userSelectedGenres:
+        description: UserSelectedGenres is nil if the user did not explicitly select
+          genres.
+        items:
+          type: string
+        type: array
+    type: object
+  store.SkippedDimStat:
+    properties:
+      dimensionKey:
+        type: string
+      label:
+        type: string
+      mediaType:
+        type: string
+      skipCount:
+        type: integer
+      totalCount:
+        type: integer
+    type: object
+  store.WeightOverrideStat:
+    properties:
+      dimensionKey:
+        type: string
+      label:
+        type: string
+      overrideCount:
+        type: integer
+    type: object
 info:
   contact:
     name: kansou
@@ -410,8 +771,8 @@ paths:
       consumes:
       - application/json
       description: Replaces the scoring config (dimensions, genres, weights) and reloads
-        the engine atomically. Writes the new config to disk. Only available when
-        --live-config is set.
+        the engine atomically. Persists to the database in DB mode, or to disk otherwise.
+        Only available when --live-config is set.
       parameters:
       - description: New config (config_hash is ignored)
         in: body
@@ -437,6 +798,20 @@ paths:
       summary: Update config
       tags:
       - config
+  /db-info:
+    get:
+      description: Reports the active database backend, or DBless live-config status.
+        Always available.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.dbInfoResponse'
+      summary: Database info
+      tags:
+      - system
   /dimensions:
     get:
       description: Returns the ordered list of scoring dimensions defined in server
@@ -476,6 +851,85 @@ paths:
       summary: Health check
       tags:
       - system
+  /history:
+    get:
+      description: Returns the latest score for every scored entry, ordered by scored_at
+        descending. Requires a database.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/server.historyListItem'
+            type: array
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: List history
+      tags:
+      - history
+  /history/{anilist_id}:
+    get:
+      description: Returns all non-deleted scores for one AniList media ID, newest
+        first, with full breakdown. Requires a database.
+      parameters:
+      - description: AniList media ID
+        in: path
+        name: anilist_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/store.Score'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Show history detail
+      tags:
+      - history
+  /history/{score_id}:
+    delete:
+      description: Soft-deletes a score by its row ID (not the AniList ID). Deliberate
+        removal from active tracking — does not promote any other score to latest.
+        Requires a database.
+      parameters:
+      - description: scores.id primary key
+        in: path
+        name: score_id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Delete a history entry
+      tags:
+      - history
   /media/{id}:
     get:
       description: Fetch an anime or manga entry by its AniList media ID.
@@ -614,6 +1068,77 @@ paths:
       summary: Publish score
       tags:
       - score
+  /stats:
+    get:
+      description: Returns one headline metric per stats category. Requires a database.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/stats.Summary'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Stats summary
+      tags:
+      - stats
+  /stats/dimensions:
+    get:
+      description: Returns variance, consistency, correlation, skip rate, and weight
+        override frequency per dimension. Requires a database.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/store.DimensionStatsResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Dimension stats
+      tags:
+      - stats
+  /stats/genres:
+    get:
+      description: Returns genre breakdown, average score by genre, and genre-dimension
+        affinity. Requires a database.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.genreStatsResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Genre stats
+      tags:
+      - stats
+  /stats/history:
+    get:
+      description: Returns most-rescored entries, outliers, and config impact. Requires
+        a database.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.historyStatsResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: History stats
+      tags:
+      - stats
   /weights:
     post:
       consumes:
