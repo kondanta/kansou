@@ -161,9 +161,16 @@ scoring session, and publishes the final weighted score back to AniList.`,
 	rootCmd.AddCommand(app.serveCmd())
 	rootCmd.AddCommand(app.dbCmd())
 
+	exitCode := 0
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		exitCode = 1
+	}
+	if app.Store != nil {
+		_ = app.Store.Close()
+	}
+	if exitCode != 0 {
+		os.Exit(exitCode)
 	}
 }
 
