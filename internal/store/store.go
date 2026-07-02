@@ -6,14 +6,34 @@ package store
 import (
 	"context"
 	"embed"
+	"errors"
 	"time"
 
 	"github.com/kondanta/kansou/internal/config"
 	"github.com/kondanta/kansou/internal/scoring"
 )
 
+// ErrScoreNotFound is returned by SoftDeleteScore when the given score ID
+// does not exist or is already soft-deleted. Wrapped with context by callers
+// (e.g. fmt.Errorf("score %d: %w", id, ErrScoreNotFound)) — check with
+// errors.Is, not string comparison.
+var ErrScoreNotFound = errors.New("score not found or already deleted")
+
 //go:embed migrations
 var MigrationsFS embed.FS
+
+// Soft-delete reasons recorded in scores.deleted_reason. The two paths that
+// set deleted_at can never race on the same row (gardening only ever prunes
+// rows older than the retention window; SoftDeleteScore only ever targets one
+// caller-specified row), so this distinction exists for accountability and
+// audit, not to resolve a conflict between the two.
+const (
+	// DeletedReasonManual marks a row removed by a deliberate SoftDeleteScore call.
+	DeletedReasonManual = "manual"
+	// DeletedReasonMaxHistory marks a row pruned automatically by max_history
+	// retention inside SaveScore.
+	DeletedReasonMaxHistory = "max_history"
+)
 
 // Store is the persistence interface for kansou. All database access goes
 // through this interface — callers never import sqlite/ or postgres/ directly.
@@ -52,9 +72,25 @@ type Store interface {
 	// is needed.
 	ListLatest(ctx context.Context) ([]Score, error)
 
+	// SearchMediaByTitle returns media whose title_romaji matches query
+	// case-insensitively (substring match), ordered by title_romaji. Matches
+	// any media that has ever been scored, regardless of whether its scores
+	// are soft-deleted — used to resolve `history show`/`history delete
+	// <query>` when query isn't a numeric AniList ID. Every media row has at
+	// least one associated score by construction (SaveScore always inserts
+	// both in the same transaction), so no JOIN against scores is needed.
+	SearchMediaByTitle(ctx context.Context, query string) ([]MediaSearchResult, error)
+
 	// --- History management ---
 
-	// SoftDeleteScore sets deleted_at = now() on the given score ID.
+	// SoftDeleteScore sets deleted_at = now(), deleted_reason = DeletedReasonManual,
+	// and is_latest = false on the given score ID. Deliberate removal from active
+	// tracking — it does NOT promote any other score for the same media to
+	// is_latest, even if the deleted score was the latest one. Older scores stay
+	// in the database (subject to max_history) but the media stops appearing in
+	// is_latest-filtered views (ListLatest, LatestScore, all stats methods) until
+	// the user scores it again, which naturally sets a fresh is_latest row via
+	// the existing SaveScore path.
 	SoftDeleteScore(ctx context.Context, scoreID int) error
 
 	// --- Gardening ---
@@ -116,6 +152,15 @@ type Store interface {
 	Close() error
 }
 
+// MediaSearchResult is one match from SearchMediaByTitle.
+type MediaSearchResult struct {
+	AnilistID    int
+	TitleRomaji  string
+	TitleEnglish string
+	MediaType    string
+	Format       string
+}
+
 // Score is the full representation of a scoring event returned by the Store.
 type Score struct {
 	ID                 int
@@ -153,6 +198,14 @@ type DimensionScoreRow struct {
 	// GenreDeselected is true when a deselected genre would have contributed
 	// to this dimension's multiplier.
 	GenreDeselected bool
+	// PrimaryGenreMultiplier is the raw multiplier the primary genre defined for
+	// this dimension at scoring time. 0 when no primary genre was set or the
+	// dimension is bias-resistant.
+	PrimaryGenreMultiplier float64
+	// SecondaryGenresMultiplier is the contributing-only average multiplier
+	// across non-primary matched genres at scoring time. 0 when no primary genre
+	// was set, there were no secondary genres, or the dimension is bias-resistant.
+	SecondaryGenresMultiplier float64
 }
 
 // MatchedGenreRow is one genre entry within a Score.

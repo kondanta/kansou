@@ -37,9 +37,12 @@ func (f *fakeStore) SaveScore(context.Context, scoring.Result, *config.Config, i
 func (f *fakeStore) LatestScore(context.Context, int) (*store.Score, error)   { return nil, nil }
 func (f *fakeStore) ScoreHistory(context.Context, int) ([]store.Score, error) { return nil, nil }
 func (f *fakeStore) ListLatest(context.Context) ([]store.Score, error)        { return nil, nil }
-func (f *fakeStore) SoftDeleteScore(context.Context, int) error               { return nil }
-func (f *fakeStore) Prune(context.Context) (int64, error)                     { return 0, nil }
-func (f *fakeStore) LastPruneAt(context.Context) (*time.Time, error)          { return f.lastPruneAt, nil }
+func (f *fakeStore) SearchMediaByTitle(context.Context, string) ([]store.MediaSearchResult, error) {
+	return nil, nil
+}
+func (f *fakeStore) SoftDeleteScore(context.Context, int) error      { return nil }
+func (f *fakeStore) Prune(context.Context) (int64, error)            { return 0, nil }
+func (f *fakeStore) LastPruneAt(context.Context) (*time.Time, error) { return f.lastPruneAt, nil }
 func (f *fakeStore) GenreBreakdown(context.Context) ([]store.GenreStat, error) {
 	return f.genreBreakdown, nil
 }

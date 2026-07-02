@@ -328,8 +328,9 @@ func (s *SQLiteStore) SaveScore(ctx context.Context, result scoring.Result, cfg 
 
 	const dimQ = `INSERT INTO dimension_scores
 	                  (score_id, dimension_key, label, score, base_weight, final_weight,
-	                   applied_multiplier, contribution, skipped, bias_resistant, weight_override, genre_deselected)
-	              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	                   applied_multiplier, contribution, skipped, bias_resistant, weight_override, genre_deselected,
+	                   primary_genre_multiplier, secondary_genres_multiplier)
+	              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	for _, row := range result.Breakdown {
 		var scoreVal, contribVal *float64
 		if !row.Skipped {
@@ -341,6 +342,7 @@ func (s *SQLiteStore) SaveScore(ctx context.Context, result scoring.Result, cfg 
 			scoreVal, row.BaseWeight, row.FinalWeight, row.AppliedMultiplier, contribVal,
 			boolToInt(row.Skipped), boolToInt(row.BiasResistant),
 			boolToInt(row.WeightOverride), boolToInt(row.GenreDeselected),
+			row.PrimaryGenreMultiplier, row.SecondaryGenresMultiplier,
 		); err != nil {
 			return fmt.Errorf("inserting dimension score %q: %w", row.Key, err)
 		}
@@ -362,14 +364,14 @@ func (s *SQLiteStore) SaveScore(ctx context.Context, result scoring.Result, cfg 
 			keepCount = 1
 		}
 		const pruneQ = `UPDATE scores
-		                SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+		                SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), deleted_reason = ?
 		                WHERE media_id = ? AND deleted_at IS NULL
 		                  AND id NOT IN (
 		                      SELECT id FROM scores
 		                      WHERE media_id = ? AND deleted_at IS NULL
 		                      ORDER BY scored_at DESC LIMIT ?
 		                  )`
-		if _, err := tx.ExecContext(ctx, pruneQ, mediaRowID, mediaRowID, keepCount); err != nil {
+		if _, err := tx.ExecContext(ctx, pruneQ, store.DeletedReasonMaxHistory, mediaRowID, mediaRowID, keepCount); err != nil {
 			return fmt.Errorf("applying max_history: %w", err)
 		}
 	}
@@ -415,17 +417,19 @@ type scoreRow struct {
 
 // dimRow is the scanning target for dimension_scores queries.
 type dimRow struct {
-	DimensionKey      string   `db:"dimension_key"`
-	Label             string   `db:"label"`
-	Score             *float64 `db:"score"`
-	BaseWeight        float64  `db:"base_weight"`
-	FinalWeight       float64  `db:"final_weight"`
-	AppliedMultiplier float64  `db:"applied_multiplier"`
-	Contribution      *float64 `db:"contribution"`
-	Skipped           bool     `db:"skipped"`
-	BiasResistant     bool     `db:"bias_resistant"`
-	WeightOverride    bool     `db:"weight_override"`
-	GenreDeselected   bool     `db:"genre_deselected"`
+	DimensionKey              string   `db:"dimension_key"`
+	Label                     string   `db:"label"`
+	Score                     *float64 `db:"score"`
+	BaseWeight                float64  `db:"base_weight"`
+	FinalWeight               float64  `db:"final_weight"`
+	AppliedMultiplier         float64  `db:"applied_multiplier"`
+	Contribution              *float64 `db:"contribution"`
+	Skipped                   bool     `db:"skipped"`
+	BiasResistant             bool     `db:"bias_resistant"`
+	WeightOverride            bool     `db:"weight_override"`
+	GenreDeselected           bool     `db:"genre_deselected"`
+	PrimaryGenreMultiplier    float64  `db:"primary_genre_multiplier"`
+	SecondaryGenresMultiplier float64  `db:"secondary_genres_multiplier"`
 }
 
 // matchRow is the scanning target for score_matched_genres queries.
@@ -517,7 +521,8 @@ func (s *SQLiteStore) fetchMediaGenres(ctx context.Context, mediaID int) ([]stri
 // fetchDimensionScores returns the breakdown rows for a score.
 func (s *SQLiteStore) fetchDimensionScores(ctx context.Context, scoreID int) ([]store.DimensionScoreRow, error) {
 	const q = `SELECT dimension_key, label, score, base_weight, final_weight, applied_multiplier,
-	                  contribution, skipped, bias_resistant, weight_override, genre_deselected
+	                  contribution, skipped, bias_resistant, weight_override, genre_deselected,
+	                  primary_genre_multiplier, secondary_genres_multiplier
 	           FROM dimension_scores WHERE score_id = ?`
 	var rows []dimRow
 	if err := s.db.SelectContext(ctx, &rows, q, scoreID); err != nil {
@@ -531,6 +536,7 @@ func (s *SQLiteStore) fetchDimensionScores(ctx context.Context, scoreID int) ([]
 			AppliedMultiplier: r.AppliedMultiplier, Contribution: r.Contribution,
 			Skipped: r.Skipped, BiasResistant: r.BiasResistant,
 			WeightOverride: r.WeightOverride, GenreDeselected: r.GenreDeselected,
+			PrimaryGenreMultiplier: r.PrimaryGenreMultiplier, SecondaryGenresMultiplier: r.SecondaryGenresMultiplier,
 		}
 	}
 	return result, nil
@@ -550,19 +556,138 @@ func (s *SQLiteStore) fetchMatchedGenres(ctx context.Context, scoreID int) ([]st
 	return result, nil
 }
 
-// ScoreHistory returns all non-deleted scores for a given AniList media ID.
+// ScoreHistory returns all non-deleted scores for a given AniList media ID,
+// ordered by scored_at DESC.
 func (s *SQLiteStore) ScoreHistory(ctx context.Context, anilistID int) ([]Score, error) {
-	return nil, errors.New("not implemented")
+	const q = `SELECT s.id, s.media_id, m.title_romaji, m.title_english, m.media_type, m.format,
+	                  s.final_score, s.primary_genre, s.primary_genre_weight, s.config_hash,
+	                  s.is_latest, s.scored_at, s.user_selected_genres
+	           FROM scores s
+	           JOIN media m ON m.id = s.media_id
+	           WHERE m.anilist_id = ? AND s.deleted_at IS NULL
+	           ORDER BY s.scored_at DESC`
+	var rows []scoreRow
+	if err := s.db.SelectContext(ctx, &rows, q, anilistID); err != nil {
+		return nil, fmt.Errorf("fetching score history: %w", err)
+	}
+	result := make([]Score, len(rows))
+	for i, row := range rows {
+		sc, err := s.assembleScore(ctx, anilistID, &row)
+		if err != nil {
+			return nil, err
+		}
+		result[i] = *sc
+	}
+	return result, nil
 }
 
-// ListLatest returns the latest score for every media entry.
+// listLatestRow is the scanning target for ListLatest, which — unlike
+// LatestScore/ScoreHistory — spans every media entry at once and so must
+// select anilist_id itself rather than receiving it as a parameter.
+type listLatestRow struct {
+	ID                 int      `db:"id"`
+	AnilistID          int      `db:"anilist_id"`
+	TitleRomaji        string   `db:"title_romaji"`
+	TitleEnglish       string   `db:"title_english"`
+	MediaType          string   `db:"media_type"`
+	Format             string   `db:"format"`
+	FinalScore         float64  `db:"final_score"`
+	PrimaryGenre       *string  `db:"primary_genre"`
+	PrimaryGenreWeight *float64 `db:"primary_genre_weight"`
+	ConfigHash         string   `db:"config_hash"`
+	IsLatest           bool     `db:"is_latest"`
+	ScoredAt           string   `db:"scored_at"`
+}
+
+// ListLatest returns the latest score for every media entry, ordered by
+// scored_at DESC. Excludes soft-deleted scores. Does NOT populate Breakdown
+// or ActiveGenres — use LatestScore or ScoreHistory when the full breakdown
+// is needed; loading it for every entry here would require an expensive JOIN.
 func (s *SQLiteStore) ListLatest(ctx context.Context) ([]Score, error) {
-	return nil, errors.New("not implemented")
+	const q = `SELECT s.id, m.anilist_id, m.title_romaji, m.title_english, m.media_type, m.format,
+	                  s.final_score, s.primary_genre, s.primary_genre_weight, s.config_hash,
+	                  s.is_latest, s.scored_at
+	           FROM scores s
+	           JOIN media m ON m.id = s.media_id
+	           WHERE s.is_latest = 1 AND s.deleted_at IS NULL
+	           ORDER BY s.scored_at DESC`
+	var rows []listLatestRow
+	if err := s.db.SelectContext(ctx, &rows, q); err != nil {
+		return nil, fmt.Errorf("fetching latest scores: %w", err)
+	}
+	result := make([]Score, len(rows))
+	for i, r := range rows {
+		scoredAt, err := parseRFC3339("scored_at", r.ScoredAt)
+		if err != nil {
+			return nil, err
+		}
+		sc := Score{
+			ID: r.ID, AnilistID: r.AnilistID, TitleRomaji: r.TitleRomaji, TitleEnglish: r.TitleEnglish,
+			MediaType: r.MediaType, Format: r.Format, FinalScore: r.FinalScore,
+			ConfigHash: r.ConfigHash, IsLatest: r.IsLatest, ScoredAt: scoredAt,
+		}
+		if r.PrimaryGenre != nil {
+			sc.PrimaryGenre = *r.PrimaryGenre
+		}
+		if r.PrimaryGenreWeight != nil {
+			sc.PrimaryGenreWeight = *r.PrimaryGenreWeight
+		}
+		result[i] = sc
+	}
+	return result, nil
 }
 
-// SoftDeleteScore sets deleted_at = now() on the given score ID.
+// SearchMediaByTitle returns media whose title_romaji matches query
+// case-insensitively, ordered by title_romaji.
+func (s *SQLiteStore) SearchMediaByTitle(ctx context.Context, query string) ([]store.MediaSearchResult, error) {
+	type row struct {
+		AnilistID    int    `db:"anilist_id"`
+		TitleRomaji  string `db:"title_romaji"`
+		TitleEnglish string `db:"title_english"`
+		MediaType    string `db:"media_type"`
+		Format       string `db:"format"`
+	}
+	const q = `SELECT anilist_id, title_romaji, title_english, media_type, format
+	           FROM media
+	           WHERE title_romaji LIKE '%' || ? || '%' COLLATE NOCASE
+	           ORDER BY title_romaji`
+	var rows []row
+	if err := s.db.SelectContext(ctx, &rows, q, query); err != nil {
+		return nil, fmt.Errorf("searching media by title: %w", err)
+	}
+	result := make([]store.MediaSearchResult, len(rows))
+	for i, r := range rows {
+		result[i] = store.MediaSearchResult{
+			AnilistID: r.AnilistID, TitleRomaji: r.TitleRomaji, TitleEnglish: r.TitleEnglish,
+			MediaType: r.MediaType, Format: r.Format,
+		}
+	}
+	return result, nil
+}
+
+// SoftDeleteScore sets deleted_at, deleted_reason = manual, and is_latest =
+// false on the given score ID. Deliberate removal from active tracking — it
+// does NOT promote any other score for the same media to is_latest. See
+// store.DeletedReasonManual for why this never conflicts with max_history
+// gardening in SaveScore.
 func (s *SQLiteStore) SoftDeleteScore(ctx context.Context, scoreID int) error {
-	return errors.New("not implemented")
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE scores
+		 SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), deleted_reason = ?, is_latest = 0
+		 WHERE id = ? AND deleted_at IS NULL`,
+		store.DeletedReasonManual, scoreID,
+	)
+	if err != nil {
+		return fmt.Errorf("soft-deleting score %d: %w", scoreID, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("reading rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("score %d: %w", scoreID, store.ErrScoreNotFound)
+	}
+	return nil
 }
 
 // Prune hard-deletes all soft-deleted score rows and any media entries with no

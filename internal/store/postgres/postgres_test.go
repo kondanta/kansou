@@ -548,3 +548,157 @@ func TestConfigImpact(t *testing.T) {
 		t.Fatalf("second epoch: got %+v, want h2 with 1 entry", got[1])
 	}
 }
+
+func TestScoreHistory(t *testing.T) {
+	s := requireStore(t)
+	ctx := context.Background()
+
+	a := insertMedia(t, s, 1, "Show A", "ANIME", []string{"Action"})
+	older := insertScore(t, s, a, 6.0, "h1", day(1), false)
+	newer := insertScore(t, s, a, 8.0, "h1", day(2), true)
+	insertDimensionScores(t, s, older, []dimFixture{{Key: "story", Label: "Story", Score: score(6.0)}})
+	insertDimensionScores(t, s, newer, []dimFixture{{Key: "story", Label: "Story", Score: score(8.0)}})
+
+	got, err := s.ScoreHistory(ctx, 1)
+	if err != nil {
+		t.Fatalf("ScoreHistory: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d scores, want 2: %+v", len(got), got)
+	}
+	// Ordered scored_at DESC — newest first.
+	if got[0].FinalScore != 8.0 || got[1].FinalScore != 6.0 {
+		t.Errorf("order: got %.1f, %.1f — want 8.0, 6.0 (newest first)", got[0].FinalScore, got[1].FinalScore)
+	}
+	if len(got[0].Breakdown) != 1 || got[0].Breakdown[0].DimensionKey != "story" {
+		t.Errorf("expected full breakdown to be populated: %+v", got[0].Breakdown)
+	}
+}
+
+func TestListLatest(t *testing.T) {
+	s := requireStore(t)
+	ctx := context.Background()
+
+	a := insertMedia(t, s, 1, "Show A", "ANIME", []string{"Action"})
+	b := insertMedia(t, s, 2, "Show B", "ANIME", []string{"Drama"})
+	insertScore(t, s, a, 6.0, "h1", day(1), false) // older, not latest
+	latestA := insertScore(t, s, a, 8.0, "h1", day(20), true)
+	insertDimensionScores(t, s, latestA, []dimFixture{{Key: "story", Label: "Story", Score: score(8.0)}})
+	insertScore(t, s, b, 7.0, "h1", day(15), true)
+
+	got, err := s.ListLatest(ctx)
+	if err != nil {
+		t.Fatalf("ListLatest: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d entries, want 2 (one per media): %+v", len(got), got)
+	}
+	// Ordered scored_at DESC.
+	if got[0].AnilistID != 1 || got[1].AnilistID != 2 {
+		t.Errorf("order: got anilist_ids %d, %d — want 1, 2 (newest first)", got[0].AnilistID, got[1].AnilistID)
+	}
+	if got[0].Breakdown != nil || got[0].ActiveGenres != nil {
+		t.Errorf("ListLatest must not populate Breakdown/ActiveGenres, got %+v", got[0])
+	}
+}
+
+func TestSoftDeleteScore(t *testing.T) {
+	s := requireStore(t)
+	ctx := context.Background()
+
+	a := insertMedia(t, s, 1, "Show A", "ANIME", []string{"Action"})
+	insertScore(t, s, a, 6.0, "h1", day(1), false)
+	latest := insertScore(t, s, a, 8.0, "h1", day(2), true)
+
+	if err := s.SoftDeleteScore(ctx, latest); err != nil {
+		t.Fatalf("SoftDeleteScore: %v", err)
+	}
+
+	// Deliberate delete does NOT promote the older score to is_latest — the
+	// media should disappear from every is_latest-filtered view.
+	latestScore, err := s.LatestScore(ctx, 1)
+	if err != nil {
+		t.Fatalf("LatestScore: %v", err)
+	}
+	if latestScore != nil {
+		t.Errorf("LatestScore: got %+v, want nil (no promotion after deliberate delete)", latestScore)
+	}
+
+	list, err := s.ListLatest(ctx)
+	if err != nil {
+		t.Fatalf("ListLatest: %v", err)
+	}
+	if len(list) != 0 {
+		t.Errorf("ListLatest: got %+v, want empty", list)
+	}
+
+	// The older, never-deleted score must still be reachable via ScoreHistory.
+	history, err := s.ScoreHistory(ctx, 1)
+	if err != nil {
+		t.Fatalf("ScoreHistory: %v", err)
+	}
+	if len(history) != 1 || history[0].FinalScore != 6.0 {
+		t.Fatalf("ScoreHistory: got %+v, want just the older score (6.0)", history)
+	}
+
+	var reason string
+	if err := s.db.Get(&reason, `SELECT deleted_reason FROM scores WHERE id = $1`, latest); err != nil {
+		t.Fatalf("reading deleted_reason: %v", err)
+	}
+	if reason != store.DeletedReasonManual {
+		t.Errorf("deleted_reason: got %q, want %q", reason, store.DeletedReasonManual)
+	}
+}
+
+func TestSoftDeleteScore_NotFoundOrAlreadyDeleted(t *testing.T) {
+	s := requireStore(t)
+	ctx := context.Background()
+
+	if err := s.SoftDeleteScore(ctx, 999999); err == nil {
+		t.Error("expected an error for a nonexistent score ID")
+	}
+
+	a := insertMedia(t, s, 1, "Show A", "ANIME", []string{"Action"})
+	sc := insertScore(t, s, a, 8.0, "h1", day(1), true)
+	if err := s.SoftDeleteScore(ctx, sc); err != nil {
+		t.Fatalf("first delete: %v", err)
+	}
+	if err := s.SoftDeleteScore(ctx, sc); err == nil {
+		t.Error("expected an error deleting an already-deleted score")
+	}
+}
+
+func TestSearchMediaByTitle(t *testing.T) {
+	s := requireStore(t)
+	ctx := context.Background()
+
+	insertMedia(t, s, 1, "Frieren: Beyond Journey's End", "ANIME", []string{"Drama"})
+	insertMedia(t, s, 2, "Attack on Titan", "ANIME", []string{"Action"})
+	insertMedia(t, s, 3, "Berserk", "MANGA", []string{"Action"})
+
+	tests := []struct {
+		name  string
+		query string
+		want  []int // expected AnilistIDs, in order
+	}{
+		{name: "case-insensitive substring match", query: "frieren", want: []int{1}},
+		{name: "matches multiple", query: "o", want: []int{2, 1}}, // "Attack on..." < "Frieren: Beyond..." alphabetically
+		{name: "no match", query: "nonexistent", want: nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := s.SearchMediaByTitle(ctx, tt.query)
+			if err != nil {
+				t.Fatalf("SearchMediaByTitle: %v", err)
+			}
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %d results, want %d: %+v", len(got), len(tt.want), got)
+			}
+			for i, r := range got {
+				if r.AnilistID != tt.want[i] {
+					t.Errorf("result[%d]: got anilist_id %d, want %d", i, r.AnilistID, tt.want[i])
+				}
+			}
+		})
+	}
+}
