@@ -71,6 +71,11 @@ The Vue source lives in the `web/tribbie/` submodule; only the compiled `dist/` 
   - `github.com/swaggo/swag` + `github.com/swaggo/http-swagger` — Swagger generation
   - `github.com/go-chi/httprate` — Per-IP rate limiting on AniList-proxying endpoints
   - Raw `net/http` for AniList GraphQL — no GraphQL client library (see ADR-004)
+  - `github.com/jmoiron/sqlx` — struct scanning for `internal/store` (raw SQL, no ORM)
+  - `github.com/golang-migrate/migrate/v4` — schema migrations for `internal/store`
+  - `modernc.org/sqlite` — pure-Go (no CGO) SQLite driver for `SQLiteStore`
+  - `github.com/jackc/pgx/v5` — Postgres driver/pool for `PostgresStore`
+  - `github.com/testcontainers/testcontainers-go` (+ `modules/postgres`) — **test-only**, spins up a real Postgres container for `internal/store/postgres` integration tests. Never imported outside `_test.go` files; adds nothing to the shipped binary.
 
 If you think a new dependency is justified, stop and ask. Do not `go get` anything not on this list.
 
@@ -243,7 +248,8 @@ If a task seems to require any of the above, stop, explain what you've found, an
 
 A task is complete when:
 1. The code compiles with `go build ./...`
-2. All tests pass with `go test ./...`
+2. All tests pass with `go test -race ./...` (race detection is not optional —
+   run `just ci` or `just ci-local`, never a bare `go test`)
 3. `go vet ./...` produces no output
 4. New exported symbols have GoDoc comments
 5. No new dependencies were added without approval
