@@ -42,9 +42,12 @@ type PostgresStore struct {
 
 // New connects to Postgres, runs migrations, and returns a ready PostgresStore.
 func New(ctx context.Context, cfg PostgresConfig) (*PostgresStore, error) {
-	connStr := buildConnString(cfg)
+	poolCfg, err := buildPoolConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("building postgres config: %w", err)
+	}
 
-	pool, err := pgxpool.New(ctx, connStr)
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		return nil, fmt.Errorf("creating postgres pool: %w", err)
 	}
@@ -65,13 +68,23 @@ func New(ctx context.Context, cfg PostgresConfig) (*PostgresStore, error) {
 	}, nil
 }
 
-func buildConnString(cfg PostgresConfig) string {
+// buildPoolConfig constructs a pgxpool.Config from PostgresConfig without
+// interpolating the password into a string (prevents it surfacing in errors).
+func buildPoolConfig(cfg PostgresConfig) (*pgxpool.Config, error) {
 	port := cfg.Port
 	if port == "" {
 		port = "5432"
 	}
-	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		cfg.Host, port, cfg.User, cfg.Password, cfg.DBName)
+	// Use a DSN without the password so pgx error messages cannot expose it.
+	// The password is set directly on the parsed config struct.
+	dsn := fmt.Sprintf("host=%s port=%s user=%s dbname=%s sslmode=disable",
+		cfg.Host, port, cfg.User, cfg.DBName)
+	poolCfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("parsing postgres config: %w", err)
+	}
+	poolCfg.ConnConfig.Password = cfg.Password
+	return poolCfg, nil
 }
 
 func runMigrations(db *sql.DB) error {

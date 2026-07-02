@@ -3,7 +3,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -101,7 +100,7 @@ scoring session, and publishes the final weighted score back to AniList.`,
 				Password: os.Getenv("POSTGRES_PASSWORD"),
 				DBName:   os.Getenv("POSTGRES_DB"),
 			}
-			s, err := postgres.New(context.Background(), pgcfg)
+			s, err := postgres.New(ctx, pgcfg)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: opening postgres database: %v\n", err)
 				os.Exit(1)
