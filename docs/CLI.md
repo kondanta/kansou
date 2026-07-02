@@ -21,8 +21,25 @@ kansou
 │   └── find <query>             # Search for media on AniList
 ├── score
 │   └── add <query>              # Start a scoring session (includes publish prompt)
-└── db
-    └── prune                    # Hard-delete soft-deleted score records
+├── history                      # List latest scores (requires a database)
+│   ├── show <query>             # Show full breakdown + previous scores
+│   └── delete <query>           # Soft-delete the latest score for an entry
+├── stats [genres|dimensions|history]  # Scoring history statistics (requires a database)
+├── export                       # Export history + stats to a self-contained HTML file
+├── db
+│   └── prune                    # Hard-delete soft-deleted score records
+└── config
+    ├── show                     # Print current scoring config
+    ├── import                   # Import scoring config from a TOML file
+    ├── export                   # Export current scoring config to a TOML file
+    ├── dimension                # All dimension subcommands require a database
+    │   ├── list                 # List all scoring dimensions
+    │   ├── add <key>            # Add a new dimension
+    │   ├── set <key>            # Update a dimension
+    │   └── remove <key>         # Remove a dimension (proportionally rebalances the rest)
+    └── genre                    # All genre subcommands require a database
+        ├── set <genre> <dim> <mult>     # Set a genre's multiplier for a dimension
+        └── remove <genre> [dim]        # Remove a genre's multiplier(s)
 ```
 
 ---
@@ -450,8 +467,187 @@ with no remaining scores (entries whose full history has been pruned away).
 
 ---
 
+## kansou history
 
-## Exit Codes
+List, inspect, or remove entries from your scoring history. **Requires a database**
+(`KANSOU_DB_TYPE` must be set). Returns an error in DBless mode:
+```
+error: history requires a database — set KANSOU_DB_TYPE to enable
+```
+
+### kansou history
+
+```
+kansou history
+```
+
+Lists the latest score for every scored entry, newest first:
+```
+  86: Eighty Six Part 2    ANIME    10.00   2026-06-30
+  Steins;Gate              ANIME     9.80   2026-05-12
+  Berserk                  MANGA     9.20   2026-04-01
+```
+
+### kansou history show \<query\>
+
+```
+kansou history show <query>
+```
+
+`<query>` is either a numeric AniList media ID or a title search string (matched
+case-insensitively against your local history, not against AniList). If a title
+search matches more than one entry, you're prompted to pick one — same pattern as
+`media find`/`score add`'s search picker.
+
+Displays the full per-dimension breakdown for the current score (same layout as
+`score add --breakdown`), followed by any older surviving scores for that entry
+(subject to `max_history`):
+```
+Previous scores:
+  8.90   2026-05-01
+  8.50   2026-03-15
+```
+
+### kansou history delete \<query\>
+
+```
+kansou history delete <query>
+```
+
+Same `<query>` resolution as `show`. Soft-deletes the *latest* score for the
+matched entry — this is a **deliberate removal from active tracking, not an undo**.
+No other score is promoted to take its place; the entry disappears from
+`kansou history`, `kansou stats`, and `GET /history` until you score it again.
+Older scores are kept (subject to `max_history`) and remain reachable via
+`kansou history show`.
+
+**Confirmation prompt:**
+```
+Delete score for <title>? [y/N]:
+```
+
+**Output on success:**
+```
+✓ Score for <title> marked for deletion. Run 'kansou db prune' to permanently remove.
+```
+
+---
+
+## kansou stats
+
+Show statistics computed from your scoring history. **Requires a database.**
+Returns an error in DBless mode:
+```
+error: stats require a database — set KANSOU_DB_TYPE to enable
+```
+
+```
+kansou stats              # one-line summary per category
+kansou stats genres       # genre breakdown, average score by genre, genre×dimension affinity
+kansou stats dimensions   # variance, consistency, correlation, skip rate, weight overrides
+kansou stats history      # most rescored, outliers, config impact
+```
+
+An unrecognized category argument returns an error listing the valid options.
+Tables and simple ASCII bar charts (`─`/`│` characters, no chart library) render
+directly in the terminal. Dimension correlation requires at least 25 shared scored
+entries per pair — pairs below that threshold are silently excluded, and if every
+pair is below threshold the output says so explicitly rather than showing an
+empty table.
+
+---
+
+## kansou export
+
+```
+kansou export [--output kansou-export-YYYY-MM-DD.html]
+```
+
+Generates a single, self-contained HTML file with charts (genre breakdown, score by
+genre, dimension variance) and tables (correlation, skip rate, weight overrides, most
+rescored, outliers, config impact, and a sortable table of every entry). The file
+embeds Chart.js inline — no network access or server is needed to view it.
+
+**Requires a database.** Returns an error in DBless mode:
+```
+error: export requires a database — set KANSOU_DB_TYPE to enable
+```
+
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--output` | `kansou-export-YYYY-MM-DD.html` | Output file path |
+
+**Output on success:**
+```
+✓ Export written to kansou-export-2026-07-02.html
+```
+
+---
+
+## kansou config
+
+View and edit scoring configuration (dimensions, genres, weights, scalars).
+
+```
+kansou config show
+kansou config import [--file config.toml]
+kansou config export [--file config.toml]
+kansou config dimension list
+kansou config dimension add <key> --label X --weight Y [--description Z] [--bias-resistant]
+kansou config dimension set <key> [--label X] [--weight Y] [--description Z] [--bias-resistant]
+kansou config dimension remove <key>
+kansou config genre set <genre> <dimension> <multiplier>
+kansou config genre remove <genre> [<dimension>]
+```
+
+### kansou config show
+
+Prints the current scoring config — from the database if one is configured, from
+`config.toml` otherwise. Works in both DB and DBless mode.
+
+### kansou config import / export
+
+Work in **both** DB and DBless mode:
+- `import` reads and validates a TOML file, then makes it the active config
+  (`SaveScoringConfig` in DB mode; writes to the resolved config path in DBless mode).
+  Errors clearly if the given `--file` doesn't exist — it does not silently fall back
+  to built-in defaults the way normal config loading does.
+- `export` writes the current active config out to a TOML file via `config.Write`.
+
+### kansou config dimension \*
+
+**All `dimension` subcommands require a database.**
+
+- `list` — prints every dimension's key, label, and weight.
+- `add <key>` — adds a new dimension. `--label` and `--weight` (must be > 0) are
+  required. If the resulting set of weights doesn't sum to 1.0, the command refuses
+  to save and explains the current sum — it does not auto-adjust other dimensions.
+  Reduce another dimension's weight first with `dimension set` if you need headroom,
+  or use `config export` → hand-edit → `config import` for a multi-field rebalance in
+  one atomic step.
+- `set <key>` — updates one or more fields on an existing dimension. Only flags you
+  pass are changed. Same immediate weight-sum validation as `add`.
+- `remove <key>` — removes a dimension **and proportionally redistributes its weight
+  across the remaining dimensions** (based on their current relative weights), so the
+  total keeps summing to 1.0 automatically — this is the one exception to `add`/`set`'s
+  "refuse and let the user fix it" rule, because removal inherently changes more than
+  one dimension's weight and there's no single-field edit that could satisfy the same
+  rule on its own. Refuses to remove the last remaining dimension. Warns (but does not
+  block) if the dimension has scored entries in current history — removing it does not
+  delete that data, but future stats silently exclude it.
+
+### kansou config genre \*
+
+**All `genre` subcommands require a database.**
+
+- `set <genre> <dimension> <multiplier>` — sets one genre/dimension multiplier.
+  `multiplier` must be > 0 and ≤ the configured `max_multiplier`.
+- `remove <genre> [dimension]` — removes one genre/dimension multiplier, or every
+  multiplier for that genre if `dimension` is omitted.
+
+---
 
 | Code | Meaning |
 |------|---------|
@@ -485,8 +681,14 @@ read-only AniList operations that do not require authentication).
 
 ## Session Model
 
-`kansou` CLI is stateless between invocations. Each `score add` run is a
-complete session: search → score → optional publish. There is no cross-invocation
-state and no queuing or history.
+`kansou` CLI is stateless *within* a session — each `score add` run is a complete
+loop: search → score → optional publish. See `ADR-002` for the original v1
+rationale.
 
-This is a v1 constraint. See `ADR-002` for context.
+**In database mode**, cross-invocation state does exist: `score add` pre-fills
+dimension prompts from your previous score (`LatestScore`), and `history`/`stats`/
+`export` read accumulated data across every past invocation. This is deliberate,
+additive persistence layered on top of the original stateless design (ADR-027–034)
+— it does not change how a single `score add` session itself behaves. **DBless mode
+is unaffected** and matches the original v1 model exactly: no cross-invocation state,
+no history, no stats.

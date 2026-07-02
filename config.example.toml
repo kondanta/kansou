@@ -204,21 +204,14 @@ world_building = 1.2
 pacing = 1.1
 
 # ---------------------------------------------------------------
-# Server (kansou serve) — DEPRECATED
+# Server (kansou serve)
 #
-# Port and CORS are now configured via environment variables:
+# There is no [server] section. Port and CORS are configured via
+# environment variables instead (ADR-030):
 #   KANSOU_PORT          — port to listen on (default: 8080)
 #   KANSOU_CORS_ORIGINS  — comma-separated allowed origins
 #
-# The [server] block below is ignored at runtime. It will be removed
-# in the next major version. Remove it from your config.toml to
-# silence the deprecation warning.
+# If you have an old config.toml with a [server] block, it is ignored
+# at runtime and a deprecation warning is printed — remove it to
+# silence the warning. See docs/CONFIG.md.
 # ---------------------------------------------------------------
-
-# [server]
-# port = 8080
-# cors_allowed_origins = [
-#     "http://localhost:3000",
-#     "http://localhost:5173",
-#     "http://localhost:8080",
-# ]

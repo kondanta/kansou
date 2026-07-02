@@ -12,7 +12,10 @@ It fetches media metadata from AniList (via GraphQL), prompts the user for per-d
 applies a weighted + genre-adjusted scoring formula, and writes the final score back to AniList.
 
 It is a single binary with two modes: CLI and REST server (`--serve`).
-There is no local persistence in v1. All state is in-memory for the duration of a session.
+Local persistence (scoring history, stats, HTML export) is opt-in via the
+`KANSOU_DB_TYPE` environment variable (SQLite or Postgres) — see ADR-027–034
+and `docs/CONFIG.md`. With it unset, kansou runs exactly as it always has:
+stateless, all state in-memory for the duration of a session.
 
 ---
 
@@ -27,12 +30,26 @@ kansou/
 │   ├── root.go              # App struct, Execute(), PersistentPreRunE, newEngine
 │   ├── serve.go             # serve subcommand
 │   ├── media.go             # media subcommands + rendering helpers
-│   └── score.go             # score subcommands + breakdown rendering
+│   ├── score.go             # score subcommands + breakdown rendering
+│   ├── history.go           # history subcommands (list/show/delete) — requires a database
+│   ├── stats.go             # stats subcommands + ASCII chart rendering — requires a database
+│   ├── export.go            # export subcommand — requires a database
+│   ├── dbcmd.go             # db prune subcommand — requires a database
+│   └── configcmd.go         # config subcommands (show/import/export/dimension/genre)
 ├── internal/
 │   ├── anilist/             # AniList GraphQL client
 │   ├── config/              # Config loader, validator, defaults
 │   ├── scoring/             # Scoring engine: weights, multipliers, formula
 │   ├── logger/              # Structured logging setup (log/slog wrappers)
+│   ├── store/               # Optional persistence (KANSOU_DB_TYPE). See ADR-027/028.
+│   │   ├── store.go         # Store interface + shared result types
+│   │   ├── migrations/{sqlite,postgres}/  # golang-migrate schema, embedded
+│   │   ├── sqlite/          # SQLiteStore (modernc.org/sqlite, no CGO)
+│   │   └── postgres/        # PostgresStore (jackc/pgx/v5)
+│   ├── stats/               # Aggregation layer over Store — no SQL of its own
+│   ├── export/              # Self-contained HTML export (template.html + embedded Chart.js)
+│   │   └── static/
+│   │       └── chart.4.4.4.min.js  # Pinned Chart.js build, embedded via go:embed
 │   └── server/              # REST server (chi router + handlers)
 │       └── web/
 │           └── index.html   # Legacy single-file UI (fallback)
@@ -51,6 +68,12 @@ kansou/
 ├── CLAUDE.md                # This file
 └── go.mod                   # module github.com/kondanta/kansou
 ```
+
+`internal/store/`, `internal/stats/`, and `internal/export/` are all optional at
+runtime (`KANSOU_DB_TYPE` unset ⇒ `Store` is `nil`) but not optional in the
+codebase — they ship in every build. Every command/handler that depends on a
+`Store` checks for `nil` explicitly and returns a clear error; there is no
+DBless no-op `Store` implementation.
 
 `internal/` is intentional. Nothing inside it is importable by external packages. Keep it that way.
 

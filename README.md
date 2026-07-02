@@ -15,6 +15,7 @@ Fetches media metadata from [AniList](https://anilist.co), walks you through a s
 - **Skippable dimensions** — enter `s` at any prompt to mark a dimension as N/A
 - **Full provenance** — every result carries a per-dimension audit trail and a config hash
 - **REST server** — same logic over HTTP for a web frontend, with Swagger UI included
+- **Optional scoring history** — persist every session to SQLite or Postgres and unlock `history`, `stats`, `export`, and DB-backed config editing (see [Scoring History (optional)](#scoring-history-optional) below)
 
 ---
 
@@ -146,6 +147,11 @@ Commands:
   media find <query>    Search AniList and display media info
   score add <query>     Start an interactive scoring session (includes publish prompt)
   serve                 Start the REST server
+  history               List/show/delete scoring history (requires KANSOU_DB_TYPE)
+  stats                 Scoring history statistics (requires KANSOU_DB_TYPE)
+  export                Export history + stats to a self-contained HTML file (requires KANSOU_DB_TYPE)
+  db prune              Hard-delete soft-deleted score records (requires KANSOU_DB_TYPE)
+  config                View/edit scoring config (dimension/genre subcommands require KANSOU_DB_TYPE)
 
 Global flags:
   --config <path>       Config file path (default: ~/.config/kansou/config.toml)
@@ -181,6 +187,33 @@ kansou media find --url https://anilist.co/anime/457
 
 ---
 
+## Scoring History (optional)
+
+Set `KANSOU_DB_TYPE` to `sqlite` or `postgres` to persist every scoring session
+and unlock history, stats, export, and database-backed config editing. Unset
+(the default), kansou is fully stateless — nothing in this section applies.
+
+```bash
+export KANSOU_DB_TYPE=sqlite   # or postgres, with POSTGRES_HOST/USER/PASSWORD/DB set
+
+kansou history                 # latest score per entry, newest first
+kansou history show "frieren"  # full breakdown + previous scores
+kansou history delete "..."    # remove the latest score from active tracking
+kansou stats                   # one-line summary per category
+kansou stats dimensions        # variance, consistency, correlation, ...
+kansou export                  # self-contained HTML export with charts
+kansou db prune                # permanently remove soft-deleted score records
+kansou config show             # works with or without a database
+kansou config dimension add pacing --label Pacing --weight 0.1
+```
+
+Rescoring an entry you've already scored pre-fills each dimension prompt with
+its previous value. See [`docs/CLI.md`](docs/CLI.md) for every subcommand and
+[`docs/CONFIG.md`](docs/CONFIG.md) for the full environment variable
+reference and `max_history` retention semantics.
+
+---
+
 ## REST Server
 
 ```bash
@@ -199,9 +232,18 @@ kansou serve --live-config          # enables GET /config and POST /config
 | `POST` | `/score` | Calculate a weighted score |
 | `POST` | `/score/publish` | Publish a score to AniList |
 | `GET` | `/config` † | Return current mutable config as JSON (with `config_hash`) |
-| `POST` | `/config` † | Replace mutable config, reload engine, write config to disk |
+| `POST` | `/config` † | Replace mutable config, reload engine, persist to DB or disk |
+| `GET` | `/db-info` | Always available — reports active DB backend or DBless status |
+| `GET` | `/history` ‡ | Latest score per entry, newest first |
+| `GET` | `/history/{anilist_id}` ‡ | All non-deleted scores for one entry, full breakdown |
+| `DELETE` | `/history/{score_id}` ‡ | Soft-delete one score by its row ID |
+| `GET` | `/stats` ‡ | One-line summary per category |
+| `GET` | `/stats/genres` ‡ | Genre breakdown, score by genre, genre×dimension affinity |
+| `GET` | `/stats/dimensions` ‡ | Variance, consistency, correlation, skip rate, weight overrides |
+| `GET` | `/stats/history` ‡ | Most rescored, outliers, config impact |
 
 † Only available when `--live-config` is set. Requires a writable config file path. See [`docs/CONFIG.md`](docs/CONFIG.md#runtime-config-editing---live-config).
+‡ Requires `KANSOU_DB_TYPE` to be set — returns HTTP 503 otherwise. See [Scoring History (optional)](#scoring-history-optional).
 
 Swagger UI: `http://localhost:8080/swagger/index.html`
 
@@ -216,6 +258,13 @@ All errors return `{ "error": "description" }`.
 | `ANILIST_TOKEN` | For write ops | AniList user token |
 | `LOG_LEVEL` | No | `debug`, `info`, `warn`, `error` (default: `info`) |
 | `NO_COLOR` | No | Set to disable coloured CLI log output |
+| `KANSOU_DB_TYPE` | No | `sqlite` or `postgres` — enables persistent history. Unset = fully stateless (DBless). |
+| `KANSOU_DB_PATH` | No | SQLite file path (default: `~/.local/share/kansou/kansou.db`). Only used when `KANSOU_DB_TYPE=sqlite`. |
+| `POSTGRES_HOST`/`PORT`/`USER`/`PASSWORD`/`DB` | If postgres | Postgres connection parameters. Password is never logged. |
+| `KANSOU_PORT` | No | REST server port (default: `8080`). Overridden by `--port`. Replaces the deprecated `[server]` config section. |
+| `KANSOU_CORS_ORIGINS` | No | Comma-separated CORS allowed origins. Replaces the deprecated `[server]` config section. |
+
+Full reference, including `max_history` retention semantics: [`docs/CONFIG.md`](docs/CONFIG.md).
 
 ---
 
@@ -227,12 +276,18 @@ just build-release  # build with git version stamp
 just test           # run tests
 just test-race      # run tests with race detector
 just vet            # go vet
-just check          # build + test + vet (full definition-of-done gate)
+just lint           # golangci-lint
+just ci             # build + test (race) + vet + lint — full definition-of-done gate
+just ci-local       # same as ci, but forces a fresh, uncached test run
 just swagger        # regenerate Swagger docs after handler changes
 just run -- <args>  # run via go run
 just serve          # start server via go run
 just clean          # remove built binary
 ```
+
+`internal/store/postgres` tests use a real, ephemeral Postgres container via
+[testcontainers-go](https://golang.testcontainers.org/) — they skip cleanly
+(not fail) when Docker isn't running.
 
 ---
 
