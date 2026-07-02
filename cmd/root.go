@@ -163,6 +163,7 @@ scoring session, and publishes the final weighted score back to AniList.`,
 	rootCmd.AddCommand(app.statsCmd())
 	rootCmd.AddCommand(app.historyCmd())
 	rootCmd.AddCommand(app.configCmd())
+	rootCmd.AddCommand(app.exportCmd())
 
 	exitCode := 0
 	if err := rootCmd.Execute(); err != nil {

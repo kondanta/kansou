@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>kansou export — {{.GeneratedAt}}</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #14161a;
+    --panel: #1d2026;
+    --border: #2c303a;
+    --text: #e4e6eb;
+    --muted: #9aa0ac;
+    --accent: #7c9eff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    margin: 0;
+    padding: 2rem;
+  }
+  h1 { margin-bottom: 0.25rem; }
+  .subtitle { color: var(--muted); margin-top: 0; margin-bottom: 2rem; }
+  section {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+  h2 { margin-top: 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; cursor: pointer; user-select: none; }
+  th:hover { color: var(--accent); }
+  .chart-wrap { max-width: 700px; margin-bottom: 1rem; }
+  .muted { color: var(--muted); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<h1>kansou export</h1>
+<p class="subtitle">Generated {{.GeneratedAt}}</p>
+
+<section>
+  <h2>Genres</h2>
+  <div class="grid">
+    <div class="chart-wrap"><canvas id="genreBreakdownChart"></canvas></div>
+    <div class="chart-wrap"><canvas id="scoreByGenreChart"></canvas></div>
+  </div>
+  {{if .Genres.Affinity}}
+  <h3>Genre × dimension affinity</h3>
+  <table>
+    <tr><th>Genre</th><th>Strongest dimension</th><th>Avg score</th></tr>
+    {{range .Genres.Affinity}}{{if .Dimensions}}
+    <tr><td>{{.Genre}}</td><td>{{(index .Dimensions 0).Label}}</td><td>{{printf "%.2f" (index .Dimensions 0).AvgScore}}</td></tr>
+    {{end}}{{end}}
+  </table>
+  {{end}}
+</section>
+
+<section>
+  <h2>Dimensions</h2>
+  <div class="chart-wrap"><canvas id="varianceChart"></canvas></div>
+  {{if .Dimensions.ScoringConsistency}}
+  <p>Overall consistency: avg std dev <strong>{{printf "%.2f" .Dimensions.ScoringConsistency.AvgStdDev}}</strong> across {{.Dimensions.ScoringConsistency.Count}} dimensions</p>
+  {{end}}
+
+  <h3>Correlation</h3>
+  {{if .Dimensions.CorrelationInsufficient}}
+  <p class="muted">Insufficient data — at least 25 shared scored entries required per dimension pair.</p>
+  {{else}}
+  <table>
+    <tr><th>Dimension A</th><th>Dimension B</th><th>Correlation</th></tr>
+    {{range .Dimensions.DimensionCorrelation}}
+    <tr><td>{{.DimensionA}}</td><td>{{.DimensionB}}</td><td>{{printf "%+.2f" .Correlation}}</td></tr>
+    {{end}}
+  </table>
+  {{end}}
+
+  {{if .Dimensions.SkippedDimensions}}
+  <h3>Skip rate by media type</h3>
+  <table>
+    <tr><th>Dimension</th><th>Media type</th><th>Skipped</th><th>Total</th></tr>
+    {{range .Dimensions.SkippedDimensions}}
+    <tr><td>{{.Label}}</td><td>{{.MediaType}}</td><td>{{.SkipCount}}</td><td>{{.TotalCount}}</td></tr>
+    {{end}}
+  </table>
+  {{end}}
+
+  {{if .Dimensions.WeightOverrides}}
+  <h3>Weight override frequency</h3>
+  <table>
+    <tr><th>Dimension</th><th>Times overridden</th></tr>
+    {{range .Dimensions.WeightOverrides}}
+    <tr><td>{{.Label}}</td><td>{{.OverrideCount}}</td></tr>
+    {{end}}
+  </table>
+  {{end}}
+</section>
+
+<section>
+  <h2>History</h2>
+  {{if .History.MostRescored}}
+  <h3>Most rescored</h3>
+  <table>
+    <tr><th>Title</th><th>Times scored</th><th>Latest score</th></tr>
+    {{range .History.MostRescored}}
+    <tr><td>{{.TitleRomaji}}</td><td>{{.ScoreCount}}</td><td>{{printf "%.2f" .LatestScore}}</td></tr>
+    {{end}}
+  </table>
+  {{end}}
+
+  {{if .History.Outliers}}
+  <h3>Outliers (&gt;2 std devs from your personal average)</h3>
+  <table>
+    <tr><th>Title</th><th>Dimension</th><th>Score</th><th>Personal avg</th><th>Deviation</th></tr>
+    {{range .History.Outliers}}
+    <tr><td>{{.TitleRomaji}}</td><td>{{.Label}}</td><td>{{printf "%.1f" .Score}}</td><td>{{printf "%.2f" .PersonalAvg}}</td><td>{{printf "%+.1f" .Deviation}}</td></tr>
+    {{end}}
+  </table>
+  {{end}}
+
+  {{if .History.ConfigImpact}}
+  <h3>Config impact (chronological)</h3>
+  <table>
+    <tr><th>Config hash</th><th>Entries</th><th>Avg score</th><th>First scored</th><th>Last scored</th></tr>
+    {{range .History.ConfigImpact}}
+    <tr><td>{{printf "%.8s" .ConfigHash}}</td><td>{{.EntryCount}}</td><td>{{printf "%.2f" .AvgScore}}</td><td>{{formatDate .FirstScoredAt}}</td><td>{{formatDate .LastScoredAt}}</td></tr>
+    {{end}}
+  </table>
+  {{end}}
+</section>
+
+<section>
+  <h2>All entries</h2>
+  <table id="entriesTable">
+    <thead>
+      <tr>
+        <th data-sort="string">Title</th>
+        <th data-sort="string">Type</th>
+        <th data-sort="string">Format</th>
+        <th data-sort="number">Score</th>
+        <th data-sort="string">Scored at</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Entries}}
+      <tr>
+        <td>{{.TitleRomaji}}</td>
+        <td>{{.MediaType}}</td>
+        <td>{{.Format}}</td>
+        <td>{{printf "%.2f" .FinalScore}}</td>
+        <td>{{formatDate .ScoredAt}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</section>
+
+<script>{{.ChartJS}}</script>
+<script>
+(function() {
+  Chart.defaults.color = "#e4e6eb";
+  Chart.defaults.borderColor = "#2c303a";
+
+  function barChart(canvasId, data) {
+    var el = document.getElementById(canvasId);
+    if (!el || !data.labels || !data.labels.length) return;
+    new Chart(el, {
+      type: "bar",
+      data: data,
+      options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+    });
+  }
+
+  barChart("genreBreakdownChart", {{.GenreBreakdownJSON}});
+  barChart("scoreByGenreChart", {{.ScoreByGenreJSON}});
+  barChart("varianceChart", {{.DimensionVarianceJSON}});
+
+  // Minimal click-to-sort for the entries table.
+  var table = document.getElementById("entriesTable");
+  if (table) {
+    table.querySelectorAll("th[data-sort]").forEach(function(th, colIndex) {
+      var asc = true;
+      th.addEventListener("click", function() {
+        var tbody = table.querySelector("tbody");
+        var rows = Array.prototype.slice.call(tbody.querySelectorAll("tr"));
+        var type = th.getAttribute("data-sort");
+        rows.sort(function(a, b) {
+          var av = a.children[colIndex].textContent.trim();
+          var bv = b.children[colIndex].textContent.trim();
+          if (type === "number") { av = parseFloat(av); bv = parseFloat(bv); }
+          if (av < bv) return asc ? -1 : 1;
+          if (av > bv) return asc ? 1 : -1;
+          return 0;
+        });
+        rows.forEach(function(r) { tbody.appendChild(r); });
+        asc = !asc;
+      });
+    });
+  }
+})();
+</script>
+</body>
+</html>
