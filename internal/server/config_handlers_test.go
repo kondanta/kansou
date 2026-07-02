@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"github.com/kondanta/kansou/internal/anilist"
 	"github.com/kondanta/kansou/internal/config"
 	"github.com/kondanta/kansou/internal/scoring"
+	"github.com/kondanta/kansou/internal/store/sqlite"
 )
 
 // minimalConfig returns a valid *config.Config with two dimensions summing to 1.0.
@@ -217,6 +219,73 @@ func TestHandlePostConfig_WritesToDisk(t *testing.T) {
 	if reloaded.Dimensions["story"].Label != "Story Updated" {
 		t.Errorf("disk not updated: got label %q, want %q",
 			reloaded.Dimensions["story"].Label, "Story Updated")
+	}
+}
+
+// TestHandlePostConfig_DBMode_PersistsToStore_NotDisk is a regression test
+// for the bug HISTORY_IMPL.md Chunk 8 calls out explicitly: handlePostConfig
+// used to always write to disk, even in DB mode, so a live config change over
+// HTTP silently didn't persist to the database and got clobbered on the next
+// restart by LoadScoringConfig. This exercises the real fix with a real
+// on-disk SQLite store, not a fake — the whole point is proving the write
+// actually lands in the database and the file is left untouched.
+func TestHandlePostConfig_DBMode_PersistsToStore_NotDisk(t *testing.T) {
+	path := writeConfigFile(t)
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading fixture config file: %v", err)
+	}
+
+	dbPath := filepath.Join(t.TempDir(), "kansou.db")
+	st, err := sqlite.New(dbPath)
+	if err != nil {
+		t.Fatalf("opening store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	cfg := minimalConfig()
+	if err := st.SaveScoringConfig(context.Background(), cfg); err != nil {
+		t.Fatalf("seeding db config: %v", err)
+	}
+	eng := minimalEngine(cfg)
+	srv := New(cfg, anilist.NewClient(), eng, true, path, st, "sqlite", nil)
+
+	body := configPayload{
+		Dimensions: map[string]configDimensionEntry{
+			"story": {Label: "Story Updated In DB", Description: "Narrative quality", Weight: 0.55},
+			"fun":   {Label: "Fun", Description: "Enjoyment", Weight: 0.45},
+		},
+		Genres:             map[string]map[string]float64{},
+		PrimaryGenreWeight: config.DefaultPrimaryGenreWeight,
+		MaxMultiplier:      config.DefaultMaxMultiplier,
+	}
+	b, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPost, "/config", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// The database must reflect the update.
+	reloaded, err := st.LoadScoringConfig(context.Background())
+	if err != nil {
+		t.Fatalf("reloading config from db: %v", err)
+	}
+	if reloaded.Dimensions["story"].Label != "Story Updated In DB" {
+		t.Errorf("db not updated: got label %q, want %q",
+			reloaded.Dimensions["story"].Label, "Story Updated In DB")
+	}
+
+	// The config file on disk must be untouched — this is the actual bug.
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading config file after request: %v", err)
+	}
+	if string(before) != string(after) {
+		t.Error("config file was modified in DB mode — handlePostConfig should persist to the store, not disk")
 	}
 }
 
