@@ -14,6 +14,7 @@ import (
 	"github.com/kondanta/kansou/internal/anilist"
 	"github.com/kondanta/kansou/internal/config"
 	"github.com/kondanta/kansou/internal/scoring"
+	"github.com/kondanta/kansou/internal/store"
 )
 
 // scoreCmd returns the `score` cobra command and its subcommands.
@@ -46,7 +47,7 @@ Enter 's' or 'skip' to mark a dimension as not applicable.
 After scoring, prompts whether to publish the result to AniList.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return a.runScoreAdd(args, urlFlag, typeFlag, breakdownFlag, weightFlag, primaryGenreFlag, notesFlag)
+			return a.runScoreAdd(cmd.Context(), args, urlFlag, typeFlag, breakdownFlag, weightFlag, primaryGenreFlag, notesFlag)
 		},
 	}
 
@@ -68,6 +69,7 @@ After scoring, prompts whether to publish the result to AniList.`,
 // runScoreAdd fetches the media entry, runs the interactive prompt loop,
 // calculates the score, and offers to publish it to AniList.
 func (a *App) runScoreAdd(
+	ctx context.Context,
 	args []string, urlFlag, typeFlag string, breakdown bool, weightFlag, primaryGenreFlag string, notesFlag bool,
 ) error {
 	mediaType, err := resolveMediaType(typeFlag)
@@ -100,6 +102,19 @@ func (a *App) runScoreAdd(
 		fmt.Printf("Genres: %s\n\n", strings.Join(media.Genres, ", "))
 	}
 
+	var prevScores map[string]float64
+	var prevSkipped map[string]bool
+	if a.Store != nil {
+		prev, prevErr := a.Store.LatestScore(ctx, media.ID)
+		if prevErr != nil {
+			return fmt.Errorf("fetching previous score: %w", prevErr)
+		}
+		if prev != nil {
+			prevScores, prevSkipped = extractPrevScores(prev)
+			fmt.Printf("Previous score: %.2f — pre-filling dimensions\n\n", prev.FinalScore)
+		}
+	}
+
 	reader := bufio.NewReader(os.Stdin)
 
 	primaryGenre, err := resolvePrimaryGenre(primaryGenreFlag, media.Genres, reader)
@@ -116,9 +131,14 @@ func (a *App) runScoreAdd(
 
 	fmt.Println("Score each dimension from 1 to 10. Decimals accepted (e.g. 7.5).")
 	fmt.Println("Enter 's' or 'skip' to mark a dimension as not applicable.")
+	if len(prevScores) > 0 || len(prevSkipped) > 0 {
+		fmt.Println("Press Enter to keep the previous value for a dimension.")
+	}
 	fmt.Println()
 
-	scores, skipped, err := runScoringLoop(reader, a.Config.DimensionOrder, a.Config.Dimensions, overrides)
+	scores, skipped, err := runScoringLoop(
+		reader, a.Config.DimensionOrder, a.Config.Dimensions, overrides, prevScores, prevSkipped,
+	)
 	if errors.Is(err, errUserCancelled) {
 		return nil
 	}
@@ -156,7 +176,7 @@ func (a *App) runScoreAdd(
 	}
 
 	if a.Store != nil {
-		if saveErr := a.Store.SaveScore(context.Background(), result, a.Config, a.Config.MaxHistory); saveErr != nil {
+		if saveErr := a.Store.SaveScore(ctx, result, a.Config, a.Config.MaxHistory); saveErr != nil {
 			fmt.Fprintf(os.Stderr, "warning: saving score to database: %v\n", saveErr)
 		}
 	}
@@ -225,13 +245,21 @@ func runScoringLoop(
 	order []string,
 	dims map[string]config.DimensionDef,
 	overrides map[string]float64,
+	prevScores map[string]float64,
+	prevSkipped map[string]bool,
 ) (map[string]float64, map[string]bool, error) {
 	scores := make(map[string]float64, len(order))
 	skipped := make(map[string]bool)
 
 	for _, key := range order {
 		def := dims[key]
-		fmt.Printf("  %-15s— %s\n", def.Label, def.Description)
+		hint := ""
+		if prevSkipped[key] {
+			hint = " [prev: skipped]"
+		} else if prev, ok := prevScores[key]; ok {
+			hint = fmt.Sprintf(" [prev: %.1f]", prev)
+		}
+		fmt.Printf("  %-15s— %s%s\n", def.Label, def.Description, hint)
 
 		for {
 			fmt.Print("  > ")
@@ -241,6 +269,27 @@ func runScoringLoop(
 				return nil, nil, errUserCancelled
 			}
 			input := strings.TrimSpace(line)
+
+			if input == "" {
+				if prevSkipped[key] {
+					if _, overridden := overrides[key]; overridden {
+						return nil, nil, fmt.Errorf(
+							"dimension %q was both weight-overridden and skipped — these are mutually exclusive",
+							key,
+						)
+					}
+					skipped[key] = true
+					fmt.Printf("  ✓ %s marked as not applicable — excluded from score\n\n", def.Label)
+					break
+				}
+				if prev, ok := prevScores[key]; ok {
+					scores[key] = prev
+					fmt.Println()
+					break
+				}
+				fmt.Println("  invalid: enter a number between 1 and 10, or 's' to skip")
+				continue
+			}
 
 			if input == "s" || input == "skip" {
 				if _, overridden := overrides[key]; overridden {
@@ -271,6 +320,21 @@ func runScoringLoop(
 	}
 
 	return scores, skipped, nil
+}
+
+// extractPrevScores converts a store.Score into the two maps consumed by
+// runScoringLoop for dimension pre-fill.
+func extractPrevScores(sc *store.Score) (map[string]float64, map[string]bool) {
+	scores := make(map[string]float64, len(sc.Breakdown))
+	skipped := make(map[string]bool)
+	for _, row := range sc.Breakdown {
+		if row.Skipped {
+			skipped[row.DimensionKey] = true
+		} else if row.Score != nil {
+			scores[row.DimensionKey] = *row.Score
+		}
+	}
+	return scores, skipped
 }
 
 // parseWeightFlag parses the --weight flag string into a map of dimension key → weight.

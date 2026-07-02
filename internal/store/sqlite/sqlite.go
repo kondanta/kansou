@@ -385,9 +385,159 @@ func boolToInt(b bool) int {
 	return 0
 }
 
+// scoreRow is the scanning target for the scores+media JOIN query.
+// ScoredAt is TEXT (ISO 8601) in SQLite; callers parse it via time.RFC3339.
+type scoreRow struct {
+	ID                 int      `db:"id"`
+	MediaID            int      `db:"media_id"`
+	TitleRomaji        string   `db:"title_romaji"`
+	TitleEnglish       string   `db:"title_english"`
+	MediaType          string   `db:"media_type"`
+	Format             string   `db:"format"`
+	FinalScore         float64  `db:"final_score"`
+	PrimaryGenre       *string  `db:"primary_genre"`
+	PrimaryGenreWeight *float64 `db:"primary_genre_weight"`
+	ConfigHash         string   `db:"config_hash"`
+	IsLatest           bool     `db:"is_latest"`
+	ScoredAt           string   `db:"scored_at"`
+	UserSelectedGenres *string  `db:"user_selected_genres"` // JSON text; nil when SQL NULL
+}
+
+// dimRow is the scanning target for dimension_scores queries.
+type dimRow struct {
+	DimensionKey      string   `db:"dimension_key"`
+	Label             string   `db:"label"`
+	Score             *float64 `db:"score"`
+	BaseWeight        float64  `db:"base_weight"`
+	FinalWeight       float64  `db:"final_weight"`
+	AppliedMultiplier float64  `db:"applied_multiplier"`
+	Contribution      *float64 `db:"contribution"`
+	Skipped           bool     `db:"skipped"`
+	BiasResistant     bool     `db:"bias_resistant"`
+	WeightOverride    bool     `db:"weight_override"`
+	GenreDeselected   bool     `db:"genre_deselected"`
+}
+
+// matchRow is the scanning target for score_matched_genres queries.
+type matchRow struct {
+	Genre     string `db:"genre"`
+	IsPrimary bool   `db:"is_primary"`
+}
+
 // LatestScore returns the most recent non-deleted score for a given AniList media ID.
+// Returns nil, nil when no score exists for the given ID.
 func (s *SQLiteStore) LatestScore(ctx context.Context, anilistID int) (*Score, error) {
-	return nil, errors.New("not implemented")
+	const q = `SELECT s.id, s.media_id, m.title_romaji, m.title_english, m.media_type, m.format,
+	                  s.final_score, s.primary_genre, s.primary_genre_weight, s.config_hash,
+	                  s.is_latest, s.scored_at, s.user_selected_genres
+	           FROM scores s
+	           JOIN media m ON m.id = s.media_id
+	           WHERE m.anilist_id = ? AND s.is_latest = 1 AND s.deleted_at IS NULL
+	           LIMIT 1`
+	var row scoreRow
+	if err := s.db.GetContext(ctx, &row, q, anilistID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("fetching latest score: %w", err)
+	}
+	return s.assembleScore(ctx, anilistID, &row)
+}
+
+// assembleScore loads sub-tables and builds a complete store.Score from a scoreRow.
+// Used by LatestScore and ScoreHistory.
+func (s *SQLiteStore) assembleScore(ctx context.Context, anilistID int, row *scoreRow) (*Score, error) {
+	scoredAt, err := time.Parse(time.RFC3339, row.ScoredAt)
+	if err != nil {
+		return nil, fmt.Errorf("parsing scored_at %q: %w", row.ScoredAt, err)
+	}
+	genres, err := s.fetchMediaGenres(ctx, row.MediaID)
+	if err != nil {
+		return nil, err
+	}
+	breakdown, err := s.fetchDimensionScores(ctx, row.ID)
+	if err != nil {
+		return nil, err
+	}
+	activeGenres, err := s.fetchMatchedGenres(ctx, row.ID)
+	if err != nil {
+		return nil, err
+	}
+	var userSelectedGenres []string
+	if row.UserSelectedGenres != nil {
+		if err := json.Unmarshal([]byte(*row.UserSelectedGenres), &userSelectedGenres); err != nil {
+			return nil, fmt.Errorf("decoding user_selected_genres: %w", err)
+		}
+	}
+	sc := &Score{
+		ID:                 row.ID,
+		AnilistID:          anilistID,
+		TitleRomaji:        row.TitleRomaji,
+		TitleEnglish:       row.TitleEnglish,
+		MediaType:          row.MediaType,
+		Format:             row.Format,
+		Genres:             genres,
+		FinalScore:         row.FinalScore,
+		ConfigHash:         row.ConfigHash,
+		IsLatest:           row.IsLatest,
+		ScoredAt:           scoredAt,
+		Breakdown:          breakdown,
+		ActiveGenres:       activeGenres,
+		UserSelectedGenres: userSelectedGenres,
+	}
+	if row.PrimaryGenre != nil {
+		sc.PrimaryGenre = *row.PrimaryGenre
+	}
+	if row.PrimaryGenreWeight != nil {
+		sc.PrimaryGenreWeight = *row.PrimaryGenreWeight
+	}
+	return sc, nil
+}
+
+// fetchMediaGenres returns the genre list for a media row.
+func (s *SQLiteStore) fetchMediaGenres(ctx context.Context, mediaID int) ([]string, error) {
+	var genres []string
+	const q = `SELECT genre FROM media_genres WHERE media_id = ? ORDER BY genre`
+	if err := s.db.SelectContext(ctx, &genres, q, mediaID); err != nil {
+		return nil, fmt.Errorf("fetching media genres: %w", err)
+	}
+	return genres, nil
+}
+
+// fetchDimensionScores returns the breakdown rows for a score.
+func (s *SQLiteStore) fetchDimensionScores(ctx context.Context, scoreID int) ([]store.DimensionScoreRow, error) {
+	const q = `SELECT dimension_key, label, score, base_weight, final_weight, applied_multiplier,
+	                  contribution, skipped, bias_resistant, weight_override, genre_deselected
+	           FROM dimension_scores WHERE score_id = ?`
+	var rows []dimRow
+	if err := s.db.SelectContext(ctx, &rows, q, scoreID); err != nil {
+		return nil, fmt.Errorf("fetching dimension scores: %w", err)
+	}
+	result := make([]store.DimensionScoreRow, len(rows))
+	for i, r := range rows {
+		result[i] = store.DimensionScoreRow{
+			DimensionKey: r.DimensionKey, Label: r.Label, Score: r.Score,
+			BaseWeight: r.BaseWeight, FinalWeight: r.FinalWeight,
+			AppliedMultiplier: r.AppliedMultiplier, Contribution: r.Contribution,
+			Skipped: r.Skipped, BiasResistant: r.BiasResistant,
+			WeightOverride: r.WeightOverride, GenreDeselected: r.GenreDeselected,
+		}
+	}
+	return result, nil
+}
+
+// fetchMatchedGenres returns the active genre rows for a score.
+func (s *SQLiteStore) fetchMatchedGenres(ctx context.Context, scoreID int) ([]store.MatchedGenreRow, error) {
+	const q = `SELECT genre, is_primary FROM score_matched_genres WHERE score_id = ?`
+	var rows []matchRow
+	if err := s.db.SelectContext(ctx, &rows, q, scoreID); err != nil {
+		return nil, fmt.Errorf("fetching matched genres: %w", err)
+	}
+	result := make([]store.MatchedGenreRow, len(rows))
+	for i, r := range rows {
+		result[i] = store.MatchedGenreRow{Genre: r.Genre, IsPrimary: r.IsPrimary}
+	}
+	return result, nil
 }
 
 // ScoreHistory returns all non-deleted scores for a given AniList media ID.
