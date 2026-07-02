@@ -594,65 +594,401 @@ func (s *PostgresStore) LastPruneAt(ctx context.Context) (*time.Time, error) {
 	return &t, nil
 }
 
-// GenreBreakdown returns the count and percentage of entries per genre.
+// GenreBreakdown returns the count and percentage of entries per genre,
+// computed over each media's full AniList genre list (not just genres that
+// actively participated in multiplier calculation — see GenreDimensionAffinity
+// for that). Percentage is relative to the total number of latest, non-deleted
+// scores; since a media entry can have multiple genres, percentages do not sum
+// to 100.
 func (s *PostgresStore) GenreBreakdown(ctx context.Context) ([]store.GenreStat, error) {
-	return nil, errors.New("not implemented")
+	var total int
+	const totalQ = `SELECT COUNT(*) FROM scores WHERE is_latest = TRUE AND deleted_at IS NULL`
+	if err := s.db.GetContext(ctx, &total, totalQ); err != nil {
+		return nil, fmt.Errorf("counting latest scores: %w", err)
+	}
+	if total == 0 {
+		return nil, nil
+	}
+
+	type row struct {
+		Genre string `db:"genre"`
+		Count int    `db:"cnt"`
+	}
+	const q = `SELECT mg.genre AS genre, COUNT(DISTINCT s.id) AS cnt
+	           FROM media_genres mg
+	           JOIN media m ON m.id = mg.media_id
+	           JOIN scores s ON s.media_id = m.id
+	           WHERE s.is_latest = TRUE AND s.deleted_at IS NULL
+	           GROUP BY mg.genre
+	           ORDER BY cnt DESC`
+	var rows []row
+	if err := s.db.SelectContext(ctx, &rows, q); err != nil {
+		return nil, fmt.Errorf("fetching genre breakdown: %w", err)
+	}
+
+	result := make([]store.GenreStat, len(rows))
+	for i, r := range rows {
+		result[i] = store.GenreStat{
+			Genre: r.Genre, Count: r.Count,
+			Percentage: float64(r.Count) / float64(total) * 100,
+		}
+	}
+	return result, nil
 }
 
-// ScoreByGenre returns the average final score per genre.
+// ScoreByGenre returns the average final score per genre, computed over each
+// media's full AniList genre list.
 func (s *PostgresStore) ScoreByGenre(ctx context.Context) ([]store.GenreScore, error) {
-	return nil, errors.New("not implemented")
+	type row struct {
+		Genre    string  `db:"genre"`
+		AvgScore float64 `db:"avg_score"`
+		Count    int     `db:"cnt"`
+	}
+	const q = `SELECT mg.genre AS genre, AVG(s.final_score) AS avg_score, COUNT(*) AS cnt
+	           FROM media_genres mg
+	           JOIN media m ON m.id = mg.media_id
+	           JOIN scores s ON s.media_id = m.id
+	           WHERE s.is_latest = TRUE AND s.deleted_at IS NULL
+	           GROUP BY mg.genre
+	           ORDER BY avg_score DESC`
+	var rows []row
+	if err := s.db.SelectContext(ctx, &rows, q); err != nil {
+		return nil, fmt.Errorf("fetching score by genre: %w", err)
+	}
+	result := make([]store.GenreScore, len(rows))
+	for i, r := range rows {
+		result[i] = store.GenreScore{Genre: r.Genre, AvgScore: r.AvgScore, Count: r.Count}
+	}
+	return result, nil
 }
 
-// GenreDimensionAffinity returns average dimension scores grouped by genre.
+// GenreDimensionAffinity returns average dimension scores grouped by genre,
+// restricted to genres that actively participated in multiplier calculation
+// (score_matched_genres) rather than the media's full genre list.
 func (s *PostgresStore) GenreDimensionAffinity(ctx context.Context) ([]store.GenreDimensionAffinity, error) {
-	return nil, errors.New("not implemented")
+	type row struct {
+		Genre        string  `db:"genre"`
+		DimensionKey string  `db:"dimension_key"`
+		Label        string  `db:"label"`
+		AvgScore     float64 `db:"avg_score"`
+	}
+	const q = `SELECT smg.genre, ds.dimension_key, ds.label, AVG(ds.score) AS avg_score
+	           FROM score_matched_genres smg
+	           JOIN dimension_scores ds ON ds.score_id = smg.score_id
+	           JOIN scores s ON s.id = smg.score_id
+	           WHERE s.is_latest = TRUE AND s.deleted_at IS NULL AND ds.skipped = FALSE
+	           GROUP BY smg.genre, ds.dimension_key, ds.label
+	           ORDER BY smg.genre, avg_score DESC`
+	var rows []row
+	if err := s.db.SelectContext(ctx, &rows, q); err != nil {
+		return nil, fmt.Errorf("fetching genre dimension affinity: %w", err)
+	}
+
+	result := make([]store.GenreDimensionAffinity, 0)
+	index := make(map[string]int)
+	for _, r := range rows {
+		i, ok := index[r.Genre]
+		if !ok {
+			i = len(result)
+			index[r.Genre] = i
+			result = append(result, store.GenreDimensionAffinity{Genre: r.Genre})
+		}
+		result[i].Dimensions = append(result[i].Dimensions, store.DimensionAvg{
+			DimensionKey: r.DimensionKey, Label: r.Label, AvgScore: r.AvgScore,
+		})
+	}
+	return result, nil
 }
 
-// DimensionVariance returns the standard deviation of scores per dimension.
+// DimensionVariance returns the standard deviation of scores per dimension
+// across all latest, non-deleted, non-skipped entries, using Postgres's
+// native population standard deviation aggregate.
 func (s *PostgresStore) DimensionVariance(ctx context.Context) ([]store.DimensionVarianceStat, error) {
-	return nil, errors.New("not implemented")
+	type row struct {
+		DimensionKey string  `db:"dimension_key"`
+		Label        string  `db:"label"`
+		StdDev       float64 `db:"std_dev"`
+		AvgScore     float64 `db:"avg_score"`
+		Count        int     `db:"cnt"`
+	}
+	const q = `SELECT ds.dimension_key, ds.label, STDDEV_POP(ds.score) AS std_dev,
+	                  AVG(ds.score) AS avg_score, COUNT(*) AS cnt
+	           FROM dimension_scores ds
+	           JOIN scores s ON s.id = ds.score_id
+	           WHERE s.is_latest = TRUE AND s.deleted_at IS NULL AND ds.skipped = FALSE
+	           GROUP BY ds.dimension_key, ds.label
+	           ORDER BY ds.dimension_key`
+	var rows []row
+	if err := s.db.SelectContext(ctx, &rows, q); err != nil {
+		return nil, fmt.Errorf("fetching dimension variance: %w", err)
+	}
+	result := make([]store.DimensionVarianceStat, len(rows))
+	for i, r := range rows {
+		result[i] = store.DimensionVarianceStat{
+			DimensionKey: r.DimensionKey, Label: r.Label, StdDev: r.StdDev,
+			AvgScore: r.AvgScore, Count: r.Count,
+		}
+	}
+	return result, nil
 }
 
-// ScoringConsistency returns the average standard deviation across all dimensions.
+// ScoringConsistency returns the average standard deviation across all
+// dimensions — a single number representing overall scoring consistency.
+// Count is the number of dimensions included in the average; dimensions with
+// zero scored entries are excluded rather than counted as zero-variance.
+// Returns nil, nil when no dimension has any scored entries yet.
 func (s *PostgresStore) ScoringConsistency(ctx context.Context) (*store.ConsistencyStat, error) {
-	return nil, errors.New("not implemented")
+	const q = `SELECT AVG(std_dev) AS avg_std_dev, COUNT(*) AS cnt
+	           FROM (
+	               SELECT STDDEV_POP(ds.score) AS std_dev
+	               FROM dimension_scores ds
+	               JOIN scores s ON s.id = ds.score_id
+	               WHERE s.is_latest = TRUE AND s.deleted_at IS NULL AND ds.skipped = FALSE
+	               GROUP BY ds.dimension_key
+	           ) sub`
+	var res struct {
+		AvgStdDev *float64 `db:"avg_std_dev"`
+		Count     int      `db:"cnt"`
+	}
+	if err := s.db.GetContext(ctx, &res, q); err != nil {
+		return nil, fmt.Errorf("computing scoring consistency: %w", err)
+	}
+	if res.Count == 0 || res.AvgStdDev == nil {
+		return nil, nil
+	}
+	return &store.ConsistencyStat{AvgStdDev: *res.AvgStdDev, Count: res.Count}, nil
 }
 
-// DimensionCorrelation returns Pearson correlation coefficients between dimension pairs.
+// DimensionCorrelation returns Pearson correlation coefficients between
+// dimension pairs, using Postgres's native CORR aggregate. Pairs with fewer
+// than 25 shared scored entries are excluded via HAVING — enforced per pair,
+// not as a global sample count, since a user may have plenty of total entries
+// but few where both dimensions in a given pair were actually scored.
 func (s *PostgresStore) DimensionCorrelation(ctx context.Context) ([]store.DimensionCorrelationStat, error) {
-	return nil, errors.New("not implemented")
+	type row struct {
+		DimA        string  `db:"dim_a"`
+		DimB        string  `db:"dim_b"`
+		Correlation float64 `db:"correlation"`
+	}
+	const q = `SELECT a.dimension_key AS dim_a, b.dimension_key AS dim_b, CORR(a.score, b.score) AS correlation
+	           FROM dimension_scores a
+	           JOIN dimension_scores b ON a.score_id = b.score_id
+	           JOIN scores s ON s.id = a.score_id
+	           WHERE s.deleted_at IS NULL AND s.is_latest = TRUE
+	             AND a.skipped = FALSE AND b.skipped = FALSE
+	             AND a.dimension_key < b.dimension_key
+	           GROUP BY a.dimension_key, b.dimension_key
+	           HAVING COUNT(*) >= 25`
+	var rows []row
+	if err := s.db.SelectContext(ctx, &rows, q); err != nil {
+		return nil, fmt.Errorf("computing dimension correlation: %w", err)
+	}
+	result := make([]store.DimensionCorrelationStat, len(rows))
+	for i, r := range rows {
+		result[i] = store.DimensionCorrelationStat{DimensionA: r.DimA, DimensionB: r.DimB, Correlation: r.Correlation}
+	}
+	return result, nil
 }
 
-// SkippedDimensions returns how often each dimension is skipped by media type.
+// SkippedDimensions returns how often each dimension is skipped, split by
+// media type (ANIME/MANGA), across all latest, non-deleted entries.
 func (s *PostgresStore) SkippedDimensions(ctx context.Context) ([]store.SkippedDimStat, error) {
-	return nil, errors.New("not implemented")
+	type row struct {
+		DimensionKey string `db:"dimension_key"`
+		Label        string `db:"label"`
+		MediaType    string `db:"media_type"`
+		SkipCount    int    `db:"skip_count"`
+		TotalCount   int    `db:"total_count"`
+	}
+	const q = `SELECT ds.dimension_key, ds.label, m.media_type,
+	                  SUM(CASE WHEN ds.skipped THEN 1 ELSE 0 END) AS skip_count,
+	                  COUNT(*) AS total_count
+	           FROM dimension_scores ds
+	           JOIN scores s ON s.id = ds.score_id
+	           JOIN media m ON m.id = s.media_id
+	           WHERE s.is_latest = TRUE AND s.deleted_at IS NULL
+	           GROUP BY ds.dimension_key, ds.label, m.media_type
+	           ORDER BY ds.dimension_key, m.media_type`
+	var rows []row
+	if err := s.db.SelectContext(ctx, &rows, q); err != nil {
+		return nil, fmt.Errorf("fetching skipped dimensions: %w", err)
+	}
+	result := make([]store.SkippedDimStat, len(rows))
+	for i, r := range rows {
+		result[i] = store.SkippedDimStat{
+			DimensionKey: r.DimensionKey, Label: r.Label, MediaType: r.MediaType,
+			SkipCount: r.SkipCount, TotalCount: r.TotalCount,
+		}
+	}
+	return result, nil
 }
 
-// WeightOverrides returns how often each dimension has been weight-overridden.
+// WeightOverrides returns how often each dimension has been weight-overridden
+// via the --weight flag, across all latest, non-deleted entries.
 func (s *PostgresStore) WeightOverrides(ctx context.Context) ([]store.WeightOverrideStat, error) {
-	return nil, errors.New("not implemented")
+	type row struct {
+		DimensionKey  string `db:"dimension_key"`
+		Label         string `db:"label"`
+		OverrideCount int    `db:"override_count"`
+	}
+	const q = `SELECT ds.dimension_key, ds.label, COUNT(*) AS override_count
+	           FROM dimension_scores ds
+	           JOIN scores s ON s.id = ds.score_id
+	           WHERE s.is_latest = TRUE AND s.deleted_at IS NULL AND ds.weight_override = TRUE
+	           GROUP BY ds.dimension_key, ds.label
+	           ORDER BY override_count DESC`
+	var rows []row
+	if err := s.db.SelectContext(ctx, &rows, q); err != nil {
+		return nil, fmt.Errorf("fetching weight overrides: %w", err)
+	}
+	result := make([]store.WeightOverrideStat, len(rows))
+	for i, r := range rows {
+		result[i] = store.WeightOverrideStat{DimensionKey: r.DimensionKey, Label: r.Label, OverrideCount: r.OverrideCount}
+	}
+	return result, nil
 }
 
-// MostRescored returns entries ordered by rescore count descending.
+// MostRescored returns entries ordered by rescore count descending. Counts
+// all non-deleted scores per media, not just is_latest — rescore count is a
+// historical fact independent of which score currently holds is_latest.
 func (s *PostgresStore) MostRescored(ctx context.Context) ([]store.RescoredStat, error) {
-	return nil, errors.New("not implemented")
+	type row struct {
+		AnilistID     int       `db:"anilist_id"`
+		TitleRomaji   string    `db:"title_romaji"`
+		ScoreCount    int       `db:"score_count"`
+		LatestScore   float64   `db:"latest_score"`
+		FirstScoredAt time.Time `db:"first_scored_at"`
+		LastScoredAt  time.Time `db:"last_scored_at"`
+	}
+	const q = `SELECT m.anilist_id, m.title_romaji, COUNT(*) AS score_count,
+	                  MAX(CASE WHEN s.is_latest THEN s.final_score END) AS latest_score,
+	                  MIN(s.scored_at) AS first_scored_at, MAX(s.scored_at) AS last_scored_at
+	           FROM scores s
+	           JOIN media m ON m.id = s.media_id
+	           WHERE s.deleted_at IS NULL
+	           GROUP BY m.id, m.anilist_id, m.title_romaji
+	           ORDER BY score_count DESC`
+	var rows []row
+	if err := s.db.SelectContext(ctx, &rows, q); err != nil {
+		return nil, fmt.Errorf("fetching most rescored: %w", err)
+	}
+	result := make([]store.RescoredStat, len(rows))
+	for i, r := range rows {
+		result[i] = store.RescoredStat{
+			AnilistID: r.AnilistID, TitleRomaji: r.TitleRomaji, ScoreCount: r.ScoreCount,
+			LatestScore: r.LatestScore, FirstScoredAt: r.FirstScoredAt, LastScoredAt: r.LastScoredAt,
+		}
+	}
+	return result, nil
 }
 
-// Outliers returns entries with dimension scores deviating more than 2 std devs.
+// Outliers returns entries where a dimension score deviates more than 2
+// population standard deviations from the user's personal average for that
+// dimension (computed over all latest, non-deleted, non-skipped scores).
+// Deviation is signed: positive means the score is above the personal
+// average, negative means below.
 func (s *PostgresStore) Outliers(ctx context.Context) ([]store.OutlierStat, error) {
-	return nil, errors.New("not implemented")
+	type row struct {
+		AnilistID    int       `db:"anilist_id"`
+		TitleRomaji  string    `db:"title_romaji"`
+		ScoreID      int       `db:"score_id"`
+		ScoredAt     time.Time `db:"scored_at"`
+		DimensionKey string    `db:"dimension_key"`
+		Label        string    `db:"label"`
+		Score        float64   `db:"score"`
+		PersonalAvg  float64   `db:"personal_avg"`
+		Deviation    float64   `db:"deviation"`
+	}
+	const q = `WITH dim_stats AS (
+	               SELECT ds.dimension_key, AVG(ds.score) AS avg_score, STDDEV_POP(ds.score) AS std_dev
+	               FROM dimension_scores ds
+	               JOIN scores s ON s.id = ds.score_id
+	               WHERE s.is_latest = TRUE AND s.deleted_at IS NULL AND ds.skipped = FALSE
+	               GROUP BY ds.dimension_key
+	           )
+	           SELECT m.anilist_id, m.title_romaji, s.id AS score_id, s.scored_at,
+	                  ds.dimension_key, ds.label, ds.score,
+	                  dst.avg_score AS personal_avg,
+	                  (ds.score - dst.avg_score) / NULLIF(dst.std_dev, 0) AS deviation
+	           FROM dimension_scores ds
+	           JOIN scores s ON s.id = ds.score_id
+	           JOIN media m ON m.id = s.media_id
+	           JOIN dim_stats dst ON dst.dimension_key = ds.dimension_key
+	           WHERE s.is_latest = TRUE AND s.deleted_at IS NULL AND ds.skipped = FALSE
+	             AND dst.std_dev > 0
+	             AND ABS(ds.score - dst.avg_score) > 2 * dst.std_dev
+	           ORDER BY ABS(ds.score - dst.avg_score) DESC`
+	var rows []row
+	if err := s.db.SelectContext(ctx, &rows, q); err != nil {
+		return nil, fmt.Errorf("fetching outliers: %w", err)
+	}
+	result := make([]store.OutlierStat, len(rows))
+	for i, r := range rows {
+		result[i] = store.OutlierStat{
+			AnilistID: r.AnilistID, TitleRomaji: r.TitleRomaji, ScoreID: r.ScoreID,
+			ScoredAt: r.ScoredAt, DimensionKey: r.DimensionKey, Label: r.Label,
+			Score: r.Score, PersonalAvg: r.PersonalAvg, Deviation: r.Deviation,
+		}
+	}
+	return result, nil
 }
 
-// ConfigImpact returns average score before and after each config change.
+// ConfigImpact returns average score data grouped by config_hash, ordered
+// chronologically by first_scored_at. Each row is one "config epoch" — the
+// caller diffs adjacent rows to see how a config change affected scores.
+// Includes all non-deleted scores, not just is_latest, since a config change
+// occurring mid-history is exactly what this stat exists to surface.
 func (s *PostgresStore) ConfigImpact(ctx context.Context) ([]store.ConfigImpactStat, error) {
-	return nil, errors.New("not implemented")
+	type row struct {
+		ConfigHash    string    `db:"config_hash"`
+		EntryCount    int       `db:"entry_count"`
+		AvgScore      float64   `db:"avg_score"`
+		FirstScoredAt time.Time `db:"first_scored_at"`
+		LastScoredAt  time.Time `db:"last_scored_at"`
+	}
+	const q = `SELECT config_hash, COUNT(*) AS entry_count, AVG(final_score) AS avg_score,
+	                  MIN(scored_at) AS first_scored_at, MAX(scored_at) AS last_scored_at
+	           FROM scores
+	           WHERE deleted_at IS NULL
+	           GROUP BY config_hash
+	           ORDER BY first_scored_at ASC`
+	var rows []row
+	if err := s.db.SelectContext(ctx, &rows, q); err != nil {
+		return nil, fmt.Errorf("fetching config impact: %w", err)
+	}
+	result := make([]store.ConfigImpactStat, len(rows))
+	for i, r := range rows {
+		result[i] = store.ConfigImpactStat{
+			ConfigHash: r.ConfigHash, EntryCount: r.EntryCount, AvgScore: r.AvgScore,
+			FirstScoredAt: r.FirstScoredAt, LastScoredAt: r.LastScoredAt,
+		}
+	}
+	return result, nil
 }
 
 // Close closes the underlying pool and database connection.
+// closeTimeout bounds how long Close waits for pgxpool to release and
+// destroy every connection. pgxpool.Pool.Close blocks until all connections
+// are returned to the pool — if a connection is ever leaked or its
+// underlying socket hangs mid-teardown, that call blocks forever with no
+// way to cancel it. Since Close runs on the CLI's exit path (see
+// cmd/root.go), an unbounded hang here would hang the whole program.
+const closeTimeout = 5 * time.Second
+
 func (s *PostgresStore) Close() error {
 	err := s.db.Close()
-	s.pool.Close()
+
+	done := make(chan struct{})
+	go func() {
+		s.pool.Close()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(closeTimeout):
+		// The process is exiting either way; a lingering pool teardown
+		// goroutine is harmless once the OS reclaims the socket.
+	}
 	return err
 }
 
