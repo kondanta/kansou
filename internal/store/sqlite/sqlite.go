@@ -6,6 +6,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -223,11 +224,165 @@ func (s *SQLiteStore) SaveScoringConfig(ctx context.Context, cfg *config.Config)
 	return tx.Commit()
 }
 
-// SaveScore saves a completed scoring session atomically across all four tables.
-// Implemented in Chunk 2 — requires SessionMeta.Format and SessionMeta.UserSelectedGenres
-// to be added to internal/scoring/types.go first.
+// SaveScore saves a completed scoring session atomically across all four tables:
+// media, scores, dimension_scores, and score_matched_genres.
 func (s *SQLiteStore) SaveScore(ctx context.Context, result scoring.Result, cfg *config.Config, maxHistory int) error {
-	return errors.New("not implemented")
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("beginning transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// Upsert media row — titles and format may change across rescores.
+	const mediaQ = `INSERT INTO media (anilist_id, title_romaji, title_english, media_type, format, updated_at)
+	                VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+	                ON CONFLICT(anilist_id) DO UPDATE SET
+	                    title_romaji  = excluded.title_romaji,
+	                    title_english = excluded.title_english,
+	                    media_type    = excluded.media_type,
+	                    format        = excluded.format,
+	                    updated_at    = excluded.updated_at`
+	if _, err := tx.ExecContext(ctx, mediaQ,
+		result.Meta.MediaID,
+		result.Meta.TitleRomaji,
+		result.Meta.TitleEnglish,
+		string(result.Meta.MediaType),
+		result.Meta.Format,
+	); err != nil {
+		return fmt.Errorf("upserting media: %w", err)
+	}
+
+	var mediaRowID int
+	if err := tx.GetContext(ctx, &mediaRowID,
+		`SELECT id FROM media WHERE anilist_id = ?`, result.Meta.MediaID,
+	); err != nil {
+		return fmt.Errorf("fetching media row id: %w", err)
+	}
+
+	// Replace media genres — the genre list can change between AniList syncs.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM media_genres WHERE media_id = ?`, mediaRowID); err != nil {
+		return fmt.Errorf("clearing media genres: %w", err)
+	}
+	const mgQ = `INSERT OR IGNORE INTO media_genres (media_id, genre) VALUES (?, ?)`
+	for _, g := range result.Meta.AllGenres {
+		if _, err := tx.ExecContext(ctx, mgQ, mediaRowID, g); err != nil {
+			return fmt.Errorf("inserting media genre %q: %w", g, err)
+		}
+	}
+
+	snapshotBytes, err := json.Marshal(store.BuildConfigSnapshot(cfg))
+	if err != nil {
+		return fmt.Errorf("marshalling config snapshot: %w", err)
+	}
+
+	var userSelectedGenresStr *string
+	if len(result.Meta.UserSelectedGenres) > 0 {
+		usgBytes, marshalErr := json.Marshal(result.Meta.UserSelectedGenres)
+		if marshalErr != nil {
+			return fmt.Errorf("marshalling user_selected_genres: %w", marshalErr)
+		}
+		usg := string(usgBytes)
+		userSelectedGenresStr = &usg
+	}
+
+	var primaryGenreStr *string
+	if result.Meta.PrimaryGenre != "" {
+		pg := result.Meta.PrimaryGenre
+		primaryGenreStr = &pg
+	}
+
+	var primaryGenreWeightPtr *float64
+	if result.Meta.PrimaryGenre != "" {
+		pgw := result.Meta.PrimaryGenreWeight
+		primaryGenreWeightPtr = &pgw
+	}
+
+	// Unset is_latest on the previous latest score before inserting the new one.
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE scores SET is_latest = 0 WHERE media_id = ? AND is_latest = 1`,
+		mediaRowID,
+	); err != nil {
+		return fmt.Errorf("unsetting previous is_latest: %w", err)
+	}
+
+	const scoreQ = `INSERT INTO scores
+	                    (media_id, final_score, primary_genre, primary_genre_weight,
+	                     config_hash, config_snapshot, user_selected_genres, is_latest)
+	                VALUES (?, ?, ?, ?, ?, ?, ?, 1)`
+	scoreRes, err := tx.ExecContext(ctx, scoreQ,
+		mediaRowID,
+		result.FinalScore,
+		primaryGenreStr,
+		primaryGenreWeightPtr,
+		result.Meta.ConfigHash,
+		string(snapshotBytes),
+		userSelectedGenresStr,
+	)
+	if err != nil {
+		return fmt.Errorf("inserting score: %w", err)
+	}
+	scoreID, err := scoreRes.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("getting score id: %w", err)
+	}
+
+	const dimQ = `INSERT INTO dimension_scores
+	                  (score_id, dimension_key, label, score, base_weight, final_weight,
+	                   applied_multiplier, contribution, skipped, bias_resistant, weight_override, genre_deselected)
+	              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	for _, row := range result.Breakdown {
+		var scoreVal, contribVal *float64
+		if !row.Skipped {
+			sv, cv := row.Score, row.Contribution
+			scoreVal, contribVal = &sv, &cv
+		}
+		if _, err := tx.ExecContext(ctx, dimQ,
+			scoreID, row.Key, row.Label,
+			scoreVal, row.BaseWeight, row.FinalWeight, row.AppliedMultiplier, contribVal,
+			boolToInt(row.Skipped), boolToInt(row.BiasResistant),
+			boolToInt(row.WeightOverride), boolToInt(row.GenreDeselected),
+		); err != nil {
+			return fmt.Errorf("inserting dimension score %q: %w", row.Key, err)
+		}
+	}
+
+	const matchQ = `INSERT INTO score_matched_genres (score_id, genre, is_primary) VALUES (?, ?, ?)`
+	primaryLower := strings.ToLower(result.Meta.PrimaryGenre)
+	for _, genre := range result.Meta.GenresActive {
+		isPrimary := primaryLower != "" && genre == primaryLower
+		if _, err := tx.ExecContext(ctx, matchQ, scoreID, genre, boolToInt(isPrimary)); err != nil {
+			return fmt.Errorf("inserting matched genre %q: %w", genre, err)
+		}
+	}
+
+	// Apply max_history retention: 0 = keep 1 (latest only), N = keep N, -1 = keep all.
+	if maxHistory >= 0 {
+		keepCount := maxHistory
+		if keepCount == 0 {
+			keepCount = 1
+		}
+		const pruneQ = `UPDATE scores
+		                SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+		                WHERE media_id = ? AND deleted_at IS NULL
+		                  AND id NOT IN (
+		                      SELECT id FROM scores
+		                      WHERE media_id = ? AND deleted_at IS NULL
+		                      ORDER BY scored_at DESC LIMIT ?
+		                  )`
+		if _, err := tx.ExecContext(ctx, pruneQ, mediaRowID, mediaRowID, keepCount); err != nil {
+			return fmt.Errorf("applying max_history: %w", err)
+		}
+	}
+
+	return tx.Commit()
+}
+
+// boolToInt converts a bool to 1 or 0 for SQLite INTEGER columns.
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // LatestScore returns the most recent non-deleted score for a given AniList media ID.

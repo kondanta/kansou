@@ -6,8 +6,10 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	migrate "github.com/golang-migrate/migrate/v4"
@@ -213,10 +215,150 @@ func (s *PostgresStore) SaveScoringConfig(ctx context.Context, cfg *config.Confi
 	return tx.Commit()
 }
 
-// SaveScore saves a completed scoring session atomically across all four tables.
-// Implemented in Chunk 2 — requires SessionMeta.Format and SessionMeta.UserSelectedGenres.
+// SaveScore saves a completed scoring session atomically across all four tables:
+// media, scores, dimension_scores, and score_matched_genres.
 func (s *PostgresStore) SaveScore(ctx context.Context, result scoring.Result, cfg *config.Config, maxHistory int) error {
-	return errors.New("not implemented")
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("beginning transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// Upsert media row — titles and format may change across rescores.
+	const mediaQ = `INSERT INTO media (anilist_id, title_romaji, title_english, media_type, format, updated_at)
+	                VALUES ($1, $2, $3, $4, $5, NOW())
+	                ON CONFLICT (anilist_id) DO UPDATE SET
+	                    title_romaji  = EXCLUDED.title_romaji,
+	                    title_english = EXCLUDED.title_english,
+	                    media_type    = EXCLUDED.media_type,
+	                    format        = EXCLUDED.format,
+	                    updated_at    = NOW()`
+	if _, err := tx.ExecContext(ctx, mediaQ,
+		result.Meta.MediaID,
+		result.Meta.TitleRomaji,
+		result.Meta.TitleEnglish,
+		string(result.Meta.MediaType),
+		result.Meta.Format,
+	); err != nil {
+		return fmt.Errorf("upserting media: %w", err)
+	}
+
+	var mediaRowID int
+	if err := tx.GetContext(ctx, &mediaRowID,
+		`SELECT id FROM media WHERE anilist_id = $1`, result.Meta.MediaID,
+	); err != nil {
+		return fmt.Errorf("fetching media row id: %w", err)
+	}
+
+	// Replace media genres — the genre list can change between AniList syncs.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM media_genres WHERE media_id = $1`, mediaRowID); err != nil {
+		return fmt.Errorf("clearing media genres: %w", err)
+	}
+	const mgQ = `INSERT INTO media_genres (media_id, genre) VALUES ($1, $2) ON CONFLICT DO NOTHING`
+	for _, g := range result.Meta.AllGenres {
+		if _, err := tx.ExecContext(ctx, mgQ, mediaRowID, g); err != nil {
+			return fmt.Errorf("inserting media genre %q: %w", g, err)
+		}
+	}
+
+	snapshotBytes, err := json.Marshal(store.BuildConfigSnapshot(cfg))
+	if err != nil {
+		return fmt.Errorf("marshalling config snapshot: %w", err)
+	}
+
+	var userSelectedGenresBytes []byte
+	if len(result.Meta.UserSelectedGenres) > 0 {
+		userSelectedGenresBytes, err = json.Marshal(result.Meta.UserSelectedGenres)
+		if err != nil {
+			return fmt.Errorf("marshalling user_selected_genres: %w", err)
+		}
+	}
+
+	var primaryGenreStr *string
+	if result.Meta.PrimaryGenre != "" {
+		pg := result.Meta.PrimaryGenre
+		primaryGenreStr = &pg
+	}
+
+	var primaryGenreWeightPtr *float64
+	if result.Meta.PrimaryGenre != "" {
+		pgw := result.Meta.PrimaryGenreWeight
+		primaryGenreWeightPtr = &pgw
+	}
+
+	// Unset is_latest on the previous latest score before inserting the new one.
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE scores SET is_latest = FALSE WHERE media_id = $1 AND is_latest = TRUE`,
+		mediaRowID,
+	); err != nil {
+		return fmt.Errorf("unsetting previous is_latest: %w", err)
+	}
+
+	const scoreQ = `INSERT INTO scores
+	                    (media_id, final_score, primary_genre, primary_genre_weight,
+	                     config_hash, config_snapshot, user_selected_genres, is_latest)
+	                VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE) RETURNING id`
+	var scoreID int64
+	if err := tx.QueryRowContext(ctx, scoreQ,
+		mediaRowID,
+		result.FinalScore,
+		primaryGenreStr,
+		primaryGenreWeightPtr,
+		result.Meta.ConfigHash,
+		snapshotBytes,
+		userSelectedGenresBytes,
+	).Scan(&scoreID); err != nil {
+		return fmt.Errorf("inserting score: %w", err)
+	}
+
+	const dimQ = `INSERT INTO dimension_scores
+	                  (score_id, dimension_key, label, score, base_weight, final_weight,
+	                   applied_multiplier, contribution, skipped, bias_resistant, weight_override, genre_deselected)
+	              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
+	for _, row := range result.Breakdown {
+		var scoreVal, contribVal *float64
+		if !row.Skipped {
+			sv, cv := row.Score, row.Contribution
+			scoreVal, contribVal = &sv, &cv
+		}
+		if _, err := tx.ExecContext(ctx, dimQ,
+			scoreID, row.Key, row.Label,
+			scoreVal, row.BaseWeight, row.FinalWeight, row.AppliedMultiplier, contribVal,
+			row.Skipped, row.BiasResistant, row.WeightOverride, row.GenreDeselected,
+		); err != nil {
+			return fmt.Errorf("inserting dimension score %q: %w", row.Key, err)
+		}
+	}
+
+	const matchQ = `INSERT INTO score_matched_genres (score_id, genre, is_primary) VALUES ($1, $2, $3)`
+	primaryLower := strings.ToLower(result.Meta.PrimaryGenre)
+	for _, genre := range result.Meta.GenresActive {
+		isPrimary := primaryLower != "" && genre == primaryLower
+		if _, err := tx.ExecContext(ctx, matchQ, scoreID, genre, isPrimary); err != nil {
+			return fmt.Errorf("inserting matched genre %q: %w", genre, err)
+		}
+	}
+
+	// Apply max_history retention: 0 = keep 1 (latest only), N = keep N, -1 = keep all.
+	if maxHistory >= 0 {
+		keepCount := maxHistory
+		if keepCount == 0 {
+			keepCount = 1
+		}
+		const pruneQ = `UPDATE scores
+		                SET deleted_at = NOW()
+		                WHERE media_id = $1 AND deleted_at IS NULL
+		                  AND id NOT IN (
+		                      SELECT id FROM scores
+		                      WHERE media_id = $1 AND deleted_at IS NULL
+		                      ORDER BY scored_at DESC LIMIT $2
+		                  )`
+		if _, err := tx.ExecContext(ctx, pruneQ, mediaRowID, keepCount); err != nil {
+			return fmt.Errorf("applying max_history: %w", err)
+		}
+	}
+
+	return tx.Commit()
 }
 
 // LatestScore returns the most recent non-deleted score for a given AniList media ID.
