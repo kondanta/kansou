@@ -45,6 +45,11 @@ build-release:
 test:
     go test ./...
 
+# Run all tests bypassing the result cache (always re-executes, e.g. after
+# toggling external state like the Docker daemon that Go's cache can't see)
+test-local:
+    go test -count=1 ./...
+
 # Run tests with verbose output
 test-v:
     go test -v ./...
@@ -52,6 +57,10 @@ test-v:
 # Run tests with race detector
 test-race:
     go test -race ./...
+
+# Run tests with race detector, bypassing the result cache
+test-race-local:
+    go test -race -count=1 ./...
 
 # Run go vet
 vet:
@@ -65,9 +74,13 @@ swagger:
 lint:
     golangci-lint run ./...
 
-# Run the full definition-of-done check: build + test + vet + lint
-ci: build test vet lint
+# Run the full definition-of-done check: build + test (race) + vet + lint
+ci: build test-race vet lint
     @echo "✓ all checks passed"
+
+# Same as `ci` but forces a fresh, uncached test run
+ci-local: build test-race-local vet lint
+    @echo "✓ all checks passed (fresh, no test cache)"
 
 # Remove build artifact
 clean:
