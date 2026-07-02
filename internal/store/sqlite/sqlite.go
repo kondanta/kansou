@@ -555,14 +555,56 @@ func (s *SQLiteStore) SoftDeleteScore(ctx context.Context, scoreID int) error {
 	return errors.New("not implemented")
 }
 
-// Prune hard-deletes all soft-deleted rows. Returns the number of score rows deleted.
+// Prune hard-deletes all soft-deleted score rows and any media entries with no
+// remaining scores. The prune timestamp is recorded in db_metadata before
+// deletion so it survives even if zero rows are deleted.
+// Returns the number of score rows hard-deleted.
 func (s *SQLiteStore) Prune(ctx context.Context) (int64, error) {
-	return 0, errors.New("not implemented")
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("beginning transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	const metaQ = `INSERT OR REPLACE INTO db_metadata (key, value)
+	               VALUES ('last_prune_at', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))`
+	if _, err := tx.ExecContext(ctx, metaQ); err != nil {
+		return 0, fmt.Errorf("recording prune timestamp: %w", err)
+	}
+
+	res, err := tx.ExecContext(ctx, `DELETE FROM scores WHERE deleted_at IS NOT NULL`)
+	if err != nil {
+		return 0, fmt.Errorf("deleting soft-deleted scores: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("reading rows affected: %w", err)
+	}
+
+	const mediaQ = `DELETE FROM media WHERE id NOT IN (SELECT DISTINCT media_id FROM scores)`
+	if _, err := tx.ExecContext(ctx, mediaQ); err != nil {
+		return 0, fmt.Errorf("deleting orphaned media: %w", err)
+	}
+
+	return n, tx.Commit()
 }
 
 // LastPruneAt returns the timestamp of the last prune operation.
+// Returns nil, nil if Prune has never run.
 func (s *SQLiteStore) LastPruneAt(ctx context.Context) (*time.Time, error) {
-	return nil, errors.New("not implemented")
+	var val string
+	err := s.db.GetContext(ctx, &val, `SELECT value FROM db_metadata WHERE key = 'last_prune_at'`)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("fetching last_prune_at: %w", err)
+	}
+	t, err := time.Parse(time.RFC3339, val)
+	if err != nil {
+		return nil, fmt.Errorf("parsing last_prune_at %q: %w", val, err)
+	}
+	return &t, nil
 }
 
 // GenreBreakdown returns the count and percentage of entries per genre.

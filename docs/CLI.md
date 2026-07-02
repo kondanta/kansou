@@ -19,8 +19,10 @@ kansou
 ├── serve                        # Start the REST server
 ├── media
 │   └── find <query>             # Search for media on AniList
-└── score
-    └── add <query>              # Start a scoring session (includes publish prompt)
+├── score
+│   └── add <query>              # Start a scoring session (includes publish prompt)
+└── db
+    └── prune                    # Hard-delete soft-deleted score records
 ```
 
 ---
@@ -411,6 +413,43 @@ terminal display, `--notes` controls what is written to AniList.
 
 ---
 
+## kansou db prune
+
+Hard-delete all soft-deleted score records from the database.
+
+Soft-deleted records are created automatically by `max_history` enforcement: when a
+new score is saved for a media entry, older scores beyond the configured history limit
+are soft-deleted. They are hidden from history and stats but remain on disk until
+`db prune` is run. Pruning is **irreversible**.
+
+```
+kansou db prune
+```
+
+**Requires a database** (`KANSOU_DB_TYPE` must be set). Returns an error in DBless mode:
+```
+error: db prune requires a database — set KANSOU_DB_TYPE to enable
+```
+
+**Confirmation prompt:**
+```
+This will permanently delete all soft-deleted score entries. Continue? [y/N]:
+```
+
+Any response other than `y` cancels the operation with no changes.
+
+**Output on success:**
+```
+✓ Pruned 4 score entries
+```
+
+After deleting the soft-deleted score rows, `db prune` also removes any media entries
+with no remaining scores (entries whose full history has been pruned away).
+
+**No flags.**
+
+---
+
 
 ## Exit Codes
 
@@ -426,10 +465,21 @@ terminal display, `--notes` controls what is written to AniList.
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `ANILIST_TOKEN` | Yes (to publish) | AniList user token for write operations |
+| `KANSOU_DB_TYPE` | No | `sqlite` or `postgres` — enables persistent history. Unset = DBless mode. |
+| `KANSOU_DB_PATH` | No | SQLite file path. Default: `~/.local/share/kansou/kansou.db`. Only used when `KANSOU_DB_TYPE=sqlite`. |
+| `POSTGRES_HOST` | If postgres | Postgres host |
+| `POSTGRES_PORT` | If postgres | Postgres port (default: `5432`) |
+| `POSTGRES_USER` | If postgres | Postgres username |
+| `POSTGRES_PASSWORD` | If postgres | Postgres password |
+| `POSTGRES_DB` | If postgres | Postgres database name |
+| `KANSOU_PORT` | No | REST server port (default: `8080`). Overridden by `--port` flag. |
+| `KANSOU_CORS_ORIGINS` | No | Comma-separated CORS allowed origins for the REST server. |
 
 `ANILIST_TOKEN` is required when answering `y` to the publish prompt in `score add`.
 It is not required for `media find` or for scoring without publishing (both are
 read-only AniList operations that do not require authentication).
+
+`POSTGRES_PASSWORD` is never logged or included in error messages.
 
 ---
 
