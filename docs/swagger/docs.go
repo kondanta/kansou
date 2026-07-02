@@ -40,7 +40,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Replaces the scoring config (dimensions, genres, weights) and reloads the engine atomically. Writes the new config to disk. Only available when --live-config is set.",
+                "description": "Replaces the scoring config (dimensions, genres, weights) and reloads the engine atomically. Persists to the database in DB mode, or to disk otherwise. Only available when --live-config is set.",
                 "consumes": [
                     "application/json"
                 ],
@@ -79,6 +79,26 @@ const docTemplate = `{
                         "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/server.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/db-info": {
+            "get": {
+                "description": "Reports the active database backend, or DBless live-config status. Always available.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Database info",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.dbInfoResponse"
                         }
                     }
                 }
@@ -137,6 +157,120 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK"
+                    }
+                }
+            }
+        },
+        "/history": {
+            "get": {
+                "description": "Returns the latest score for every scored entry, ordered by scored_at descending. Requires a database.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "history"
+                ],
+                "summary": "List history",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/server.historyListItem"
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/history/{anilist_id}": {
+            "get": {
+                "description": "Returns all non-deleted scores for one AniList media ID, newest first, with full breakdown. Requires a database.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "history"
+                ],
+                "summary": "Show history detail",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "AniList media ID",
+                        "name": "anilist_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/store.Score"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/history/{score_id}": {
+            "delete": {
+                "description": "Soft-deletes a score by its row ID (not the AniList ID). Deliberate removal from active tracking — does not promote any other score to latest. Requires a database.",
+                "tags": [
+                    "history"
+                ],
+                "summary": "Delete a history entry",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "scores.id primary key",
+                        "name": "score_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
                     }
                 }
             }
@@ -348,6 +482,110 @@ const docTemplate = `{
                 }
             }
         },
+        "/stats": {
+            "get": {
+                "description": "Returns one headline metric per stats category. Requires a database.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "stats"
+                ],
+                "summary": "Stats summary",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/stats.Summary"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/stats/dimensions": {
+            "get": {
+                "description": "Returns variance, consistency, correlation, skip rate, and weight override frequency per dimension. Requires a database.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "stats"
+                ],
+                "summary": "Dimension stats",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/store.DimensionStatsResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/stats/genres": {
+            "get": {
+                "description": "Returns genre breakdown, average score by genre, and genre-dimension affinity. Requires a database.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "stats"
+                ],
+                "summary": "Genre stats",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.genreStatsResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/stats/history": {
+            "get": {
+                "description": "Returns most-rescored entries, outliers, and config impact. Requires a database.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "stats"
+                ],
+                "summary": "History stats",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.historyStatsResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/weights": {
             "post": {
                 "description": "Compute per-dimension final weights for a given genre/override configuration without scoring. Used for live weight preview in the web UI.",
@@ -505,6 +743,19 @@ const docTemplate = `{
                 }
             }
         },
+        "server.dbInfoResponse": {
+            "type": "object",
+            "properties": {
+                "db": {
+                    "description": "DB is \"sqlite\", \"postgres\", or null in DBless mode.",
+                    "type": "string"
+                },
+                "live_config": {
+                    "description": "LiveConfig is only present in DBless mode — it is not meaningful in DB\nmode, where config is always writable via POST /config.",
+                    "type": "boolean"
+                }
+            }
+        },
         "server.dimensionItem": {
             "type": "object",
             "properties": {
@@ -568,6 +819,29 @@ const docTemplate = `{
                 }
             }
         },
+        "server.genreStatsResponse": {
+            "type": "object",
+            "properties": {
+                "genre_breakdown": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/store.GenreStat"
+                    }
+                },
+                "genre_dimension_affinity": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/store.GenreDimensionAffinity"
+                    }
+                },
+                "score_by_genre": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/store.GenreScore"
+                    }
+                }
+            }
+        },
         "server.genresResponse": {
             "type": "object",
             "properties": {
@@ -581,6 +855,55 @@ const docTemplate = `{
                 "primary_genre_weight": {
                     "description": "PrimaryGenreWeight is the configured blend ratio for primary genre support.",
                     "type": "number"
+                }
+            }
+        },
+        "server.historyListItem": {
+            "type": "object",
+            "properties": {
+                "anilist_id": {
+                    "type": "integer"
+                },
+                "final_score": {
+                    "type": "number"
+                },
+                "format": {
+                    "type": "string"
+                },
+                "media_type": {
+                    "type": "string"
+                },
+                "score_id": {
+                    "type": "integer"
+                },
+                "scored_at": {
+                    "type": "string"
+                },
+                "title_romaji": {
+                    "type": "string"
+                }
+            }
+        },
+        "server.historyStatsResponse": {
+            "type": "object",
+            "properties": {
+                "config_impact": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/store.ConfigImpactStat"
+                    }
+                },
+                "most_rescored": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/store.RescoredStat"
+                    }
+                },
+                "outliers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/store.OutlierStat"
+                    }
                 }
             }
         },
@@ -885,6 +1208,439 @@ const docTemplate = `{
                 "primary_genre_weight": {
                     "description": "PrimaryGenreWeight is the blend ratio applied when a primary genre is set (0–1).\nA value of 0.6 means 60 % primary, 40 % secondary average.",
                     "type": "number"
+                }
+            }
+        },
+        "stats.Summary": {
+            "type": "object",
+            "properties": {
+                "lastPruneAt": {
+                    "description": "LastPruneAt is nil if ` + "`" + `kansou db prune` + "`" + ` has never run.",
+                    "type": "string"
+                },
+                "leastConsistentDim": {
+                    "$ref": "#/definitions/store.DimensionVarianceStat"
+                },
+                "mostConsistentDim": {
+                    "$ref": "#/definitions/store.DimensionVarianceStat"
+                },
+                "mostRescored": {
+                    "description": "MostRescored is nil unless some entry has been scored more than once.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/store.RescoredStat"
+                        }
+                    ]
+                },
+                "outlierCount": {
+                    "type": "integer"
+                },
+                "overallConsistency": {
+                    "$ref": "#/definitions/store.ConsistencyStat"
+                },
+                "topGenre": {
+                    "$ref": "#/definitions/store.GenreStat"
+                },
+                "topScoringGenre": {
+                    "$ref": "#/definitions/store.GenreScore"
+                }
+            }
+        },
+        "store.ConfigImpactStat": {
+            "type": "object",
+            "properties": {
+                "avgScore": {
+                    "type": "number",
+                    "format": "float64"
+                },
+                "configHash": {
+                    "type": "string"
+                },
+                "entryCount": {
+                    "type": "integer"
+                },
+                "firstScoredAt": {
+                    "type": "string"
+                },
+                "lastScoredAt": {
+                    "type": "string"
+                }
+            }
+        },
+        "store.ConsistencyStat": {
+            "type": "object",
+            "properties": {
+                "avgStdDev": {
+                    "type": "number",
+                    "format": "float64"
+                },
+                "count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "store.DimensionAvg": {
+            "type": "object",
+            "properties": {
+                "avgScore": {
+                    "type": "number",
+                    "format": "float64"
+                },
+                "dimensionKey": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                }
+            }
+        },
+        "store.DimensionCorrelationStat": {
+            "type": "object",
+            "properties": {
+                "correlation": {
+                    "description": "Pearson -1.0 to 1.0",
+                    "type": "number",
+                    "format": "float64"
+                },
+                "dimensionA": {
+                    "type": "string"
+                },
+                "dimensionB": {
+                    "type": "string"
+                }
+            }
+        },
+        "store.DimensionScoreRow": {
+            "type": "object",
+            "properties": {
+                "appliedMultiplier": {
+                    "type": "number",
+                    "format": "float64"
+                },
+                "baseWeight": {
+                    "type": "number",
+                    "format": "float64"
+                },
+                "biasResistant": {
+                    "type": "boolean"
+                },
+                "contribution": {
+                    "description": "nil if skipped",
+                    "type": "number",
+                    "format": "float64"
+                },
+                "dimensionKey": {
+                    "type": "string"
+                },
+                "finalWeight": {
+                    "type": "number",
+                    "format": "float64"
+                },
+                "genreDeselected": {
+                    "description": "GenreDeselected is true when a deselected genre would have contributed\nto this dimension's multiplier.",
+                    "type": "boolean"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "primaryGenreMultiplier": {
+                    "description": "PrimaryGenreMultiplier is the raw multiplier the primary genre defined for\nthis dimension at scoring time. 0 when no primary genre was set or the\ndimension is bias-resistant.",
+                    "type": "number",
+                    "format": "float64"
+                },
+                "score": {
+                    "description": "nil if skipped",
+                    "type": "number",
+                    "format": "float64"
+                },
+                "secondaryGenresMultiplier": {
+                    "description": "SecondaryGenresMultiplier is the contributing-only average multiplier\nacross non-primary matched genres at scoring time. 0 when no primary genre\nwas set, there were no secondary genres, or the dimension is bias-resistant.",
+                    "type": "number",
+                    "format": "float64"
+                },
+                "skipped": {
+                    "type": "boolean"
+                },
+                "weightOverride": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "store.DimensionStatsResponse": {
+            "type": "object",
+            "properties": {
+                "correlation_insufficient": {
+                    "description": "CorrelationInsufficient is true when no pairs met the minimum threshold.",
+                    "type": "boolean"
+                },
+                "dimensionCorrelation": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/store.DimensionCorrelationStat"
+                    }
+                },
+                "dimensionVariance": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/store.DimensionVarianceStat"
+                    }
+                },
+                "scoringConsistency": {
+                    "$ref": "#/definitions/store.ConsistencyStat"
+                },
+                "skippedDimensions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/store.SkippedDimStat"
+                    }
+                },
+                "weightOverrides": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/store.WeightOverrideStat"
+                    }
+                }
+            }
+        },
+        "store.DimensionVarianceStat": {
+            "type": "object",
+            "properties": {
+                "avgScore": {
+                    "type": "number",
+                    "format": "float64"
+                },
+                "count": {
+                    "type": "integer"
+                },
+                "dimensionKey": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "stdDev": {
+                    "type": "number",
+                    "format": "float64"
+                }
+            }
+        },
+        "store.GenreDimensionAffinity": {
+            "type": "object",
+            "properties": {
+                "dimensions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/store.DimensionAvg"
+                    }
+                },
+                "genre": {
+                    "type": "string"
+                }
+            }
+        },
+        "store.GenreScore": {
+            "type": "object",
+            "properties": {
+                "avgScore": {
+                    "type": "number",
+                    "format": "float64"
+                },
+                "count": {
+                    "type": "integer"
+                },
+                "genre": {
+                    "type": "string"
+                }
+            }
+        },
+        "store.GenreStat": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "genre": {
+                    "type": "string"
+                },
+                "percentage": {
+                    "type": "number",
+                    "format": "float64"
+                }
+            }
+        },
+        "store.MatchedGenreRow": {
+            "type": "object",
+            "properties": {
+                "genre": {
+                    "type": "string"
+                },
+                "isPrimary": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "store.OutlierStat": {
+            "type": "object",
+            "properties": {
+                "anilistID": {
+                    "type": "integer"
+                },
+                "deviation": {
+                    "description": "how many std devs from personal avg",
+                    "type": "number",
+                    "format": "float64"
+                },
+                "dimensionKey": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "personalAvg": {
+                    "type": "number",
+                    "format": "float64"
+                },
+                "score": {
+                    "type": "number",
+                    "format": "float64"
+                },
+                "scoreID": {
+                    "type": "integer"
+                },
+                "scoredAt": {
+                    "type": "string"
+                },
+                "titleRomaji": {
+                    "type": "string"
+                }
+            }
+        },
+        "store.RescoredStat": {
+            "type": "object",
+            "properties": {
+                "anilistID": {
+                    "type": "integer"
+                },
+                "firstScoredAt": {
+                    "type": "string"
+                },
+                "lastScoredAt": {
+                    "type": "string"
+                },
+                "latestScore": {
+                    "type": "number",
+                    "format": "float64"
+                },
+                "scoreCount": {
+                    "type": "integer"
+                },
+                "titleRomaji": {
+                    "type": "string"
+                }
+            }
+        },
+        "store.Score": {
+            "type": "object",
+            "properties": {
+                "activeGenres": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/store.MatchedGenreRow"
+                    }
+                },
+                "anilistID": {
+                    "type": "integer"
+                },
+                "breakdown": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/store.DimensionScoreRow"
+                    }
+                },
+                "configHash": {
+                    "type": "string"
+                },
+                "deletedAt": {
+                    "type": "string"
+                },
+                "finalScore": {
+                    "type": "number",
+                    "format": "float64"
+                },
+                "format": {
+                    "type": "string"
+                },
+                "genres": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "isLatest": {
+                    "type": "boolean"
+                },
+                "mediaType": {
+                    "type": "string"
+                },
+                "primaryGenre": {
+                    "type": "string"
+                },
+                "primaryGenreWeight": {
+                    "type": "number",
+                    "format": "float64"
+                },
+                "scoredAt": {
+                    "type": "string"
+                },
+                "titleEnglish": {
+                    "type": "string"
+                },
+                "titleRomaji": {
+                    "type": "string"
+                },
+                "userSelectedGenres": {
+                    "description": "UserSelectedGenres is nil if the user did not explicitly select genres.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "store.SkippedDimStat": {
+            "type": "object",
+            "properties": {
+                "dimensionKey": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "mediaType": {
+                    "type": "string"
+                },
+                "skipCount": {
+                    "type": "integer"
+                },
+                "totalCount": {
+                    "type": "integer"
+                }
+            }
+        },
+        "store.WeightOverrideStat": {
+            "type": "object",
+            "properties": {
+                "dimensionKey": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "overrideCount": {
+                    "type": "integer"
                 }
             }
         }
