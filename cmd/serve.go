@@ -52,8 +52,9 @@ Swagger UI is available at /swagger/index.html.`,
 
 			port := resolvePort(portFlag)
 			corsOrigins := resolveCORSOrigins()
+			dbType := os.Getenv("KANSOU_DB_TYPE")
 
-			srv := server.New(a.Config, a.AniList, a.Engine, liveConfig, a.ConfigPath, a.Store, corsOrigins)
+			srv := server.New(a.Config, a.AniList, a.Engine, liveConfig, a.ConfigPath, a.Store, dbType, corsOrigins)
 			if err := srv.ListenAndServe(port); err != nil {
 				slog.Error("server error", "err", err)
 				os.Exit(1)

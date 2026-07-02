@@ -56,18 +56,26 @@ type Server struct {
 	corsOrigins []string
 	al          *anilist.Client
 	store       store.Store
-	router      *chi.Mux
+	// dbType is "sqlite", "postgres", or "" (DBless). Read once at startup
+	// from KANSOU_DB_TYPE — the server never re-reads the env var per request.
+	dbType string
+	router *chi.Mux
 }
 
 // New constructs a Server wired with the provided dependencies.
-// corsOrigins is the list of CORS allowed origins; store is nil in DBless mode.
-func New(cfg *config.Config, al *anilist.Client, eng *scoring.Engine, liveConfig bool, configPath string, st store.Store, corsOrigins []string) *Server {
+// corsOrigins is the list of CORS allowed origins; store and dbType are the
+// zero value ("", nil) in DBless mode.
+func New(
+	cfg *config.Config, al *anilist.Client, eng *scoring.Engine, liveConfig bool,
+	configPath string, st store.Store, dbType string, corsOrigins []string,
+) *Server {
 	s := &Server{
 		al:          al,
 		liveConfig:  liveConfig,
 		configPath:  configPath,
 		corsOrigins: corsOrigins,
 		store:       st,
+		dbType:      dbType,
 	}
 	s.snapshot.Store(&configSnapshot{cfg: cfg, engine: eng})
 	s.router = s.buildRouter()
@@ -92,8 +100,13 @@ func (s *Server) buildRouter() *chi.Mux {
 	r.Handle("/*", spaHandler(kansouweb.DistDirFS))
 
 	r.Get("/health", s.handleHealth)
+	r.Get("/db-info", s.handleDBInfo)
 	r.Get("/dimensions", s.handleDimensions)
 	r.Get("/genres", s.handleGenres)
+	r.Get("/stats", s.handleStatsSummary)
+	r.Get("/stats/genres", s.handleStatsGenres)
+	r.Get("/stats/dimensions", s.handleStatsDimensions)
+	r.Get("/stats/history", s.handleStatsHistory)
 	r.With(httprate.LimitByIP(rateLimitSearch, time.Minute)).Get("/media/search", s.handleMediaSearch)
 	r.With(httprate.LimitByIP(rateLimitFetch, time.Minute)).Get("/media/{id}", s.handleMediaFetch)
 	r.With(httprate.LimitByIP(rateLimitScore, time.Minute)).Post("/score", s.handleScore)

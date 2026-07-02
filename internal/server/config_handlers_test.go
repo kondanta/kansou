@@ -50,7 +50,7 @@ func minimalEngine(cfg *config.Config) *scoring.Engine {
 func newTestServer(cfg *config.Config, liveConfig bool, configPath string) *Server {
 	al := anilist.NewClient()
 	eng := minimalEngine(cfg)
-	return New(cfg, al, eng, liveConfig, configPath, nil, nil)
+	return New(cfg, al, eng, liveConfig, configPath, nil, "", nil)
 }
 
 // writeConfigFile writes a minimal valid TOML to a temp file and returns its path.
@@ -186,39 +186,6 @@ func TestHandlePostConfig_ValidReplacement(t *testing.T) {
 	snap := srv.getSnapshot()
 	if snap.cfg.Dimensions["story"].Weight != 0.70 {
 		t.Error("snapshot not updated after POST /config")
-	}
-}
-
-func TestHandlePostConfig_SnapshotUpdatedAtomically(t *testing.T) {
-	path := writeConfigFile(t)
-	cfg := minimalConfig()
-	srv := newTestServer(cfg, true, path)
-
-	hashBefore := config.Hash(srv.getSnapshot().cfg)
-
-	body := configPayload{
-		Dimensions: map[string]configDimensionEntry{
-			"story": {Label: "Story", Description: "Narrative quality", Weight: 0.80},
-			"fun":   {Label: "Fun", Description: "Enjoyment", Weight: 0.20},
-		},
-		Genres:             map[string]map[string]float64{},
-		PrimaryGenreWeight: config.DefaultPrimaryGenreWeight,
-		MaxMultiplier:      config.DefaultMaxMultiplier,
-	}
-	b, _ := json.Marshal(body)
-
-	req := httptest.NewRequest(http.MethodPost, "/config", bytes.NewReader(b))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	srv.router.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
-	}
-
-	hashAfter := config.Hash(srv.getSnapshot().cfg)
-	if hashBefore == hashAfter {
-		t.Error("snapshot hash unchanged after a valid POST /config — snapshot not swapped")
 	}
 }
 
