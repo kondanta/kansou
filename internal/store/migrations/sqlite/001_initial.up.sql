@@ -26,7 +26,8 @@ CREATE TABLE scores (
     user_selected_genres  TEXT,
     is_latest             INTEGER NOT NULL DEFAULT 0,
     scored_at             TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-    deleted_at            TEXT
+    deleted_at            TEXT,
+    deleted_reason        TEXT CHECK (deleted_reason IN ('manual', 'max_history') OR deleted_reason IS NULL)
 );
 
 CREATE TABLE dimension_scores (
@@ -42,7 +43,9 @@ CREATE TABLE dimension_scores (
     skipped            INTEGER NOT NULL DEFAULT 0,
     bias_resistant     INTEGER NOT NULL DEFAULT 0,
     weight_override    INTEGER NOT NULL DEFAULT 0,
-    genre_deselected   INTEGER NOT NULL DEFAULT 0
+    genre_deselected   INTEGER NOT NULL DEFAULT 0,
+    primary_genre_multiplier    REAL NOT NULL DEFAULT 0,
+    secondary_genres_multiplier REAL NOT NULL DEFAULT 0
 );
 
 CREATE TABLE score_matched_genres (

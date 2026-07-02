@@ -26,7 +26,8 @@ CREATE TABLE scores (
     user_selected_genres  JSONB,
     is_latest             BOOLEAN          NOT NULL DEFAULT FALSE,
     scored_at             TIMESTAMPTZ      NOT NULL DEFAULT NOW(),
-    deleted_at            TIMESTAMPTZ
+    deleted_at            TIMESTAMPTZ,
+    deleted_reason        TEXT CHECK (deleted_reason IN ('manual', 'max_history') OR deleted_reason IS NULL)
 );
 
 CREATE TABLE dimension_scores (
@@ -42,7 +43,9 @@ CREATE TABLE dimension_scores (
     skipped            BOOLEAN          NOT NULL DEFAULT FALSE,
     bias_resistant     BOOLEAN          NOT NULL DEFAULT FALSE,
     weight_override    BOOLEAN          NOT NULL DEFAULT FALSE,
-    genre_deselected   BOOLEAN          NOT NULL DEFAULT FALSE
+    genre_deselected   BOOLEAN          NOT NULL DEFAULT FALSE,
+    primary_genre_multiplier    DOUBLE PRECISION NOT NULL DEFAULT 0,
+    secondary_genres_multiplier DOUBLE PRECISION NOT NULL DEFAULT 0
 );
 
 CREATE TABLE score_matched_genres (
