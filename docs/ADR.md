@@ -1287,3 +1287,394 @@ not use `--live-config` are unaffected and can continue using read-only mounts.
 - `docs/CONFIG.md` documents the `--live-config` flag and the editable surface.
 - `docs/CLI.md` documents the `--live-config` flag on `kansou serve`.
 - `config.example.toml` is unaffected — it remains the annotated reference.
+
+---
+
+## ADR-027 — Persistent scoring history: normalized schema, dimensions as rows
+
+**Status:** Accepted
+
+**Date:** 2026-07-02
+
+**Context:**
+Prior to this feature, kansou had no local persistence at all (see ADR-002) —
+every session was stateless, and there was no way to see past scores, compare
+config changes over time, or compute statistics across a scoring history. This
+was a deliberate v1 constraint, not an oversight, but it blocks a whole class
+of useful features (rescoring pre-fill, stats, export) that require knowing
+what you scored before.
+
+**Decision:**
+Add an opt-in persistence layer (`internal/store/`) backed by a normalized,
+five-table schema: `media`, `scores`, `dimension_scores`, `score_matched_genres`,
+and `db_metadata`, plus `dimensions`, `genre_multipliers`, and `config_scalars`
+for scoring config (see ADR-029). Key design choices:
+
+- **Dimensions are rows, not columns.** Each dimension score is a row in
+  `dimension_scores` keyed by `dimension_key`. Adding or removing a scoring
+  dimension never requires an `ALTER TABLE` — a direct application of the
+  project's "let the DB do DB work, keep elasticity" philosophy: user-driven
+  runtime additions (dimensions, genre multipliers) are rows; developer-driven
+  additions at release time (new scalar fields) are typed columns.
+- **`is_latest` flag**, maintained on every insert, so the common "give me the
+  current score for X" query is `WHERE is_latest = true` with an index, not a
+  window-function scan.
+- **Soft deletes via `deleted_at`**, not hard deletes, so scoring history can
+  be recovered before `kansou db prune` permanently removes it (see ADR-031).
+- **`config_snapshot`** (full JSON serialization of the scoring config active
+  at the time) is stored per score, answering "why did this score change after
+  I edited my config?" without needing to reconstruct historical config state
+  from `config_scalars`/`dimensions`, which only reflect the *current* config.
+- **`score_matched_genres`** records which genres *actively participated* in
+  multiplier calculation, separately from `media_genres` (the media's full
+  AniList genre list) — these diverge whenever the user deselects a genre for
+  a session (ADR-023).
+
+**Consequences:**
+- New package `internal/store/` with `sqlite/` and `postgres/` sub-packages
+  implementing a shared `Store` interface (see ADR-028).
+- `internal/store/migrations/{sqlite,postgres}/001_initial.up.sql` define the
+  schema per backend (SQLite: `INTEGER`/`TEXT`/`REAL`; Postgres: `BOOLEAN`/
+  `TIMESTAMPTZ`/`JSONB`/`DOUBLE PRECISION`).
+- `CLAUDE.md` project structure gains `internal/store/`.
+
+---
+
+## ADR-028 — Dual database support: SQLite + Postgres behind one Store interface
+
+**Status:** Accepted
+
+**Date:** 2026-07-02
+
+**Context:**
+kansou is used both as a personal CLI tool (where a zero-config embedded
+database is the right default) and, via `kansou serve`, as a small self-hosted
+service (where a real Postgres instance may already be part of the deployment).
+Persistence should not force one deployment shape onto the other.
+
+**Decision:**
+Define a single `store.Store` interface (`internal/store/store.go`) that both
+`SQLiteStore` and `PostgresStore` satisfy completely. Callers (`cmd/`,
+`internal/server/`, `internal/stats/`, `internal/export/`) depend only on the
+interface, never on `sqlite`/`postgres` directly. Backend selection is via the
+`KANSOU_DB_TYPE` environment variable (`sqlite` or `postgres`); if unset,
+kansou runs **DBless** — exactly as it always has, with no persistence, no
+history, no stats. DBless is a first-class mode, not a fallback: every new
+command added by this feature (`history`, `stats`, `export`, `config
+dimension/genre`) checks for a nil `Store` and returns a clear error rather
+than silently doing nothing.
+
+`modernc.org/sqlite` (pure Go, no CGO) and `jackc/pgx/v5` were chosen as the
+drivers; `golang-migrate/migrate/v4` runs schema migrations for both from a
+shared embedded `migrations/` filesystem; `jmoiron/sqlx` handles struct
+scanning. All four are new approved dependencies (see CLAUDE.md).
+
+**Consequences:**
+- `cmd/root.go`'s `PersistentPreRunE` opens the configured backend (or leaves
+  `App.Store` nil) before any command runs, and closes it on exit.
+- Every `Store` method is implemented twice, once per backend, with
+  backend-specific SQL where the two dialects diverge (e.g. `STDDEV_POP`/`CORR`
+  in Postgres vs. a manually-derived population-variance formula and a
+  self-join Pearson correlation formula in SQLite — see the stats methods in
+  `internal/store/sqlite/sqlite.go` and `internal/store/postgres/postgres.go`).
+- `PostgresStore.Close()` bounds `pgxpool.Pool.Close()` (which has no built-in
+  timeout and blocks until every connection is returned) to 5 seconds, since
+  it sits on the CLI's exit path — an unbounded hang here would hang the whole
+  program. This was a real bug caught by real integration testing (ADR-034),
+  not found by inspection.
+
+---
+
+## ADR-029 — Scoring config moves to the database when one is configured
+
+**Status:** Accepted
+
+**Date:** 2026-07-02
+
+**Context:**
+Once a database is available, storing scoring config exclusively in
+`config.toml` creates two sources of truth: `kansou config dimension add`
+issued against one replica of a multi-instance deployment wouldn't be visible
+to the others, and there would be no way to atomically read-modify-write config
+under concurrent CLI/REST edits.
+
+**Decision:**
+When `KANSOU_DB_TYPE` is set, scoring config (dimensions, genre multipliers,
+`primary_genre_weight`, `max_multiplier`, `max_history`) is loaded from and
+saved to the database via `Store.LoadScoringConfig`/`SaveScoringConfig`, not
+`config.toml`. The TOML file becomes a seed/export format only, read on first
+run to populate an empty database (`dimensions` table empty ⇒ seed from
+`config.Load(configPath)`) and writable again via `kansou config export`.
+DBless mode is unaffected — `config.toml` remains the sole source of truth
+when no database is configured.
+
+`POST /config` (the live-config REST endpoint from ADR-026) now branches on
+`server.store != nil`: DB mode calls `SaveScoringConfig`, DBless mode keeps
+writing to disk as before. This was originally a bug — the handler
+unconditionally wrote to disk even in DB mode, so a config change over HTTP
+silently failed to persist to the database and was clobbered by
+`LoadScoringConfig` on the next restart. Fixed as part of this feature
+(`internal/server/config_handlers.go`), with a regression test using a real
+on-disk SQLite store asserting the config file is *not* touched in DB mode.
+
+**Consequences:**
+- `cmd/configcmd.go` adds `kansou config show/import/export` (the latter two
+  work DBless too — they operate on a file directly) and
+  `dimension list/add/set/remove`, `genre set/remove` (DB-required).
+- TOML dimension order is lost on first DB seed — `dimensions` rows are
+  ordered by an explicit `sort_order` column, but `LoadScoringConfig` doesn't
+  currently reconstruct the original TOML declaration order beyond that.
+  Documented limitation, not fixed in this feature.
+
+---
+
+## ADR-030 — Config file stays `config.toml`; `[server]` section deprecated
+
+**Status:** Accepted
+
+**Date:** 2026-07-02
+
+**Context:**
+Two config-format questions came up while designing this feature: whether to
+rename `config.toml` (e.g. to `scoring-config.toml`, to reflect that it's now
+scoring-only), and what to do with the `[server]` section now that port/CORS
+configuration doesn't fit well alongside a config file that's meant to be
+DB-replaceable.
+
+**Decision:**
+No rename. `config.toml` stays `config.toml` — a rename would break every
+existing installation's `--config` flag and documentation for no functional
+benefit. The `[server]` section is deprecated: `KANSOU_PORT` and
+`KANSOU_CORS_ORIGINS` environment variables replace `server.port` and
+`server.cors_allowed_origins`. The `[server]` struct fields remain in
+`config.Config` (removing them would break TOML parsing for existing files
+with a `[server]` block present), but their values are ignored at runtime and
+a deprecation warning is printed to stderr if they're set. Full removal is
+deferred to the next major version.
+
+**Consequences:**
+- `cmd/serve.go`: `resolvePort`/`resolveCORSOrigins` read the new env vars
+  (flag > env var > default), and a startup warning fires if `[server]` is
+  present in the loaded config.
+- `config.example.toml` documents the deprecation in place rather than
+  deleting the section outright, so existing users see why their `[server]`
+  block stopped having any effect.
+
+---
+
+## ADR-031 — `max_history` retention semantics and gardening
+
+**Status:** Accepted
+
+**Date:** 2026-07-02
+
+**Context:**
+Keeping every score forever by default would silently grow the database
+without bound and wasn't what was wanted; keeping only the latest with no
+option to retain more would prevent the "compare scores over time" use case
+stats and export are built for. A single scalar needs to express "keep
+none/one", "keep N", and "keep everything".
+
+**Decision:**
+`max_history` (stored in `config_scalars`, exposed via `config.toml` in
+DBless mode) is a signed integer with three sentinel behaviors:
+
+| Value | Behavior |
+|---|---|
+| `0` (default) | Keep only the latest score. Previous scores are soft-deleted on every new score. |
+| `N` (positive) | Keep the `N` most recent scores per media. Older ones are soft-deleted. |
+| `-1` | Keep all scores forever. Gardening is skipped entirely. |
+
+Gardening runs inside `SaveScore`, in the same transaction as the insert:
+count non-deleted scores for the media (including the one just inserted),
+compute `keepCount` (`max_history == 0` → `1`, else `max_history`), and if
+`count > keepCount`, soft-delete the oldest `count - keepCount` rows — tagged
+`deleted_reason = 'max_history'` (see ADR-032). The `keepCount` indirection
+matters: using `count > max_history` directly would delete the score that was
+just inserted when `max_history = 0` (`1 > 0` fires immediately), leaving zero
+entries instead of one.
+
+Actual hard deletion is a separate, explicit step: `kansou db prune` (in a
+single transaction) records a `last_prune_at` timestamp in `db_metadata`
+*before* deleting (since hard-deleted rows leave nothing to query afterward),
+then hard-deletes every row with `deleted_at IS NOT NULL` (cascading via FK to
+`dimension_scores`/`score_matched_genres`) and any now-orphaned `media` rows.
+It prompts for confirmation and is irreversible.
+
+**Consequences:**
+- `internal/store/{sqlite,postgres}`: `SaveScore`'s gardening `UPDATE`,
+  `Prune`, `LastPruneAt`.
+- `cmd/dbcmd.go`: `kansou db prune`.
+
+---
+
+## ADR-032 — Deliberate history deletion does not promote another score to latest; `deleted_reason` for accountability
+
+**Status:** Accepted
+
+**Date:** 2026-07-02
+
+**Context:**
+`kansou history delete <query>` (and `DELETE /history/{score_id}`) needed a
+decision about what happens to `is_latest` when the row being soft-deleted
+currently holds it. Two readings were considered during design: treat deletion
+as an "undo" that reveals the next most recent surviving score, or treat it as
+a genuine "remove this media from my active history" action that leaves
+nothing flagged current until the media is scored again.
+
+**Decision:**
+Deletion is **not** an undo. `SoftDeleteScore` sets `deleted_at`,
+`deleted_reason = 'manual'`, and `is_latest = false` on exactly the row it's
+given — it never promotes any other score for the same media to `is_latest`.
+After a deletion, the media disappears from every `is_latest`-filtered view
+(`ListLatest`, `LatestScore`, and every Chunk 5 stats method) until the user
+scores it again, at which point `SaveScore`'s existing logic naturally sets a
+fresh `is_latest` row. Older, non-deleted scores remain reachable via
+`kansou history show`/`ScoreHistory` (which don't filter on `is_latest`) and
+are only ever purged for real by `kansou db prune`.
+
+A `deleted_reason` column (`'manual'` | `'max_history'`, `NOT NULL DEFAULT`
+via a `CHECK` constraint) distinguishes this deliberate path from automatic
+`max_history` gardening (ADR-031). The two paths can never race on the same
+row — gardening only ever prunes rows older than the retention window;
+deliberate delete only ever targets one caller-specified row — so the column
+exists purely for accountability/audit, not to resolve a conflict. It is not
+currently surfaced in any CLI output or REST response; `kansou db prune`
+treats both kinds identically. Revisit only if browsing *why* something was
+removed turns out to matter in practice — until then it's a pure audit trail,
+and if it never gets used it can be dropped with a migration at no cost to
+anything else.
+
+**Consequences:**
+- `internal/store/store.go`: `DeletedReasonManual`/`DeletedReasonMaxHistory`
+  constants.
+- `SoftDeleteScore` in both backends sets all three fields in one `UPDATE`.
+- `internal/store/migrations/{sqlite,postgres}/001_initial.up.sql`:
+  `scores.deleted_reason TEXT CHECK (deleted_reason IN ('manual',
+  'max_history') OR deleted_reason IS NULL)`.
+
+---
+
+## ADR-033 — `dimension remove` proportionally rebalances remaining weights; `add`/`set` do not
+
+**Status:** Accepted
+
+**Date:** 2026-07-02
+
+**Context:**
+`kansou config dimension add` and `set` each validate the *entire* weight-sum
+invariant (all dimensions sum to 1.0 ±0.001) immediately on every call and
+refuse to save an unbalanced result — this was an explicit requirement for
+`add` ("do not silently save an invalid state, consistent with the engine's
+strict weight validation"), and the same rule was applied to `set` for
+consistency. Applying that same immediate-validation rule to `remove` turned
+out to make it nearly unusable: removing any dimension (weight must be > 0)
+necessarily drops the remaining total below 1.0, and no sequence of other
+single-dimension edits can fix that afterward — every edit independently
+validates the *whole* config, so every intermediate state on the way to a
+rebalanced 1.0 is itself invalid and gets rejected. Bulk-replace paths
+(`kansou config import`, `POST /config`) don't hit this at all, because they
+validate one complete final state, never an intermediate one.
+
+Two ways out were considered: defer weight-sum validation from config-edit
+time to score-calculation time (return an error from `/score`/`/weights` if
+the active config is unbalanced), or make `remove` compute a valid rebalance
+itself instead of requiring the user to. The first was rejected — it
+contradicts CLAUDE.md's existing rule that weights are "validated on load",
+duplicates validation into a request hot path, and lets an invalid config sit
+silently in the database until someone happens to score something and hits
+the error.
+
+**Decision:**
+`dimension remove` is the one exception to "add/set validate and refuse":
+it deletes the dimension, then proportionally redistributes its freed weight
+across the remaining dimensions based on their current relative weights
+(e.g. removing a 0.2-weight dimension from a 5:3 story:fun ratio adds
+`0.2 × 5/8` to story and `0.2 × 3/8` to fun), so the result still sums to 1.0
+by construction — computed, not requested from the user. `add`/`set` are
+unchanged. This isn't an inconsistency: removal is the only one of the three
+operations that *inherently* changes more than one dimension's weight, so it's
+the only one that structurally cannot be expressed as a single valid
+single-field edit.
+
+A floor of 1 remaining dimension is enforced (`minDimensionsAfterRemoval`) —
+a single dimension at weight 1.0 is mathematically valid, so only removing the
+*last* dimension is blocked. No ceiling on dimension count was judged
+necessary: `add` already self-limits in practice, since every addition
+requires the caller to work out weights that still sum to 1.0.
+
+**Consequences:**
+- `cmd/configcmd.go`: `rebalanceWeightsAfterRemoval`, `minDimensionsAfterRemoval`.
+- `runConfigDimensionRemove` also strips any genre multiplier entries
+  referencing the removed dimension before rebuilding (`config.Rebuild` would
+  otherwise fail its genre-key-reference validation).
+
+---
+
+## ADR-034 — Real Postgres integration tests via testcontainers-go; race detection mandatory in CI
+
+**Status:** Accepted
+
+**Date:** 2026-07-02
+
+**Context:**
+Prior to this feature, `internal/store/postgres` had zero tests — the
+project's existing testing rule only mandated real-SQLite integration tests
+(in-memory, no external process required), leaving no equivalent requirement
+for Postgres, presumably because standing up a real Postgres instance in tests
+is heavier infrastructure than an in-memory SQLite file. A mock/stub database
+was considered and rejected: the actual risk in a two-backend store is whether
+backend-specific SQL (`STDDEV_POP`, `CORR`, `RETURNING id`, JSONB/boolean
+handling via `pgx`) is *valid and correct against a real Postgres server* — a
+mock just pattern-matches queries and returns canned results without ever
+parsing or executing real SQL, so it cannot catch a syntax error or type
+mismatch, which is exactly the failure mode this backend is at risk of.
+
+This paid off immediately: writing real integration tests surfaced a genuine
+bug that had shipped undetected — `PostgresStore.Close()` could hang forever
+(`pgxpool.Pool.Close()` blocks until every connection is returned, with no
+timeout), sitting on the CLI's exit path. See ADR-028's consequences.
+
+**Decision:**
+`internal/store/postgres/postgres_test.go` uses `testcontainers-go` (+ its
+`modules/postgres` submodule) to start a real, ephemeral Postgres container
+per test binary run, shared across all tests in the package (truncating
+relevant tables between tests rather than paying container-startup cost per
+test). Tests skip (not fail) when Docker is unavailable, so `go test ./...`
+stays green on machines and CI runs without Docker — verified in both
+directions (real container run, and a forced Docker-unreachable run showing
+clean `SKIP` output). `testcontainers-go` is a test-only dependency: it's
+never imported outside `_test.go` files, so it adds nothing to the shipped
+binary — confirmed as part of approving it (see CLAUDE.md's dependency list).
+
+GitHub Actions' native `services:` key (a job-level sidecar container) was
+considered as an alternative for CI specifically, and rejected in favor of
+using `testcontainers-go` everywhere: it would mean two different mechanisms
+for "get Postgres running" (YAML `services:` in CI vs. a local `docker run` in
+dev), whereas `testcontainers-go` gives one code path that behaves identically
+in both places, and GitHub-hosted runners already have Docker with zero extra
+CI configuration needed.
+
+Separately, `-race` was added to every test invocation (`just ci`, `just
+ci-local`, `.github/workflows/ci.yml`) — it had a dedicated `just test-race`
+recipe already but was never wired into the actual CI/definition-of-done path,
+despite the codebase having real concurrency surface (the REST server's
+`atomic.Value` config-snapshot swapping on every request, the Postgres
+connection pool, goroutines from container lifecycle management in tests).
+`-race` is a strict superset of a normal test run (same assertions, plus
+concurrent-access detection), so making it the default has no downside beyond
+being slower — deemed worth it given `-race` is exactly what would have caught
+a lurking data race, the same category of previously-undetected bug this
+whole ADR is about.
+
+**Consequences:**
+- `CLAUDE.md` Definition of Done: `go test -race ./...` is explicit, not
+  optional.
+- `.justfile`: `ci`/`ci-local` depend on `test-race`/`test-race-local`
+  instead of `test`/`test-local`. `test-local`/`ci-local` exist specifically
+  because Go's test cache doesn't know about external state changes (like the
+  Docker daemon starting/stopping) — `-count=1` forces a real re-run.
+- `internal/store/postgres/postgres_test.go`: `TestMain` owns the container
+  lifecycle in a helper function (`runTests`), not directly in `TestMain`
+  itself, since `os.Exit` skips any pending `defer`s in the function that
+  calls it — the container/pool cleanup would silently never run otherwise.

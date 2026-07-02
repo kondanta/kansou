@@ -25,6 +25,7 @@ import (
 	"github.com/kondanta/kansou/internal/anilist"
 	"github.com/kondanta/kansou/internal/config"
 	"github.com/kondanta/kansou/internal/scoring"
+	"github.com/kondanta/kansou/internal/store"
 	kansouweb "github.com/kondanta/kansou/web"
 )
 
@@ -49,19 +50,32 @@ type configSnapshot struct {
 
 // Server holds the dependencies for the REST server.
 type Server struct {
-	snapshot   atomic.Value
-	liveConfig bool
-	configPath string
-	al         *anilist.Client
-	router     *chi.Mux
+	snapshot    atomic.Value
+	liveConfig  bool
+	configPath  string
+	corsOrigins []string
+	al          *anilist.Client
+	store       store.Store
+	// dbType is "sqlite", "postgres", or "" (DBless). Read once at startup
+	// from KANSOU_DB_TYPE — the server never re-reads the env var per request.
+	dbType string
+	router *chi.Mux
 }
 
 // New constructs a Server wired with the provided dependencies.
-func New(cfg *config.Config, al *anilist.Client, eng *scoring.Engine, liveConfig bool, configPath string) *Server {
+// corsOrigins is the list of CORS allowed origins; store and dbType are the
+// zero value ("", nil) in DBless mode.
+func New(
+	cfg *config.Config, al *anilist.Client, eng *scoring.Engine, liveConfig bool,
+	configPath string, st store.Store, dbType string, corsOrigins []string,
+) *Server {
 	s := &Server{
-		al:         al,
-		liveConfig: liveConfig,
-		configPath: configPath,
+		al:          al,
+		liveConfig:  liveConfig,
+		configPath:  configPath,
+		corsOrigins: corsOrigins,
+		store:       st,
+		dbType:      dbType,
 	}
 	s.snapshot.Store(&configSnapshot{cfg: cfg, engine: eng})
 	s.router = s.buildRouter()
@@ -74,12 +88,11 @@ func (s *Server) getSnapshot() *configSnapshot {
 
 // buildRouter registers all routes and middleware.
 func (s *Server) buildRouter() *chi.Mux {
-	snap := s.getSnapshot()
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
 	r.Use(securityHeaders)
-	r.Use(corsMiddleware(snap.cfg.Server.CORSAllowedOrigins))
+	r.Use(corsMiddleware(s.corsOrigins))
 	r.Use(requestLogger)
 
 	// UI — served at root. Prefers the built Vue app; falls back to the
@@ -87,8 +100,16 @@ func (s *Server) buildRouter() *chi.Mux {
 	r.Handle("/*", spaHandler(kansouweb.DistDirFS))
 
 	r.Get("/health", s.handleHealth)
+	r.Get("/db-info", s.handleDBInfo)
 	r.Get("/dimensions", s.handleDimensions)
 	r.Get("/genres", s.handleGenres)
+	r.Get("/stats", s.handleStatsSummary)
+	r.Get("/stats/genres", s.handleStatsGenres)
+	r.Get("/stats/dimensions", s.handleStatsDimensions)
+	r.Get("/stats/history", s.handleStatsHistory)
+	r.Get("/history", s.handleHistoryList)
+	r.Get("/history/{anilist_id}", s.handleHistoryDetail)
+	r.Delete("/history/{score_id}", s.handleHistoryDelete)
 	r.With(httprate.LimitByIP(rateLimitSearch, time.Minute)).Get("/media/search", s.handleMediaSearch)
 	r.With(httprate.LimitByIP(rateLimitFetch, time.Minute)).Get("/media/{id}", s.handleMediaFetch)
 	r.With(httprate.LimitByIP(rateLimitScore, time.Minute)).Post("/score", s.handleScore)
@@ -143,15 +164,11 @@ func spaHandler(distFS fs.FS) http.HandlerFunc {
 	}
 }
 
-// ListenAndServe starts the HTTP server on the configured port.
-// It handles SIGINT and SIGTERM with a graceful shutdown, waiting up to
-// 10 seconds for in-flight requests to complete.
-func (s *Server) ListenAndServe(portOverride int) error {
-	snap := s.getSnapshot()
-	port := snap.cfg.Server.Port
-	if portOverride > 0 {
-		port = portOverride
-	}
+// ListenAndServe starts the HTTP server on the given port.
+// Port resolution (--port flag > KANSOU_PORT env var > 8080) is handled by
+// the caller (cmd/serve.go). It handles SIGINT and SIGTERM with a graceful
+// shutdown, waiting up to 10 seconds for in-flight requests to complete.
+func (s *Server) ListenAndServe(port int) error {
 
 	addr := fmt.Sprintf(":%d", port)
 	srv := &http.Server{

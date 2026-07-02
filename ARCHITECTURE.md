@@ -7,7 +7,9 @@
 - **CLI mode** — interactive, terminal-driven scoring sessions
 - **Server mode** — a REST API (`--serve`) that exposes the same core logic over HTTP for web frontends or external tooling
 
-Both modes share identical business logic. The binary entry point branches into one of the two modes based on how it is invoked. There is no local persistence in v1. All state is in-memory for the duration of a session.
+Both modes share identical business logic. The binary entry point branches into one of the two modes based on how it is invoked.
+
+Local persistence is **opt-in** (`KANSOU_DB_TYPE` environment variable — see `docs/CONFIG.md`). When unset, kansou runs exactly as it always has: fully stateless, all state in-memory for the duration of a session ("DBless mode"). When set, kansou persists every scoring session to SQLite or Postgres, enabling `kansou history`, `kansou stats`, `kansou export`, and DB-backed scoring config editing (`kansou config dimension/genre`). See `docs/ADR.md` ADR-027–034.
 
 ---
 
@@ -23,11 +25,14 @@ Both modes share identical business logic. The binary entry point branches into 
 │  │                  │         │                      │   │
 │  │  score add       │         │  GET  /dimensions    │   │
 │  │  media find      │         │  GET  /genres        │   │
-│  │                  │         │  GET  /media/search  │   │
-│  │                  │         │  GET  /media/{id}    │   │
-│  │                  │         │  POST /score         │   │
-│  │                  │         │  POST /score/publish │   │
-│  │                  │         │  POST /weights       │   │
+│  │  history         │         │  GET  /media/search  │   │
+│  │  stats           │         │  GET  /media/{id}    │   │
+│  │  export          │         │  POST /score         │   │
+│  │  db prune        │         │  POST /score/publish │   │
+│  │  config          │         │  POST /weights       │   │
+│  │                  │         │  GET  /db-info       │   │
+│  │                  │         │  GET  /history*      │   │
+│  │                  │         │  GET  /stats*        │   │
 │  └────────┬─────────┘         └──────────┬──────────┘   │
 │           │                              │               │
 │           └──────────────┬───────────────┘               │
@@ -50,23 +55,30 @@ Both modes share identical business logic. The binary entry point branches into 
 │              │  └──────────────────┘  │                  │
 │              └───────────┬────────────┘                  │
 │                          │                               │
-│              ┌───────────▼────────────┐                  │
-│              │    AniList Client      │                  │
-│              │  - Search by name      │                  │
-│              │  - Fetch by ID         │                  │
-│              │  - Publish score       │                  │
-│              │  (raw net/http wrapper)│                  │
-│              └───────────┬────────────┘                  │
-│                          │                               │
-└──────────────────────────┼──────────────────────────────┘
-                           │ HTTPS / GraphQL
-                           ▼
-                  ┌─────────────────┐
-                  │   AniList API   │
-                  │  graphql.anilist│
-                  │     .co/api/v2  │
-                  └─────────────────┘
+│         ┌────────────────┼────────────────┐              │
+│         │                │                │              │
+│  ┌──────▼──────┐  ┌──────▼───────┐ ┌──────▼───────┐      │
+│  │AniList Client│  │ Store (opt.) │ │ Stats/Export │      │
+│  │- Search      │  │ SQLite or    │ │ (opt., needs │      │
+│  │- Fetch by ID │  │ Postgres,    │ │  a Store)    │      │
+│  │- Publish     │  │ behind one   │ │ - genre/dim/ │      │
+│  │(raw net/http)│  │ interface    │ │   history    │      │
+│  └──────┬───────┘  └──────────────┘ │   stats      │      │
+│         │                            │ - HTML export│      │
+│         │                            └──────────────┘      │
+└─────────┼──────────────────────────────────────────────────┘
+          │ HTTPS / GraphQL
+          ▼
+ ┌─────────────────┐
+ │   AniList API   │
+ │  graphql.anilist│
+ │     .co/api/v2  │
+ └─────────────────┘
 ```
+
+The Store box is present but unused (`nil`) unless `KANSOU_DB_TYPE` is set — see
+"Persistence Layer" below. Stats and Export depend on a configured Store; both
+return a clear error rather than silently doing nothing when it's absent.
 
 ---
 
@@ -98,6 +110,15 @@ Configures the application-wide `log/slog` default logger. `Setup(isServer bool)
 
 ### AniList Client — `internal/anilist/`
 A thin wrapper around `net/http`. Contains typed Go functions for each GraphQL operation. Reads `ANILIST_TOKEN` from the environment. Returns typed response structs. Never logs the token. Hard fails on non-200 responses or network errors.
+
+### Persistence Layer — `internal/store/`
+Optional (`KANSOU_DB_TYPE` env var). Defines a single `Store` interface (`store.go`) implemented twice — `sqlite/` (pure-Go `modernc.org/sqlite`, no CGO) and `postgres/` (`jackc/pgx/v5`) — so every caller depends only on the interface, never on a specific backend. Schema migrations (`golang-migrate/migrate/v4`) run from an embedded `migrations/{sqlite,postgres}/` filesystem shared by both backends. `Store` is `nil` in DBless mode; every caller checks for that explicitly rather than relying on a no-op implementation. See ADR-027/028.
+
+### Stats — `internal/stats/`
+A thin formatting/aggregation layer over `Store` — no SQL of its own, no business logic beyond bundling several `Store` calls into the shapes `kansou stats` and `GET /stats*` need (genre category, dimension category, history category, and a cross-category summary). All actual computation (variance, Pearson correlation, etc.) lives in the `Store` implementations' SQL.
+
+### Export — `internal/export/`
+Renders a self-contained HTML file (inline CSS, inline Chart.js v4.4.4 pinned via `go:embed`, inline JSON chart data) from the same `internal/stats` data plus `Store.ListLatest`. No server, no network access needed to view the output.
 
 ---
 
@@ -168,6 +189,18 @@ POST /score/publish       { "media_id": 154587, "score": 8.4 }
 
 POST /weights             { "media_id": 154587, "selected_genres": [...], "primary_genre": "...", "skipped_dimensions": {...}, "weight_overrides": {...} }
   → returns per-dimension final weights without scoring; used for live UI preview
+
+GET  /db-info                     # always available — { "db": "sqlite"|"postgres"|null, "live_config"?: bool }
+
+# The following all require a database (KANSOU_DB_TYPE set) and return
+# HTTP 503 with the standard error envelope otherwise:
+GET    /history                   # latest score per entry, newest first
+GET    /history/{anilist_id}      # all non-deleted scores for one entry, full breakdown
+DELETE /history/{score_id}        # soft-delete one score by its row ID (not the AniList ID)
+GET    /stats                     # one-line summary per category
+GET    /stats/genres              # genre breakdown, score by genre, genre×dimension affinity
+GET    /stats/dimensions          # variance, consistency, correlation, skip rate, weight overrides
+GET    /stats/history             # most rescored, outliers, config impact
 ```
 
 **Embedded UI:** `package web` (`web/embed.go`) embeds `web/dist/` via
@@ -204,6 +237,17 @@ kansou serve --port 3000
 kansou score add "..."    # CLI: score by search (publish prompt included)
 kansou score add --url "https://anilist.co/anime/154587"
 kansou media find "..."   # CLI: search and display media info only
+
+# The following require KANSOU_DB_TYPE to be set (sqlite or postgres):
+kansou history                 # list latest scores
+kansou history show "..."      # full breakdown + previous scores
+kansou history delete "..."    # soft-delete the latest score for an entry
+kansou stats                   # one-line summary per category
+kansou stats dimensions        # variance, consistency, correlation, ...
+kansou export                  # self-contained HTML export
+kansou db prune                # hard-delete soft-deleted score records
+kansou config show             # works DBless too
+kansou config dimension add pacing --label Pacing --weight 0.1
 ```
 
 ---
@@ -224,12 +268,20 @@ No frontend-specific logic lives in the server layer. The server is a thin HTTP 
 
 ## Configuration
 
-Config is loaded from `~/.config/kansou/config.toml` on startup.
-The path is overridable via the `--config` flag.
-The server port is overridable via the `--port` flag.
-Flag values always take precedence over config file values.
+**DBless mode** (default): config is loaded from `~/.config/kansou/config.toml`
+on startup. The path is overridable via the `--config` flag.
 
-See `docs/CONFIG.md` for the full schema.
+**Database mode** (`KANSOU_DB_TYPE` set): scoring config (dimensions, genres,
+`primary_genre_weight`, `max_multiplier`, `max_history`) is loaded from and
+saved to the database instead — `config.toml` becomes a seed/export format
+only (`kansou config import`/`export`). See ADR-029.
+
+The server port and CORS origins are configured via `KANSOU_PORT`/
+`KANSOU_CORS_ORIGINS` environment variables (the `[server]` section of
+`config.toml` is deprecated — see ADR-030), overridable by the `--port` flag.
+Flag values always take precedence.
+
+See `docs/CONFIG.md` for the full schema and environment variable reference.
 
 ---
 
@@ -241,9 +293,15 @@ AniList write operations require a user token. The token is read exclusively fro
 
 ## Versioning and Extensibility
 
-The architecture is intentionally minimal for v1. The following are explicitly deferred and must not be introduced without a corresponding ADR update:
+The architecture is intentionally minimal. Local persistence (previously deferred
+in v1) is now implemented as an **opt-in** layer — see "Persistence Layer" above
+and ADR-027–034 — but only touches `internal/store/`, `internal/stats/`,
+`internal/export/`, and additive fields/branches in `cmd/` and `internal/server/`.
+DBless mode is unchanged and remains the default.
 
-- Local persistence (SQLite, flat file, or any other store)
+The following are still explicitly deferred and must not be introduced without a
+corresponding ADR update:
+
 - OAuth2 / PKCE authentication flow
 - Background workers or job queues
 - Multi-user support

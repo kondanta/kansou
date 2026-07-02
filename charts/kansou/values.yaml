@@ -70,6 +70,31 @@ liveConfig:
 # Never commit a real token here.
 anilistToken: ""
 
+# Optional persistent scoring history (KANSOU_DB_TYPE, see ADR-027/028).
+# Leave db.type empty to run stateless, exactly as kansou always has.
+db:
+  type: ""  # "" (stateless), "sqlite", or "postgres"
+  sqlite:
+    # Path must live under /data — that's where the chart mounts the PVC.
+    path: /data/kansou.db
+    persistence:
+      size: 1Gi
+      # storageClassName: ""  # leave empty to use the cluster default StorageClass
+      storageClassName: ""
+      accessMode: ReadWriteOnce
+  postgres:
+    host: ""
+    port: 5432
+    database: ""
+    user: ""
+    # Set via --set db.postgres.password=... or a values override file.
+    # Never commit a real password here. Stored in the chart's Secret.
+    password: ""
+
+# KANSOU_CORS_ORIGINS — comma-separated CORS allowed origins for the REST
+# server (ADR-030). Empty uses kansou's built-in default.
+corsAllowedOrigins: []
+
 # Raw config.toml content. Mounted into the container at /etc/kansou/config.toml.
 # This matches kansou's built-in defaults. Override any value in your own values file.
 config: |
@@ -194,9 +219,8 @@ config: |
   world_building = 1.2
   pacing = 1.1
 
-  [server]
-  port = 8080
-  cors_allowed_origins = []
+  # Server port/CORS are configured via KANSOU_PORT / KANSOU_CORS_ORIGINS
+  # (see values.service.port and values.corsAllowedOrigins) — not here.
 
 resources:
   requests:

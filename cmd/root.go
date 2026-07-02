@@ -13,6 +13,9 @@ import (
 	"github.com/kondanta/kansou/internal/config"
 	"github.com/kondanta/kansou/internal/logger"
 	"github.com/kondanta/kansou/internal/scoring"
+	"github.com/kondanta/kansou/internal/store"
+	"github.com/kondanta/kansou/internal/store/postgres"
+	"github.com/kondanta/kansou/internal/store/sqlite"
 )
 
 // version is the build version, overridable at link time:
@@ -34,6 +37,8 @@ type App struct {
 	Engine *scoring.Engine
 	// ConfigPath is the resolved path to the loaded config file.
 	ConfigPath string
+	// Store is the persistence layer. Nil in DBless mode (KANSOU_DB_TYPE unset).
+	Store store.Store
 }
 
 // Execute builds the command tree and runs it. Called from main.
@@ -70,29 +75,106 @@ scoring session, and publishes the final weighted score back to AniList.`,
 	app := &App{}
 
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		cfg, err := config.Load(configPath)
-		if err != nil {
-			return fmt.Errorf("loading config: %w", err)
+		ctx := cmd.Context()
+
+		// --- Store initialisation ---
+		dbType := os.Getenv("KANSOU_DB_TYPE")
+		switch dbType {
+		case "sqlite":
+			path := os.Getenv("KANSOU_DB_PATH")
+			if path == "" {
+				path = "~/.local/share/kansou/kansou.db"
+			}
+			s, err := sqlite.New(path)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: opening sqlite database: %v\n", err)
+				os.Exit(1)
+			}
+			app.Store = s
+
+		case "postgres":
+			pgcfg := postgres.PostgresConfig{
+				Host:     os.Getenv("POSTGRES_HOST"),
+				Port:     os.Getenv("POSTGRES_PORT"),
+				User:     os.Getenv("POSTGRES_USER"),
+				Password: os.Getenv("POSTGRES_PASSWORD"),
+				DBName:   os.Getenv("POSTGRES_DB"),
+			}
+			s, err := postgres.New(ctx, pgcfg)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: opening postgres database: %v\n", err)
+				os.Exit(1)
+			}
+			app.Store = s
+
+		case "":
+			app.Store = nil // DBless mode
+
+		default:
+			fmt.Fprintf(os.Stderr, "error: unknown KANSOU_DB_TYPE %q — must be \"sqlite\" or \"postgres\"\n", dbType)
+			os.Exit(1)
 		}
-		slog.Debug("config loaded", "dimensions", len(cfg.Dimensions))
-		app.Config = cfg
+
+		// --- Config loading ---
+		if app.Store != nil {
+			cfg, err := app.Store.LoadScoringConfig(ctx)
+			if err != nil {
+				return fmt.Errorf("loading scoring config from database: %w", err)
+			}
+
+			// Seed the DB on first run (empty dimensions table returned defaults).
+			if len(cfg.Dimensions) == 0 {
+				fileCfg, err := config.Load(configPath)
+				if err != nil {
+					return fmt.Errorf("loading config file for DB seed: %w", err)
+				}
+				if err := app.Store.SaveScoringConfig(ctx, fileCfg); err != nil {
+					return fmt.Errorf("seeding database config: %w", err)
+				}
+				cfg = fileCfg
+				slog.Info("seeded database from config file", "dimensions", len(cfg.Dimensions))
+			}
+
+			slog.Debug("config loaded from database", "dimensions", len(cfg.Dimensions))
+			app.Config = cfg
+		} else {
+			cfg, err := config.Load(configPath)
+			if err != nil {
+				return fmt.Errorf("loading config: %w", err)
+			}
+			slog.Debug("config loaded", "dimensions", len(cfg.Dimensions))
+			app.Config = cfg
+		}
+
 		resolved, err := config.ResolvePath(configPath)
 		if err != nil {
 			return fmt.Errorf("resolving config path: %w", err)
 		}
 		app.ConfigPath = resolved
 		app.AniList = anilist.NewClient()
-		app.Engine = newEngine(cfg)
+		app.Engine = newEngine(app.Config)
 		return nil
 	}
 
 	rootCmd.AddCommand(app.mediaCmd())
 	rootCmd.AddCommand(app.scoreCmd())
 	rootCmd.AddCommand(app.serveCmd())
+	rootCmd.AddCommand(app.dbCmd())
+	rootCmd.AddCommand(app.statsCmd())
+	rootCmd.AddCommand(app.historyCmd())
+	rootCmd.AddCommand(app.configCmd())
+	rootCmd.AddCommand(app.exportCmd())
 
+	exitCode := 0
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+		exitCode = 1
+	}
+	if app.Store != nil {
+		_ = app.Store.Close()
+	}
+	if exitCode != 0 {
+		os.Exit(exitCode)
 	}
 }
 

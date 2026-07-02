@@ -110,6 +110,13 @@ type SessionMeta struct {
 	// (base × multiplier) before renormalization. Dividing any dimension's
 	// effective weight by this value reproduces its final weight.
 	EffectiveWeightSum float64
+	// Format is the raw AniList format string (TV, OVA, MANGA, ONE_SHOT, etc.).
+	// Carried through for persistence provenance. Not used by the engine itself.
+	Format string
+	// UserSelectedGenres is the explicit genre selection provided by the caller
+	// (Entry.UserSelectedGenres), copied through by the engine for persistence.
+	// Nil when the caller did not restrict the active genre set.
+	UserSelectedGenres []string
 }
 
 // BreakdownRow is the full audit trail for a single dimension's contribution

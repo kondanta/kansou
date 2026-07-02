@@ -85,7 +85,7 @@ func toConfigPayload(cfg *config.Config) configPayload {
 // handlePostConfig replaces the mutable config surface and reloads the engine.
 //
 //	@Summary                Update config
-//	@Description    Replaces the scoring config (dimensions, genres, weights) and reloads the engine atomically. Writes the new config to disk. Only available when --live-config is set.
+//	@Description    Replaces the scoring config (dimensions, genres, weights) and reloads the engine atomically. Persists to the database in DB mode, or to disk otherwise. Only available when --live-config is set.
 //	@Tags                   config
 //	@Accept                 json
 //	@Produce                json
@@ -117,9 +117,18 @@ func (s *Server) handlePostConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := config.Write(s.configPath, newCfg); err != nil {
-		writeError(w, http.StatusInternalServerError, "config file is not writable: "+err.Error())
-		return
+	// In DB mode, config lives in the database — writing to disk here would
+	// silently diverge from what LoadScoringConfig returns on next restart.
+	if s.store != nil {
+		if err := s.store.SaveScoringConfig(r.Context(), newCfg); err != nil {
+			writeError(w, http.StatusInternalServerError, "persisting config to database: "+err.Error())
+			return
+		}
+	} else {
+		if err := config.Write(s.configPath, newCfg); err != nil {
+			writeError(w, http.StatusInternalServerError, "config file is not writable: "+err.Error())
+			return
+		}
 	}
 
 	eng := buildEngine(newCfg)

@@ -14,6 +14,101 @@ notice: no config file found at ~/.config/kansou/config.toml, using built-in def
 
 This is not an error. `kansou` is fully functional without a config file.
 
+**This section describes DBless mode.** When `KANSOU_DB_TYPE` is set (see
+below), scoring config lives in the database instead — `config.toml` becomes
+a seed/export format only. See "Database Mode" below (ADR-029).
+
+---
+
+## Environment Variables
+
+All environment variables are optional. `ANILIST_TOKEN` (required only for
+publishing scores) is documented in `docs/ANILIST_INTEGRATION.md`, never here
+or in any config file.
+
+| Variable | Default | Description |
+|---|---|---|
+| `KANSOU_DB_TYPE` | unset (DBless) | `sqlite` or `postgres`. Enables persistence, history, stats, and export. Unset = kansou behaves exactly as it always has. |
+| `KANSOU_DB_PATH` | `~/.local/share/kansou/kansou.db` | SQLite database file path. Only read when `KANSOU_DB_TYPE=sqlite`. |
+| `POSTGRES_HOST` | — | Postgres host. Required when `KANSOU_DB_TYPE=postgres`. |
+| `POSTGRES_PORT` | `5432` | Postgres port. |
+| `POSTGRES_USER` | — | Postgres username. Required when `KANSOU_DB_TYPE=postgres`. |
+| `POSTGRES_PASSWORD` | — | Postgres password. Never logged, never included in error messages, never appears in DSN strings passed to the driver. |
+| `POSTGRES_DB` | — | Postgres database name. Required when `KANSOU_DB_TYPE=postgres`. |
+| `KANSOU_PORT` | `8080` | REST server port. Replaces `[server].port`, now deprecated (ADR-030). `--port` flag still takes precedence. |
+| `KANSOU_CORS_ORIGINS` | `http://localhost:3000,http://localhost:5173,http://localhost:8080` | Comma-separated CORS allowed origins. Replaces `[server].cors_allowed_origins`. |
+
+If `KANSOU_DB_TYPE` is set to anything other than `sqlite` or `postgres`,
+`kansou` prints an error and exits with code 1 — there is no default database
+type to silently fall back to.
+
+---
+
+## Database Mode
+
+Set `KANSOU_DB_TYPE=sqlite` or `KANSOU_DB_TYPE=postgres` to enable persistent
+scoring history, `kansou stats`, `kansou history`, and `kansou export`. See
+`docs/ADR.md` ADR-027–034 for the full design rationale.
+
+When a database is configured:
+
+- **Scoring config moves to the database.** `LoadScoringConfig`/
+  `SaveScoringConfig` replace `config.toml` as the source of truth. On first
+  run against an empty database, kansou seeds it from `config.toml` (or
+  built-in defaults if no file exists) automatically.
+- **`config.toml` becomes a seed/export format.** Use `kansou config export`
+  to write the current DB config out to a file, and `kansou config import` to
+  load a file's contents into the database. Both DBless-mode config commands
+  (`show`, `import`, `export`) work regardless of database mode; `dimension`
+  and `genre` subcommands require a database.
+- **`kansou db prune`** hard-deletes soft-deleted score rows (see
+  "`max_history`" below and ADR-031). This is irreversible and prompts for
+  confirmation.
+- If the database is unreachable or migrations fail, `kansou` fails loudly
+  before reaching any prompt — there is no silent fallback to DBless mode.
+
+DBless mode (`KANSOU_DB_TYPE` unset) is unaffected by anything in this
+section — every command that requires a database returns a clear error
+(`"... requires a database — set KANSOU_DB_TYPE to enable"`) rather than
+silently doing nothing.
+
+### Deploying with Helm
+
+The chart in `charts/kansou/` sets the environment variables above from
+`values.yaml` — you don't set them directly in a Kubernetes deployment.
+
+| Chart value | Maps to |
+|---|---|
+| `db.type` | `KANSOU_DB_TYPE` (`""`, `sqlite`, or `postgres`) |
+| `db.sqlite.path` | `KANSOU_DB_PATH`. Must live under `/data` — the chart mounts a PVC (`db.sqlite.persistence`) there when `db.type: sqlite`. |
+| `db.postgres.host` / `port` / `database` / `user` | `POSTGRES_HOST` / `POSTGRES_PORT` / `POSTGRES_DB` / `POSTGRES_USER` |
+| `db.postgres.password` | `POSTGRES_PASSWORD`, stored in the chart's Secret, never a plain env value |
+| `corsAllowedOrigins` | `KANSOU_CORS_ORIGINS` (joined with commas) |
+| `service.port` | `KANSOU_PORT` |
+
+Leaving `db.type` empty deploys kansou stateless, same as an unset
+`KANSOU_DB_TYPE` locally. The chart refuses to render if `db.type` is set to
+anything other than `""`, `sqlite`, or `postgres`, or if `db.postgres.password`
+is missing while `db.type: postgres`.
+
+---
+
+## `max_history`
+
+Controls how many previous scores are kept per media entry (stored in
+`config_scalars` in DB mode, or as a top-level `max_history` key in
+`config.toml` in DBless mode):
+
+| Value | Behavior |
+|---|---|
+| `0` (default) | Keep only the latest score. Previous scores are soft-deleted on every new score. |
+| `N` (positive integer) | Keep the `N` most recent scores per media. Older ones are soft-deleted. |
+| `-1` | Keep all scores forever. No soft deletion ever happens. |
+
+Soft-deleted rows still occupy space until `kansou db prune` hard-deletes
+them. `max_history` only controls *retention count*, not *when* pruning
+happens — pruning is always a separate, explicit, irreversible action.
+
 ---
 
 ## Validation Rules
@@ -70,6 +165,19 @@ max_multiplier = 2.0
 # ---------------------------------------------------------------
 
 primary_genre_weight = 0.6
+
+# ---------------------------------------------------------------
+# max_history
+#
+# How many previous scores to keep per media entry (requires a database —
+# see "Database Mode" above; ignored in DBless mode beyond being stored).
+#   0  = keep only the latest (previous score is soft-deleted on each rescore)
+#   N  = keep the N most recent (e.g. max_history = 5)
+#  -1  = keep all scores forever
+# Default: 0
+# ---------------------------------------------------------------
+
+max_history = 0
 
 # ---------------------------------------------------------------
 # [dimensions]
@@ -254,23 +362,22 @@ pacing         = 1.1
 
 
 # ---------------------------------------------------------------
-# [server]
+# [server] — DEPRECATED (ADR-030)
 #
-# Configuration for `kansou serve` mode.
-# All fields are optional — the values below are the defaults.
+# Values in this section are ignored at runtime. If present, kansou prints a
+# deprecation warning to stderr and uses KANSOU_PORT / KANSOU_CORS_ORIGINS
+# environment variables instead (see "Environment Variables" above). This
+# section will be removed entirely in the next major version. Delete it from
+# your config file — it has no effect.
 # ---------------------------------------------------------------
 
-[server]
-port = 8080
-
-# CORS allowed origins for the REST API.
-# Add your frontend origin here when building a web UI.
-# Default allows localhost development on common ports.
-cors_allowed_origins = [
-  "http://localhost:3000",
-  "http://localhost:5173",
-  "http://localhost:8080",
-]
+# [server]
+# port = 8080
+# cors_allowed_origins = [
+#   "http://localhost:3000",
+#   "http://localhost:5173",
+#   "http://localhost:8080",
+# ]
 ```
 
 ---
@@ -355,15 +462,24 @@ values must be > 0.0 and ≤ `max_multiplier`. No auto-normalization. On any
 validation failure the request is rejected with HTTP 400 and the in-memory
 config is unchanged.
 
-### TOML write-back
+### Persistence: database vs. disk (ADR-029)
 
-After a successful `POST /config`, the updated config is written atomically
-to the config file on disk (encode to a temp file, then `os.Rename` into
-place). Comments and custom formatting from the original file are not
-preserved after the first write. `config.example.toml` remains the annotated
-human-readable reference.
+After a successful `POST /config`:
 
-### Writability requirement
+- **Database mode** (`KANSOU_DB_TYPE` set): the update is persisted via
+  `SaveScoringConfig` — the config file on disk is untouched.
+- **DBless mode**: the updated config is written atomically to the config
+  file on disk (encode to a temp file, then `os.Rename` into place). Comments
+  and custom formatting from the original file are not preserved after the
+  first write. `config.example.toml` remains the annotated human-readable
+  reference.
+
+This branch exists because `POST /config` originally always wrote to disk,
+even in database mode — meaning a live config change over HTTP silently
+failed to persist to the database and was overwritten by `LoadScoringConfig`
+on the next restart. Fixed as part of ADR-029.
+
+### Writability requirement (DBless mode only)
 
 `--live-config` requires the config file path to be on a writable filesystem.
 At startup, the server probes writability by creating and deleting a temporary

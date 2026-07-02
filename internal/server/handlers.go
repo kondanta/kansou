@@ -357,6 +357,7 @@ func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 			TitleRomaji:        media.TitleRomaji,
 			TitleEnglish:       media.TitleEnglish,
 			MediaType:          media.MediaType,
+			Format:             media.Format,
 			AniListURL:         aniListURL(media),
 			AllGenres:          media.Genres,
 			ConfigHash:         snap.cfg.DimensionsHash,
@@ -369,6 +370,12 @@ func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
+	}
+
+	if s.store != nil {
+		if saveErr := s.store.SaveScore(r.Context(), result, snap.cfg, snap.cfg.MaxHistory); saveErr != nil {
+			slog.Error("saving score to database", "err", saveErr)
+		}
 	}
 
 	writeJSON(w, http.StatusOK, toScoreResponse(result))
