@@ -67,7 +67,7 @@ type mediaResponse struct {
 //	@Failure		400	{object}	errorResponse
 //	@Failure		404	{object}	errorResponse
 //	@Failure		502	{object}	errorResponse
-//	@Router			/media/search [get]
+//	@Router			/api/media/search [get]
 func (s *Server) handleMediaSearch(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
 	if q == "" {
@@ -100,7 +100,7 @@ func (s *Server) handleMediaSearch(w http.ResponseWriter, r *http.Request) {
 //	@Failure		400	{object}	errorResponse
 //	@Failure		404	{object}	errorResponse
 //	@Failure		502	{object}	errorResponse
-//	@Router			/media/{id} [get]
+//	@Router			/api/media/{id} [get]
 func (s *Server) handleMediaFetch(w http.ResponseWriter, r *http.Request) {
 	rawID := chi.URLParam(r, "id")
 	id, err := strconv.Atoi(rawID)
@@ -147,7 +147,7 @@ type dimensionsResponse struct {
 //	@Tags			score
 //	@Produce		json
 //	@Success		200	{object}	dimensionsResponse
-//	@Router			/dimensions [get]
+//	@Router			/api/dimensions [get]
 func (s *Server) handleDimensions(w http.ResponseWriter, r *http.Request) {
 	snap := s.getSnapshot()
 	items := make([]dimensionItem, 0, len(snap.cfg.DimensionOrder))
@@ -192,7 +192,7 @@ type genresResponse struct {
 //	@Tags			score
 //	@Produce		json
 //	@Success		200	{object}	genresResponse
-//	@Router			/genres [get]
+//	@Router			/api/genres [get]
 func (s *Server) handleGenres(w http.ResponseWriter, r *http.Request) {
 	snap := s.getSnapshot()
 	items := make([]genreMultiplierItem, 0, len(snap.cfg.Genres))
@@ -292,7 +292,7 @@ type sessionMetaResponse struct {
 //	@Failure		400		{object}	errorResponse
 //	@Failure		413		{object}	errorResponse
 //	@Failure		502		{object}	errorResponse
-//	@Router			/score [post]
+//	@Router			/api/score [post]
 func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 	var req scoreRequest
 
@@ -457,7 +457,7 @@ type weightsResponse struct {
 //	@Failure		400		{object}	errorResponse
 //	@Failure		413		{object}	errorResponse
 //	@Failure		502		{object}	errorResponse
-//	@Router			/weights [post]
+//	@Router			/api/weights [post]
 func (s *Server) handleWeights(w http.ResponseWriter, r *http.Request) {
 	var req weightsRequest
 	if !decodeBody(w, r, &req) {
@@ -556,7 +556,7 @@ type publishResponse struct {
 //	@Failure		400		{object}	errorResponse
 //	@Failure		413		{object}	errorResponse
 //	@Failure		502		{object}	errorResponse
-//	@Router			/score/publish [post]
+//	@Router			/api/score/publish [post]
 func (s *Server) handleScorePublish(w http.ResponseWriter, r *http.Request) {
 	var req publishRequest
 	if !decodeBody(w, r, &req) {

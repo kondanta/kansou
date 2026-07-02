@@ -99,32 +99,37 @@ func (s *Server) buildRouter() *chi.Mux {
 	// legacy single-file UI when dist hasn't been built yet.
 	r.Handle("/*", spaHandler(kansouweb.DistDirFS))
 
+	// Health check stays at root — outside /api — for load balancer/orchestrator
+	// probes that expect a fixed, unprefixed path.
 	r.Get("/health", s.handleHealth)
-	r.Get("/db-info", s.handleDBInfo)
-	r.Get("/dimensions", s.handleDimensions)
-	r.Get("/genres", s.handleGenres)
-	r.Get("/stats", s.handleStatsSummary)
-	r.Get("/stats/genres", s.handleStatsGenres)
-	r.Get("/stats/dimensions", s.handleStatsDimensions)
-	r.Get("/stats/history", s.handleStatsHistory)
-	r.Get("/history", s.handleHistoryList)
-	r.Get("/history/{anilist_id}", s.handleHistoryDetail)
-	r.Delete("/history/{score_id}", s.handleHistoryDelete)
-	r.With(httprate.LimitByIP(rateLimitSearch, time.Minute)).Get("/media/search", s.handleMediaSearch)
-	r.With(httprate.LimitByIP(rateLimitFetch, time.Minute)).Get("/media/{id}", s.handleMediaFetch)
-	r.With(httprate.LimitByIP(rateLimitScore, time.Minute)).Post("/score", s.handleScore)
-	r.With(httprate.LimitByIP(rateLimitPublish, time.Minute)).Post("/score/publish", s.handleScorePublish)
-	r.Post("/weights", s.handleWeights)
 
-	// Swagger UI.
+	r.Route("/api", func(r chi.Router) {
+		r.Get("/db-info", s.handleDBInfo)
+		r.Get("/dimensions", s.handleDimensions)
+		r.Get("/genres", s.handleGenres)
+		r.Get("/stats", s.handleStatsSummary)
+		r.Get("/stats/genres", s.handleStatsGenres)
+		r.Get("/stats/dimensions", s.handleStatsDimensions)
+		r.Get("/stats/history", s.handleStatsHistory)
+		r.Get("/history", s.handleHistoryList)
+		r.Get("/history/{anilist_id}", s.handleHistoryDetail)
+		r.Delete("/history/{score_id}", s.handleHistoryDelete)
+		r.With(httprate.LimitByIP(rateLimitSearch, time.Minute)).Get("/media/search", s.handleMediaSearch)
+		r.With(httprate.LimitByIP(rateLimitFetch, time.Minute)).Get("/media/{id}", s.handleMediaFetch)
+		r.With(httprate.LimitByIP(rateLimitScore, time.Minute)).Post("/score", s.handleScore)
+		r.With(httprate.LimitByIP(rateLimitPublish, time.Minute)).Post("/score/publish", s.handleScorePublish)
+		r.Post("/weights", s.handleWeights)
+
+		if s.dbType != "" || s.liveConfig {
+			r.Get("/config", s.handleGetConfig)
+			r.Post("/config", s.handlePostConfig)
+		}
+	})
+
+	// Swagger UI — stays at root, not versioned under /api.
 	r.Get("/swagger/*", httpSwagger.Handler(
 		httpSwagger.URL("/swagger/doc.json"),
 	))
-
-	if s.liveConfig {
-		r.Get("/config", s.handleGetConfig)
-		r.Post("/config", s.handlePostConfig)
-	}
 
 	return r
 }
@@ -169,7 +174,6 @@ func spaHandler(distFS fs.FS) http.HandlerFunc {
 // the caller (cmd/serve.go). It handles SIGINT and SIGTERM with a graceful
 // shutdown, waiting up to 10 seconds for in-flight requests to complete.
 func (s *Server) ListenAndServe(port int) error {
-
 	addr := fmt.Sprintf(":%d", port)
 	srv := &http.Server{
 		Addr:         addr,
