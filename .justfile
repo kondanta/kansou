@@ -15,7 +15,7 @@ build:
 build-ui:
     gh release download "{{tribbie_version}}" --repo sasalx/tribbie --pattern "tribbie-{{tribbie_version}}.zip" --output /tmp/tribbie.zip --clobber
     mkdir -p web/dist
-    unzip -o /tmp/tribbie.zip -d web/dist/
+    unzip -o /tmp/tribbie.zip -d web/
     touch web/dist/.gitkeep
     rm /tmp/tribbie.zip
 
