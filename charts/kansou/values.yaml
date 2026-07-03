@@ -95,6 +95,13 @@ db:
 # server (ADR-030). Empty uses kansou's built-in default.
 corsAllowedOrigins: []
 
+# TRUST_PROXY — resolve the client IP used for per-IP rate limiting from
+# X-Forwarded-For instead of the raw TCP peer address. Defaults to true
+# because Kubernetes ingress/gateway (e.g. Envoy Gateway) sits in front of
+# the Service and adds itself as one hop. Set to false only if the Service
+# is exposed directly (e.g. type: LoadBalancer with no fronting proxy).
+trustProxy: true
+
 # Raw config.toml content. Mounted into the container at /etc/kansou/config.toml.
 # This matches kansou's built-in defaults. Override any value in your own values file.
 config: |

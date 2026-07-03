@@ -53,8 +53,9 @@ Swagger UI is available at /swagger/index.html.`,
 			port := resolvePort(portFlag)
 			corsOrigins := resolveCORSOrigins()
 			dbType := os.Getenv("KANSOU_DB_TYPE")
+			trustProxy := resolveTrustProxy()
 
-			srv := server.New(a.Config, a.AniList, a.Engine, liveConfig, a.ConfigPath, a.Store, dbType, corsOrigins)
+			srv := server.New(a.Config, a.AniList, a.Engine, liveConfig, a.ConfigPath, a.Store, dbType, corsOrigins, trustProxy)
 			if err := srv.ListenAndServe(port); err != nil {
 				slog.Error("server error", "err", err)
 				os.Exit(1)
@@ -99,4 +100,16 @@ func resolveCORSOrigins() []string {
 		}
 	}
 	return defaultCORSOrigins
+}
+
+// resolveTrustProxy reports whether kansou should resolve the client IP for
+// rate limiting from the X-Forwarded-For header set by a fronting reverse
+// proxy or gateway, rather than from the raw TCP peer address. Set
+// TRUST_PROXY=true when kansou sits behind exactly one such hop (e.g. an
+// Envoy Kubernetes Gateway). Leave it unset for direct-exposed deployments
+// (e.g. a bare `docker run`), where the TCP peer address is already the
+// real client IP and trusting X-Forwarded-For would let clients spoof it.
+func resolveTrustProxy() bool {
+	trust, err := strconv.ParseBool(os.Getenv("TRUST_PROXY"))
+	return err == nil && trust
 }

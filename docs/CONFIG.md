@@ -37,6 +37,7 @@ or in any config file.
 | `POSTGRES_DB` | — | Postgres database name. Required when `KANSOU_DB_TYPE=postgres`. |
 | `KANSOU_PORT` | `8080` | REST server port. Replaces `[server].port`, now deprecated (ADR-030). `--port` flag still takes precedence. |
 | `KANSOU_CORS_ORIGINS` | `http://localhost:3000,http://localhost:5173,http://localhost:8080` | Comma-separated CORS allowed origins. Replaces `[server].cors_allowed_origins`. |
+| `TRUST_PROXY` | `false` | Set to `true` when kansou sits behind exactly one reverse proxy/gateway hop (e.g. an Envoy Kubernetes Gateway) that sets `X-Forwarded-For`. Controls how the client IP used for per-IP rate limiting on `/media/search`, `/media/{id}`, `/score`, and `/score/publish` is resolved. Leave unset for direct-exposed deployments (e.g. a bare `docker run`) — trusting `X-Forwarded-For` there would let clients spoof their rate-limit bucket. |
 
 If `KANSOU_DB_TYPE` is set to anything other than `sqlite` or `postgres`,
 `kansou` prints an error and exits with code 1 — there is no default database
@@ -85,6 +86,7 @@ The chart in `charts/kansou/` sets the environment variables above from
 | `db.postgres.password` | `POSTGRES_PASSWORD`, stored in the chart's Secret, never a plain env value |
 | `corsAllowedOrigins` | `KANSOU_CORS_ORIGINS` (joined with commas) |
 | `service.port` | `KANSOU_PORT` |
+| `trustProxy` | `TRUST_PROXY`. Defaults to `true` — the chart assumes a fronting gateway/ingress (e.g. Envoy Gateway) adds one `X-Forwarded-For` hop. |
 
 Leaving `db.type` empty deploys kansou stateless, same as an unset
 `KANSOU_DB_TYPE` locally. The chart refuses to render if `db.type` is set to

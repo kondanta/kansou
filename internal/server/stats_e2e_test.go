@@ -78,7 +78,7 @@ func newDBBackedTestServer(t *testing.T) (*Server, *sqlite.SQLiteStore) {
 	t.Cleanup(func() { _ = st.Close() })
 
 	cfg := minimalConfig()
-	s := New(cfg, nil, minimalEngine(cfg), false, "", st, "sqlite", nil)
+	s := New(cfg, nil, minimalEngine(cfg), false, "", st, "sqlite", nil, false)
 	return s, st
 }
 
@@ -196,7 +196,7 @@ func TestStatsEndpoints_EndToEnd(t *testing.T) {
 // store is configured — the DB-optional mode real users run in by default.
 func TestStatsEndpoints_DBless(t *testing.T) {
 	cfg := minimalConfig()
-	s := New(cfg, nil, minimalEngine(cfg), true, "", nil, "", nil)
+	s := New(cfg, nil, minimalEngine(cfg), true, "", nil, "", nil, false)
 
 	for _, path := range []string{"/api/stats", "/api/stats/genres", "/api/stats/dimensions", "/api/stats/history"} {
 		t.Run(path, func(t *testing.T) {
