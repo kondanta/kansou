@@ -126,6 +126,8 @@ func (s *Server) buildRouter() *chi.Mux {
 
 	// Health check stays at root — outside /api — for load balancer/orchestrator
 	// probes that expect a fixed, unprefixed path.
+	r.Get("/health", s.handleHealth)
+
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/db-info", s.handleDBInfo)
 		r.Get("/dimensions", s.handleDimensions)
