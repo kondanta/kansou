@@ -21,7 +21,7 @@ func TestHistoryEndpoints_EndToEnd(t *testing.T) {
 
 	t.Run("list", func(t *testing.T) {
 		var body []historyListItem
-		res := doGet(t, s, "/history", &body)
+		res := doGet(t, s, "/api/history", &body)
 		if res.StatusCode != http.StatusOK {
 			t.Fatalf("status: got %d, want 200", res.StatusCode)
 		}
@@ -40,7 +40,7 @@ func TestHistoryEndpoints_EndToEnd(t *testing.T) {
 
 	t.Run("detail", func(t *testing.T) {
 		var body []store.Score
-		res := doGet(t, s, "/history/1", &body)
+		res := doGet(t, s, "/api/history/1", &body)
 		if res.StatusCode != http.StatusOK {
 			t.Fatalf("status: got %d, want 200", res.StatusCode)
 		}
@@ -54,14 +54,14 @@ func TestHistoryEndpoints_EndToEnd(t *testing.T) {
 
 	t.Run("detail invalid id", func(t *testing.T) {
 		var body errorResponse
-		res := doGet(t, s, "/history/not-a-number", &body)
+		res := doGet(t, s, "/api/history/not-a-number", &body)
 		if res.StatusCode != http.StatusBadRequest {
 			t.Fatalf("status: got %d, want 400", res.StatusCode)
 		}
 	})
 
 	t.Run("delete", func(t *testing.T) {
-		req := doDelete(t, s, fmt.Sprintf("/history/%d", scoreIDToDelete))
+		req := doDelete(t, s, fmt.Sprintf("/api/history/%d", scoreIDToDelete))
 		if req.StatusCode != http.StatusNoContent {
 			t.Fatalf("status: got %d, want 204", req.StatusCode)
 		}
@@ -69,7 +69,7 @@ func TestHistoryEndpoints_EndToEnd(t *testing.T) {
 		// Deliberate delete does not promote an older score — must disappear
 		// from the list, not just drop a count.
 		var body []historyListItem
-		doGet(t, s, "/history", &body)
+		doGet(t, s, "/api/history", &body)
 		for _, item := range body {
 			if item.TitleRomaji == "Test Show A" {
 				t.Errorf("deleted entry still present in list: %+v", item)
@@ -78,14 +78,14 @@ func TestHistoryEndpoints_EndToEnd(t *testing.T) {
 	})
 
 	t.Run("delete already deleted", func(t *testing.T) {
-		req := doDelete(t, s, fmt.Sprintf("/history/%d", scoreIDToDelete))
+		req := doDelete(t, s, fmt.Sprintf("/api/history/%d", scoreIDToDelete))
 		if req.StatusCode != http.StatusNotFound {
 			t.Fatalf("status: got %d, want 404", req.StatusCode)
 		}
 	})
 
 	t.Run("delete invalid id", func(t *testing.T) {
-		req := doDelete(t, s, "/history/not-a-number")
+		req := doDelete(t, s, "/api/history/not-a-number")
 		if req.StatusCode != http.StatusBadRequest {
 			t.Fatalf("status: got %d, want 400", req.StatusCode)
 		}
@@ -100,20 +100,20 @@ func TestHistoryEndpoints_DBless(t *testing.T) {
 
 	t.Run("GET /history", func(t *testing.T) {
 		var body errorResponse
-		res := doGet(t, s, "/history", &body)
+		res := doGet(t, s, "/api/history", &body)
 		if res.StatusCode != http.StatusServiceUnavailable {
 			t.Fatalf("status: got %d, want 503", res.StatusCode)
 		}
 	})
 	t.Run("GET /history/{anilist_id}", func(t *testing.T) {
 		var body errorResponse
-		res := doGet(t, s, "/history/1", &body)
+		res := doGet(t, s, "/api/history/1", &body)
 		if res.StatusCode != http.StatusServiceUnavailable {
 			t.Fatalf("status: got %d, want 503", res.StatusCode)
 		}
 	})
 	t.Run("DELETE /history/{score_id}", func(t *testing.T) {
-		res := doDelete(t, s, "/history/1")
+		res := doDelete(t, s, "/api/history/1")
 		if res.StatusCode != http.StatusServiceUnavailable {
 			t.Fatalf("status: got %d, want 503", res.StatusCode)
 		}

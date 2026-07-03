@@ -116,7 +116,7 @@ The tool runs with built-in defaults if no config file is found. See [`docs/CONF
 
 ## AniList Token
 
-Write operations (publish prompt in `score add`, `POST /score/publish`) require an AniList user token:
+Write operations (publish prompt in `score add`, `POST /api/score/publish`) require an AniList user token:
 
 ```bash
 export ANILIST_TOKEN=your_token_here
@@ -219,28 +219,28 @@ reference and `max_history` retention semantics.
 ```bash
 kansou serve
 kansou serve --port 3000
-kansou serve --live-config          # enables GET /config and POST /config
+kansou serve --live-config          # enables GET /api/config and POST /api/config
 ```
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/health` | Liveness check |
-| `GET` | `/dimensions` | List configured scoring dimensions |
-| `GET` | `/genres` | List configured genre multiplier blocks |
-| `GET` | `/media/search?q={query}` | Search AniList by name |
-| `GET` | `/media/{id}` | Fetch media by AniList ID |
-| `POST` | `/score` | Calculate a weighted score |
-| `POST` | `/score/publish` | Publish a score to AniList |
-| `GET` | `/config` † | Return current mutable config as JSON (with `config_hash`) |
-| `POST` | `/config` † | Replace mutable config, reload engine, persist to DB or disk |
-| `GET` | `/db-info` | Always available — reports active DB backend or DBless status |
-| `GET` | `/history` ‡ | Latest score per entry, newest first |
-| `GET` | `/history/{anilist_id}` ‡ | All non-deleted scores for one entry, full breakdown |
-| `DELETE` | `/history/{score_id}` ‡ | Soft-delete one score by its row ID |
-| `GET` | `/stats` ‡ | One-line summary per category |
-| `GET` | `/stats/genres` ‡ | Genre breakdown, score by genre, genre×dimension affinity |
-| `GET` | `/stats/dimensions` ‡ | Variance, consistency, correlation, skip rate, weight overrides |
-| `GET` | `/stats/history` ‡ | Most rescored, outliers, config impact |
+| `GET` | `/api/dimensions` | List configured scoring dimensions |
+| `GET` | `/api/genres` | List configured genre multiplier blocks |
+| `GET` | `/api/media/search?q={query}` | Search AniList by name |
+| `GET` | `/api/media/{id}` | Fetch media by AniList ID |
+| `POST` | `/api/score` | Calculate a weighted score |
+| `POST` | `/api/score/publish` | Publish a score to AniList |
+| `GET` | `/api/config` † | Return current mutable config as JSON (with `config_hash`) |
+| `POST` | `/api/config` † | Replace mutable config, reload engine, persist to DB or disk |
+| `GET` | `/api/db-info` | Always available — reports active DB backend or DBless status |
+| `GET` | `/api/history` ‡ | Latest score per entry, newest first |
+| `GET` | `/api/history/{anilist_id}` ‡ | All non-deleted scores for one entry, full breakdown |
+| `DELETE` | `/api/history/{score_id}` ‡ | Soft-delete one score by its row ID |
+| `GET` | `/api/stats` ‡ | One-line summary per category |
+| `GET` | `/api/stats/genres` ‡ | Genre breakdown, score by genre, genre×dimension affinity |
+| `GET` | `/api/stats/dimensions` ‡ | Variance, consistency, correlation, skip rate, weight overrides |
+| `GET` | `/api/stats/history` ‡ | Most rescored, outliers, config impact |
 
 † Only available when `--live-config` is set. Requires a writable config file path. See [`docs/CONFIG.md`](docs/CONFIG.md#runtime-config-editing---live-config).
 ‡ Requires `KANSOU_DB_TYPE` to be set — returns HTTP 503 otherwise. See [Scoring History (optional)](#scoring-history-optional).
