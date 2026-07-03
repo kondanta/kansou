@@ -108,7 +108,7 @@ func TestStatsEndpoints_EndToEnd(t *testing.T) {
 
 	t.Run("summary", func(t *testing.T) {
 		var body map[string]any
-		res := doGet(t, s, "/stats", &body)
+		res := doGet(t, s, "/api/stats", &body)
 		if res.StatusCode != http.StatusOK {
 			t.Fatalf("status: got %d, want 200", res.StatusCode)
 		}
@@ -122,7 +122,7 @@ func TestStatsEndpoints_EndToEnd(t *testing.T) {
 
 	t.Run("genres", func(t *testing.T) {
 		var body genreStatsResponse
-		res := doGet(t, s, "/stats/genres", &body)
+		res := doGet(t, s, "/api/stats/genres", &body)
 		if res.StatusCode != http.StatusOK {
 			t.Fatalf("status: got %d, want 200", res.StatusCode)
 		}
@@ -153,7 +153,7 @@ func TestStatsEndpoints_EndToEnd(t *testing.T) {
 				AvgScore     float64
 			}
 		}
-		res := doGet(t, s, "/stats/dimensions", &body)
+		res := doGet(t, s, "/api/stats/dimensions", &body)
 		if res.StatusCode != http.StatusOK {
 			t.Fatalf("status: got %d, want 200", res.StatusCode)
 		}
@@ -169,7 +169,7 @@ func TestStatsEndpoints_EndToEnd(t *testing.T) {
 
 	t.Run("history", func(t *testing.T) {
 		var body historyStatsResponse
-		res := doGet(t, s, "/stats/history", &body)
+		res := doGet(t, s, "/api/stats/history", &body)
 		if res.StatusCode != http.StatusOK {
 			t.Fatalf("status: got %d, want 200", res.StatusCode)
 		}
@@ -184,7 +184,7 @@ func TestStatsEndpoints_EndToEnd(t *testing.T) {
 
 	t.Run("db-info reports sqlite", func(t *testing.T) {
 		var body map[string]any
-		doGet(t, s, "/db-info", &body)
+		doGet(t, s, "/api/db-info", &body)
 		if body["db"] != "sqlite" {
 			t.Errorf("db-info: got %+v, want db=sqlite", body)
 		}
@@ -198,7 +198,7 @@ func TestStatsEndpoints_DBless(t *testing.T) {
 	cfg := minimalConfig()
 	s := New(cfg, nil, minimalEngine(cfg), true, "", nil, "", nil, false)
 
-	for _, path := range []string{"/stats", "/stats/genres", "/stats/dimensions", "/stats/history"} {
+	for _, path := range []string{"/api/stats", "/api/stats/genres", "/api/stats/dimensions", "/api/stats/history"} {
 		t.Run(path, func(t *testing.T) {
 			var body errorResponse
 			res := doGet(t, s, path, &body)
@@ -212,7 +212,7 @@ func TestStatsEndpoints_DBless(t *testing.T) {
 	}
 
 	var info map[string]any
-	doGet(t, s, "/db-info", &info)
+	doGet(t, s, "/api/db-info", &info)
 	if db, ok := info["db"]; !ok || db != nil {
 		t.Errorf("db-info: got db=%+v, want nil in DBless mode", db)
 	}

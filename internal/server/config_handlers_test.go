@@ -81,7 +81,7 @@ func TestHandleGetConfig_ReturnsPayload(t *testing.T) {
 	cfg := minimalConfig()
 	srv := newTestServer(cfg, true, "")
 
-	req := httptest.NewRequest(http.MethodGet, "/config", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/config", nil)
 	rec := httptest.NewRecorder()
 	srv.router.ServeHTTP(rec, req)
 
@@ -112,7 +112,7 @@ func TestHandleGetConfig_HashMatchesConfig(t *testing.T) {
 	cfg := minimalConfig()
 	srv := newTestServer(cfg, true, "")
 
-	req := httptest.NewRequest(http.MethodGet, "/config", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/config", nil)
 	rec := httptest.NewRecorder()
 	srv.router.ServeHTTP(rec, req)
 
@@ -130,16 +130,16 @@ func TestHandleGetConfig_HashMatchesConfig(t *testing.T) {
 func TestHandleGetConfig_RouteAbsentWithoutFlag(t *testing.T) {
 	srv := newTestServer(minimalConfig(), false, "")
 
-	req := httptest.NewRequest(http.MethodGet, "/config", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/config", nil)
 	rec := httptest.NewRecorder()
 	srv.router.ServeHTTP(rec, req)
 
-	// The SPA wildcard catches /config when the route is not registered and
-	// returns 200 HTML — but the config handler would return application/json.
+	// The SPA wildcard catches /api/config when the route is not registered
+	// and returns 200 HTML — but the config handler would return application/json.
 	// Absence of JSON content-type confirms the config handler did not run.
 	ct := rec.Header().Get("Content-Type")
 	if ct == "application/json" {
-		t.Error("GET /config returned JSON — config handler should not be registered without --live-config")
+		t.Error("GET /api/config returned JSON — config handler should not be registered without --live-config")
 	}
 }
 
@@ -160,7 +160,7 @@ func TestHandlePostConfig_ValidReplacement(t *testing.T) {
 	}
 	b, _ := json.Marshal(body)
 
-	req := httptest.NewRequest(http.MethodPost, "/config", bytes.NewReader(b))
+	req := httptest.NewRequest(http.MethodPost, "/api/config", bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.router.ServeHTTP(rec, req)
@@ -187,7 +187,7 @@ func TestHandlePostConfig_ValidReplacement(t *testing.T) {
 	// Snapshot must reflect the new config.
 	snap := srv.getSnapshot()
 	if snap.cfg.Dimensions["story"].Weight != 0.70 {
-		t.Error("snapshot not updated after POST /config")
+		t.Error("snapshot not updated after POST /api/config")
 	}
 }
 
@@ -207,7 +207,7 @@ func TestHandlePostConfig_WritesToDisk(t *testing.T) {
 	}
 	b, _ := json.Marshal(body)
 
-	req := httptest.NewRequest(http.MethodPost, "/config", bytes.NewReader(b))
+	req := httptest.NewRequest(http.MethodPost, "/api/config", bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
 	srv.router.ServeHTTP(httptest.NewRecorder(), req)
 
@@ -261,7 +261,7 @@ func TestHandlePostConfig_DBMode_PersistsToStore_NotDisk(t *testing.T) {
 	}
 	b, _ := json.Marshal(body)
 
-	req := httptest.NewRequest(http.MethodPost, "/config", bytes.NewReader(b))
+	req := httptest.NewRequest(http.MethodPost, "/api/config", bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.router.ServeHTTP(rec, req)
@@ -344,7 +344,7 @@ func TestHandlePostConfig_InvalidWeights_Returns400(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			b, _ := json.Marshal(tc.body)
-			req := httptest.NewRequest(http.MethodPost, "/config", bytes.NewReader(b))
+			req := httptest.NewRequest(http.MethodPost, "/api/config", bytes.NewReader(b))
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
 			srv.router.ServeHTTP(rec, req)
@@ -363,7 +363,7 @@ func TestHandlePostConfig_InvalidWeights_Returns400(t *testing.T) {
 
 			// Snapshot must be unchanged.
 			if config.Hash(srv.getSnapshot().cfg) != hashBefore {
-				t.Error("snapshot changed after rejected POST /config")
+				t.Error("snapshot changed after rejected POST /api/config")
 			}
 		})
 	}
@@ -372,7 +372,7 @@ func TestHandlePostConfig_InvalidWeights_Returns400(t *testing.T) {
 func TestHandlePostConfig_MalformedBody_Returns400(t *testing.T) {
 	srv := newTestServer(minimalConfig(), true, "")
 
-	req := httptest.NewRequest(http.MethodPost, "/config", bytes.NewReader([]byte("not json")))
+	req := httptest.NewRequest(http.MethodPost, "/api/config", bytes.NewReader([]byte("not json")))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.router.ServeHTTP(rec, req)
@@ -406,7 +406,7 @@ func TestHandlePostConfig_WriteFailure_Returns500_SnapshotUnchanged(t *testing.T
 	}
 	b, _ := json.Marshal(body)
 
-	req := httptest.NewRequest(http.MethodPost, "/config", bytes.NewReader(b))
+	req := httptest.NewRequest(http.MethodPost, "/api/config", bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.router.ServeHTTP(rec, req)
@@ -431,7 +431,7 @@ func TestHandlePostConfig_RouteAbsentWithoutFlag(t *testing.T) {
 	}
 	b, _ := json.Marshal(body)
 
-	req := httptest.NewRequest(http.MethodPost, "/config", bytes.NewReader(b))
+	req := httptest.NewRequest(http.MethodPost, "/api/config", bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.router.ServeHTTP(rec, req)
@@ -441,6 +441,6 @@ func TestHandlePostConfig_RouteAbsentWithoutFlag(t *testing.T) {
 	// the config handler did not run.
 	ct := rec.Header().Get("Content-Type")
 	if ct == "application/json" {
-		t.Error("POST /config returned JSON — config handler should not be registered without --live-config")
+		t.Error("POST /api/config returned JSON — config handler should not be registered without --live-config")
 	}
 }

@@ -20,7 +20,7 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/config": {
+        "/api/config": {
             "get": {
                 "description": "Returns the current scoring config (dimensions, genres, weights). Only available when --live-config is set.",
                 "produces": [
@@ -84,7 +84,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/db-info": {
+        "/api/db-info": {
             "get": {
                 "description": "Reports the active database backend, or DBless live-config status. Always available.",
                 "produces": [
@@ -104,7 +104,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/dimensions": {
+        "/api/dimensions": {
             "get": {
                 "description": "Returns the ordered list of scoring dimensions defined in server config. Use the returned keys in the scores map when calling POST /score.",
                 "produces": [
@@ -124,7 +124,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/genres": {
+        "/api/genres": {
             "get": {
                 "description": "Returns all configured genre multiplier blocks and the primary genre blend ratio.",
                 "produces": [
@@ -144,24 +144,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/health": {
-            "get": {
-                "description": "Returns 200 OK if the server is running.",
-                "produces": [
-                    "text/plain"
-                ],
-                "tags": [
-                    "system"
-                ],
-                "summary": "Health check",
-                "responses": {
-                    "200": {
-                        "description": "OK"
-                    }
-                }
-            }
-        },
-        "/history": {
+        "/api/history": {
             "get": {
                 "description": "Returns the latest score for every scored entry, ordered by scored_at descending. Requires a database.",
                 "produces": [
@@ -190,7 +173,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/history/{anilist_id}": {
+        "/api/history/{anilist_id}": {
             "get": {
                 "description": "Returns all non-deleted scores for one AniList media ID, newest first, with full breakdown. Requires a database.",
                 "produces": [
@@ -234,7 +217,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/history/{score_id}": {
+        "/api/history/{score_id}": {
             "delete": {
                 "description": "Soft-deletes a score by its row ID (not the AniList ID). Deliberate removal from active tracking — does not promote any other score to latest. Requires a database.",
                 "tags": [
@@ -275,7 +258,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/media/search": {
+        "/api/media/search": {
             "get": {
                 "description": "Search AniList for anime or manga by name. Returns up to 5 results sorted by relevance.",
                 "produces": [
@@ -331,7 +314,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/media/{id}": {
+        "/api/media/{id}": {
             "get": {
                 "description": "Fetch an anime or manga entry by its AniList media ID.",
                 "produces": [
@@ -378,7 +361,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/score": {
+        "/api/score": {
             "post": {
                 "description": "Calculate a weighted, genre-adjusted score for a media entry.",
                 "consumes": [
@@ -430,7 +413,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/score/publish": {
+        "/api/score/publish": {
             "post": {
                 "description": "Write a score to the user's AniList account. Requires ANILIST_TOKEN env var.",
                 "consumes": [
@@ -482,7 +465,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/stats": {
+        "/api/stats": {
             "get": {
                 "description": "Returns one headline metric per stats category. Requires a database.",
                 "produces": [
@@ -508,7 +491,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/stats/dimensions": {
+        "/api/stats/dimensions": {
             "get": {
                 "description": "Returns variance, consistency, correlation, skip rate, and weight override frequency per dimension. Requires a database.",
                 "produces": [
@@ -534,7 +517,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/stats/genres": {
+        "/api/stats/genres": {
             "get": {
                 "description": "Returns genre breakdown, average score by genre, and genre-dimension affinity. Requires a database.",
                 "produces": [
@@ -560,7 +543,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/stats/history": {
+        "/api/stats/history": {
             "get": {
                 "description": "Returns most-rescored entries, outliers, and config impact. Requires a database.",
                 "produces": [
@@ -586,7 +569,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/weights": {
+        "/api/weights": {
             "post": {
                 "description": "Compute per-dimension final weights for a given genre/override configuration without scoring. Used for live weight preview in the web UI.",
                 "consumes": [
@@ -634,6 +617,23 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/server.errorResponse"
                         }
+                    }
+                }
+            }
+        },
+        "/health": {
+            "get": {
+                "description": "Returns 200 OK if the server is running.",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Health check",
+                "responses": {
+                    "200": {
+                        "description": "OK"
                     }
                 }
             }

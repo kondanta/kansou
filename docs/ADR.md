@@ -1678,3 +1678,46 @@ whole ADR is about.
   lifecycle in a helper function (`runTests`), not directly in `TestMain`
   itself, since `os.Exit` skips any pending `defer`s in the function that
   calls it — the container/pool cleanup would silently never run otherwise.
+
+## ADR-035 — All data-bearing REST routes moved under `/api`; `/health` and `/swagger/*` stay at root
+
+**Context:**
+Every REST route (`/dimensions`, `/media/*`, `/score*`, `/weights`, `/config`,
+`/history*`, `/stats*`, `/db-info`) was registered flat at the server root,
+sharing the same namespace as the embedded SPA's `/*` catch-all. This worked
+only because none of the literal API paths collided with a file name the Vue
+build might emit, an assumption that grows more fragile as the frontend and
+its build output evolve independently of the server.
+
+**Decision:**
+All routes that serve application data now live under an explicit `/api`
+chi subrouter (`internal/server/server.go`, `buildRouter`). Two exceptions:
+- `/health` stays at root — liveness probes from load balancers and
+  orchestrators (k8s, etc.) conventionally expect a fixed, unprefixed path.
+- `/swagger/*` stays at root — it's a documentation UI, not application data,
+  and swaggo's `@BasePath` has no per-route override mechanism, so keeping
+  the Swagger UI's own mount point outside `/api` avoids fighting the tool.
+
+`main.go`'s `@BasePath` annotation stays `/` (unchanged) rather than becoming
+`/api`, because swaggo applies `@BasePath` uniformly to every route — setting
+it to `/api` would incorrectly prefix the `/health` route too. Instead, each
+handler's `@Router` annotation was updated individually to include the `/api`
+prefix (all except `handleHealth`'s, which stays `/health`).
+
+**Consequences:**
+- `internal/server/server.go`: API routes registered via `r.Route("/api",
+  func(r chi.Router) {...})` instead of directly on the root `chi.Mux`.
+- All 16 non-health `@Router` swagger annotations across `handlers.go`,
+  `stats_handlers.go`, `config_handlers.go`, `history_handlers.go` gained the
+  `/api` prefix; `docs/swagger/*` regenerated via `swag init`.
+- `README.md`, `ARCHITECTURE.md`, `docs/CLI.md`, `docs/CONFIG.md`,
+  `docs/ANILIST_INTEGRATION.md`, `docs/FE.md`, `docs/REQUIREMENTS.md`,
+  `docs/HISTORY_IMPL.md` updated to reference the new `/api`-prefixed paths.
+  Historical ADR entries above this one were left untouched — they describe
+  the flat-namespace routing that was accurate at the time it was written.
+- `internal/server/*_test.go` (`history_e2e_test.go`, `stats_e2e_test.go`,
+  `config_handlers_test.go`) updated to hit `/api/...` paths through the real
+  router; unit tests that call handlers directly were unaffected.
+- The frontend (`web/tribbie/` submodule) will need every hardcoded fetch
+  path updated to add the `/api` prefix — not done here, as the submodule
+  was not checked out in this environment.

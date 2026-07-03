@@ -54,7 +54,7 @@ type configPayload struct {
 //	@Tags                   config
 //	@Produce                json
 //	@Success                200     {object}        configPayload
-//	@Router                 /config [get]
+//	@Router                 /api/config [get]
 func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	snap := s.getSnapshot()
 	writeJSON(w, http.StatusOK, toConfigPayload(snap.cfg))
@@ -93,7 +93,7 @@ func toConfigPayload(cfg *config.Config) configPayload {
 //	@Success                200             {object}        configPayload
 //	@Failure                400             {object}        errorResponse
 //	@Failure                500             {object}        errorResponse
-//	@Router                 /config [post]
+//	@Router                 /api/config [post]
 func (s *Server) handlePostConfig(w http.ResponseWriter, r *http.Request) {
 	var payload configPayload
 	if !decodeBody(w, r, &payload) {
