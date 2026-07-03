@@ -321,9 +321,9 @@ func TestScoringConsistency(t *testing.T) {
 		t.Fatalf("ScoringConsistency: %v", err)
 	}
 	if got == nil {
-		t.Fatal("got nil, want a ConsistencyStat") //nolint:staticcheck // SA5011 false positive: t.Fatal halts execution
+		t.Fatal("got nil, want a ConsistencyStat")
 	}
-	if got.Count != 1 {
+	if got.Count != 1 { //nolint:staticcheck // SA5011 false positive: t.Fatal above halts execution on nil
 		t.Errorf("count: got %d, want 1", got.Count)
 	}
 	if math.Abs(got.AvgStdDev-0.5) > floatTolerance {
