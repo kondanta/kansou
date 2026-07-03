@@ -57,7 +57,7 @@ kansou serve [flags]
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--port` | `8080` | Port to listen on (overrides config) |
-| `--live-config` | `false` | Enable `GET /api/config` and `POST /api/config` for runtime config editing. Requires a writable config file path (PVC on k8s; ConfigMap mounts are incompatible). |
+| `--live-config` | `false` | Enable `GET /api/v1/config` and `POST /api/v1/config` for runtime config editing. Requires a writable config file path (PVC on k8s; ConfigMap mounts are incompatible). |
 
 **Behaviour:**
 - Loads config from the default path or `--config`
@@ -517,7 +517,7 @@ kansou history delete <query>
 Same `<query>` resolution as `show`. Soft-deletes the *latest* score for the
 matched entry — this is a **deliberate removal from active tracking, not an undo**.
 No other score is promoted to take its place; the entry disappears from
-`kansou history`, `kansou stats`, and `GET /api/history` until you score it again.
+`kansou history`, `kansou stats`, and `GET /api/v1/history` until you score it again.
 Older scores are kept (subject to `max_history`) and remain reachable via
 `kansou history show`.
 

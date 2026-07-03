@@ -29,7 +29,7 @@ func (s *Server) requireStore(w http.ResponseWriter) bool {
 //	@Produce		json
 //	@Success		200	{object}	stats.Summary
 //	@Failure		503	{object}	errorResponse
-//	@Router			/api/stats [get]
+//	@Router			/api/v1/stats [get]
 func (s *Server) handleStatsSummary(w http.ResponseWriter, r *http.Request) {
 	if !s.requireStore(w) {
 		return
@@ -60,7 +60,7 @@ type genreStatsResponse struct {
 //	@Produce		json
 //	@Success		200	{object}	genreStatsResponse
 //	@Failure		503	{object}	errorResponse
-//	@Router			/api/stats/genres [get]
+//	@Router			/api/v1/stats/genres [get]
 func (s *Server) handleStatsGenres(w http.ResponseWriter, r *http.Request) {
 	if !s.requireStore(w) {
 		return
@@ -87,7 +87,7 @@ func (s *Server) handleStatsGenres(w http.ResponseWriter, r *http.Request) {
 //	@Produce		json
 //	@Success		200	{object}	store.DimensionStatsResponse
 //	@Failure		503	{object}	errorResponse
-//	@Router			/api/stats/dimensions [get]
+//	@Router			/api/v1/stats/dimensions [get]
 func (s *Server) handleStatsDimensions(w http.ResponseWriter, r *http.Request) {
 	if !s.requireStore(w) {
 		return
@@ -118,7 +118,7 @@ type historyStatsResponse struct {
 //	@Produce		json
 //	@Success		200	{object}	historyStatsResponse
 //	@Failure		503	{object}	errorResponse
-//	@Router			/api/stats/history [get]
+//	@Router			/api/v1/stats/history [get]
 func (s *Server) handleStatsHistory(w http.ResponseWriter, r *http.Request) {
 	if !s.requireStore(w) {
 		return
@@ -153,7 +153,7 @@ type dbInfoResponse struct {
 //	@Tags			system
 //	@Produce		json
 //	@Success		200	{object}	dbInfoResponse
-//	@Router			/api/db-info [get]
+//	@Router			/api/v1/db-info [get]
 func (s *Server) handleDBInfo(w http.ResponseWriter, r *http.Request) {
 	if s.dbType != "" {
 		writeJSON(w, http.StatusOK, dbInfoResponse{DB: &s.dbType})

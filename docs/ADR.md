@@ -1721,3 +1721,32 @@ prefix (all except `handleHealth`'s, which stays `/health`).
 - The frontend (`web/tribbie/` submodule) will need every hardcoded fetch
   path updated to add the `/api` prefix — not done here, as the submodule
   was not checked out in this environment.
+
+## ADR-036 — `/api` re-versioned to `/api/v1` (supersedes the `/api` prefix from ADR-035)
+
+**Context:**
+ADR-035 introduced a flat `/api` prefix for all data-bearing routes. Before
+any external client depended on it, the decision was made to version the
+prefix up front rather than retrofit versioning later once real clients
+exist.
+
+**Decision:**
+The `/api` chi subrouter is renamed to `/api/v1` (`internal/server/server.go`,
+`buildRouter`). No other routing behavior changes — `/health` and
+`/swagger/*` remain at root, unaffected, per ADR-035.
+
+**Consequences:**
+- `internal/server/server.go`: `r.Route("/api", ...)` → `r.Route("/api/v1", ...)`.
+- All 16 non-health `@Router` swagger annotations across `handlers.go`,
+  `stats_handlers.go`, `config_handlers.go`, `history_handlers.go` updated
+  from `/api/...` to `/api/v1/...`; `docs/swagger/*` regenerated via
+  `swag init`.
+- `README.md`, `ARCHITECTURE.md`, `docs/CLI.md`, `docs/CONFIG.md`,
+  `docs/ANILIST_INTEGRATION.md`, `docs/REQUIREMENTS.md` updated to reference
+  `/api/v1`-prefixed paths. `docs/FE.md` and `docs/HISTORY_IMPL.md` referenced
+  in ADR-035 no longer exist in the repo, so nothing to update there.
+- `internal/server/*_test.go` (`history_e2e_test.go`, `stats_e2e_test.go`,
+  `config_handlers_test.go`) updated to hit `/api/v1/...` paths.
+- The frontend (`web/tribbie/` submodule) still needs its hardcoded fetch
+  paths updated for the `/api/v1` prefix — same caveat as ADR-035, submodule
+  not checked out in this environment.

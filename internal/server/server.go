@@ -124,11 +124,11 @@ func (s *Server) buildRouter() *chi.Mux {
 	// legacy single-file UI when dist hasn't been built yet.
 	r.Handle("/*", spaHandler(kansouweb.DistDirFS))
 
-	// Health check stays at root — outside /api — for load balancer/orchestrator
+	// Health check stays at root — outside /api/v1 — for load balancer/orchestrator
 	// probes that expect a fixed, unprefixed path.
 	r.Get("/health", s.handleHealth)
 
-	r.Route("/api", func(r chi.Router) {
+	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/db-info", s.handleDBInfo)
 		r.Get("/dimensions", s.handleDimensions)
 		r.Get("/genres", s.handleGenres)
@@ -151,7 +151,7 @@ func (s *Server) buildRouter() *chi.Mux {
 		}
 	})
 
-	// Swagger UI — stays at root, not versioned under /api.
+	// Swagger UI — stays at root, not versioned under /api/v1.
 	r.Get("/swagger/*", httpSwagger.Handler(
 		httpSwagger.URL("/swagger/doc.json"),
 	))

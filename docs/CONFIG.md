@@ -437,8 +437,8 @@ session without modifying config. See `docs/CLI.md` for usage.
 
 The `--live-config` flag on `kansou serve` enables two additional endpoints:
 
-- `GET /api/config` — returns the current mutable config surface as JSON
-- `POST /api/config` — replaces the mutable config surface, reloads the scoring
+- `GET /api/v1/config` — returns the current mutable config surface as JSON
+- `POST /api/v1/config` — replaces the mutable config surface, reloads the scoring
   engine atomically, and writes the updated config to disk
 
 Both endpoints are absent when the flag is not set.
@@ -457,7 +457,7 @@ exposed by these endpoints and cannot be changed at runtime.
 
 ### Validation
 
-`POST /api/config` runs the same strict validation as the config loader:
+`POST /api/v1/config` runs the same strict validation as the config loader:
 dimension weights must sum to 1.0 (±0.001), genre blocks may only reference
 dimension keys present in the submitted dimensions map, and all multiplier
 values must be > 0.0 and ≤ `max_multiplier`. No auto-normalization. On any
@@ -466,7 +466,7 @@ config is unchanged.
 
 ### Persistence: database vs. disk (ADR-029)
 
-After a successful `POST /api/config`:
+After a successful `POST /api/v1/config`:
 
 - **Database mode** (`KANSOU_DB_TYPE` set): the update is persisted via
   `SaveScoringConfig` — the config file on disk is untouched.
@@ -476,7 +476,7 @@ After a successful `POST /api/config`:
   first write. `config.example.toml` remains the annotated human-readable
   reference.
 
-This branch exists because `POST /api/config` originally always wrote to disk,
+This branch exists because `POST /api/v1/config` originally always wrote to disk,
 even in database mode — meaning a live config change over HTTP silently
 failed to persist to the database and was overwritten by `LoadScoringConfig`
 on the next restart. Fixed as part of ADR-029.
@@ -498,7 +498,7 @@ using read-only config file mounts.
 
 ### `config_hash`
 
-`GET /api/config` returns a `config_hash` field — a SHA-256 digest of the full
+`GET /api/v1/config` returns a `config_hash` field — a SHA-256 digest of the full
 mutable config surface. The UI can compare this value between a GET and a
 subsequent POST to detect config drift (e.g. if another client wrote a
-`POST /api/config` in the meantime).
+`POST /api/v1/config` in the meantime).
