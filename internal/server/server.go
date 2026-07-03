@@ -138,9 +138,9 @@ func (s *Server) buildRouter() *chi.Mux {
 		r.Get("/history/{anilist_id}", s.handleHistoryDetail)
 		r.Delete("/history/{score_id}", s.handleHistoryDelete)
 		r.With(httprate.LimitBy(rateLimitSearch, time.Minute, clientIPKey)).Get("/media/search", s.handleMediaSearch)
-	  r.With(httprate.LimitBy(rateLimitFetch, time.Minute, clientIPKey)).Get("/media/{id}", s.handleMediaFetch)
-	  r.With(httprate.LimitBy(rateLimitScore, time.Minute, clientIPKey)).Post("/score", s.handleScore)
-	  r.With(httprate.LimitBy(rateLimitPublish, time.Minute, clientIPKey)).Post("/score/publish", s.handleScorePublish)
+		r.With(httprate.LimitBy(rateLimitFetch, time.Minute, clientIPKey)).Get("/media/{id}", s.handleMediaFetch)
+		r.With(httprate.LimitBy(rateLimitScore, time.Minute, clientIPKey)).Post("/score", s.handleScore)
+		r.With(httprate.LimitBy(rateLimitPublish, time.Minute, clientIPKey)).Post("/score/publish", s.handleScorePublish)
 		r.Post("/weights", s.handleWeights)
 
 		if s.dbType != "" || s.liveConfig {
