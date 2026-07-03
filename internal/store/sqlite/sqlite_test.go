@@ -257,7 +257,7 @@ func TestScoringConsistency(t *testing.T) {
 		t.Fatalf("ScoringConsistency: %v", err)
 	}
 	if got == nil {
-		t.Fatal("got nil, want a ConsistencyStat")
+		t.Fatal("got nil, want a ConsistencyStat") //nolint:staticcheck // SA5011 false positive: t.Fatal halts execution
 	}
 	if got.Count != 1 {
 		t.Errorf("count: got %d, want 1", got.Count)
