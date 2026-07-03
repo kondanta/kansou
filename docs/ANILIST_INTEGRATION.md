@@ -174,7 +174,7 @@ parsing logic.
 ### 3. Publish Score
 
 **Triggered by:** answering `y` at the publish prompt in `kansou score add` (CLI),
-or `POST /api/score/publish` (API)
+or `POST /api/v1/score/publish` (API)
 
 **GraphQL mutation (score only):**
 
@@ -347,7 +347,7 @@ attempting to parse `data`.
 
 ## REST Endpoints — Genre and Score
 
-### GET /api/genres
+### GET /api/v1/genres
 
 Returns all configured genre multiplier blocks and the primary genre blend ratio.
 Used by web clients to populate the primary genre picker.
@@ -368,9 +368,9 @@ Used by web clients to populate the primary genre picker.
 - `multipliers` — only dimensions explicitly configured for that genre; dimensions absent here
   are excluded from the contributing-only average (not treated as 1.0).
 
-### POST /api/score/publish — notes field
+### POST /api/v1/score/publish — notes field
 
-The `POST /api/score/publish` request body accepts an optional `notes` string:
+The `POST /api/v1/score/publish` request body accepts an optional `notes` string:
 
 ```json
 {
@@ -383,13 +383,13 @@ The `POST /api/score/publish` request body accepts an optional `notes` string:
 - If `notes` is non-empty, the server fetches the existing list entry notes and
   appends the new block after a `---` separator before saving.
 - If `notes` is omitted or empty, only the score is written (existing notes unchanged).
-- The web UI's `buildNotes()` function produces a compatible string from a `POST /api/score` result.
+- The web UI's `buildNotes()` function produces a compatible string from a `POST /api/v1/score` result.
 
 ---
 
-### POST /api/score — selected_genres and primary_genre fields
+### POST /api/v1/score — selected_genres and primary_genre fields
 
-The `POST /api/score` request body accepts optional `selected_genres` and `primary_genre` fields:
+The `POST /api/v1/score` request body accepts optional `selected_genres` and `primary_genre` fields:
 
 ```json
 {
@@ -424,7 +424,7 @@ The `POST /api/score` request body accepts optional `selected_genres` and `prima
 
 ---
 
-### POST /api/weights — live weight preview (ADR-023)
+### POST /api/v1/weights — live weight preview (ADR-023)
 
 Returns per-dimension final weights without requiring scores. Used by the web UI to show
 a live weight preview as the user adjusts genre selection or skips dimensions.
@@ -441,10 +441,10 @@ a live weight preview as the user adjusts genre selection or skips dimensions.
 ```
 
 - `media_id` — required. Used to fetch the media's genre list.
-- `selected_genres` — optional. Same semantics as in `POST /api/score`.
-- `primary_genre` — optional. Same validation rules as in `POST /api/score`.
+- `selected_genres` — optional. Same semantics as in `POST /api/v1/score`.
+- `primary_genre` — optional. Same validation rules as in `POST /api/v1/score`.
 - `skipped_dimensions` — optional. Keys mapped to `true` are excluded from the weight pool.
-- `weight_overrides` — optional. Same validation rules as in `POST /api/score`.
+- `weight_overrides` — optional. Same validation rules as in `POST /api/v1/score`.
 
 **Response shape:**
 ```json
@@ -479,7 +479,7 @@ a live weight preview as the user adjusts genre selection or skips dimensions.
 - `effective_weight` — `base_weight × multiplier` before renormalization. The intermediate
   value in the weight pool prior to the step that forces all weights to sum to 1.0.
 - `final_weight` — weight after genre adjustment, renormalization, and overrides. This is
-  identical to the `final_weight` field that `POST /api/score` would produce.
+  identical to the `final_weight` field that `POST /api/v1/score` would produce.
 - `primary_genre_multiplier` — the raw multiplier the primary genre defines for this
   dimension. 0 when no primary genre is set, when the dimension is bias-resistant, or when
   the primary genre has no configured entry for this dimension.
@@ -488,7 +488,7 @@ a live weight preview as the user adjusts genre selection or skips dimensions.
   (ADR-025), or when the dimension is bias-resistant. Used with `primary_genre_multiplier` and
   `primary_genre_weight` to reconstruct the full blend formula.
 
-**Validation errors** (same rules as `POST /api/score`):
+**Validation errors** (same rules as `POST /api/v1/score`):
 - Unknown key in `weight_overrides` → 400
 - `weight_overrides` value ≤ 0 or > 1 → 400
 - Sum of `weight_overrides` ≥ 1.0 → 400

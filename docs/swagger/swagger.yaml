@@ -753,7 +753,7 @@ info:
   title: kansou API
   version: "1.0"
 paths:
-  /api/config:
+  /api/v1/config:
     get:
       description: Returns the current scoring config (dimensions, genres, weights).
         Only available when --live-config is set.
@@ -798,7 +798,7 @@ paths:
       summary: Update config
       tags:
       - config
-  /api/db-info:
+  /api/v1/db-info:
     get:
       description: Reports the active database backend, or DBless live-config status.
         Always available.
@@ -812,7 +812,7 @@ paths:
       summary: Database info
       tags:
       - system
-  /api/dimensions:
+  /api/v1/dimensions:
     get:
       description: Returns the ordered list of scoring dimensions defined in server
         config. Use the returned keys in the scores map when calling POST /score.
@@ -826,7 +826,7 @@ paths:
       summary: List scoring dimensions
       tags:
       - score
-  /api/genres:
+  /api/v1/genres:
     get:
       description: Returns all configured genre multiplier blocks and the primary
         genre blend ratio.
@@ -840,7 +840,7 @@ paths:
       summary: List genre multipliers
       tags:
       - score
-  /api/history:
+  /api/v1/history:
     get:
       description: Returns the latest score for every scored entry, ordered by scored_at
         descending. Requires a database.
@@ -860,7 +860,7 @@ paths:
       summary: List history
       tags:
       - history
-  /api/history/{anilist_id}:
+  /api/v1/history/{anilist_id}:
     get:
       description: Returns all non-deleted scores for one AniList media ID, newest
         first, with full breakdown. Requires a database.
@@ -890,7 +890,7 @@ paths:
       summary: Show history detail
       tags:
       - history
-  /api/history/{score_id}:
+  /api/v1/history/{score_id}:
     delete:
       description: Soft-deletes a score by its row ID (not the AniList ID). Deliberate
         removal from active tracking — does not promote any other score to latest.
@@ -919,7 +919,7 @@ paths:
       summary: Delete a history entry
       tags:
       - history
-  /api/media/{id}:
+  /api/v1/media/{id}:
     get:
       description: Fetch an anime or manga entry by its AniList media ID.
       parameters:
@@ -950,7 +950,7 @@ paths:
       summary: Fetch media by ID
       tags:
       - media
-  /api/media/search:
+  /api/v1/media/search:
     get:
       description: Search AniList for anime or manga by name. Returns up to 5 results
         sorted by relevance.
@@ -988,7 +988,7 @@ paths:
       summary: Search media
       tags:
       - media
-  /api/score:
+  /api/v1/score:
     post:
       consumes:
       - application/json
@@ -1022,7 +1022,7 @@ paths:
       summary: Calculate score
       tags:
       - score
-  /api/score/publish:
+  /api/v1/score/publish:
     post:
       consumes:
       - application/json
@@ -1057,7 +1057,7 @@ paths:
       summary: Publish score
       tags:
       - score
-  /api/stats:
+  /api/v1/stats:
     get:
       description: Returns one headline metric per stats category. Requires a database.
       produces:
@@ -1074,7 +1074,7 @@ paths:
       summary: Stats summary
       tags:
       - stats
-  /api/stats/dimensions:
+  /api/v1/stats/dimensions:
     get:
       description: Returns variance, consistency, correlation, skip rate, and weight
         override frequency per dimension. Requires a database.
@@ -1092,7 +1092,7 @@ paths:
       summary: Dimension stats
       tags:
       - stats
-  /api/stats/genres:
+  /api/v1/stats/genres:
     get:
       description: Returns genre breakdown, average score by genre, and genre-dimension
         affinity. Requires a database.
@@ -1110,7 +1110,7 @@ paths:
       summary: Genre stats
       tags:
       - stats
-  /api/stats/history:
+  /api/v1/stats/history:
     get:
       description: Returns most-rescored entries, outliers, and config impact. Requires
         a database.
@@ -1128,7 +1128,7 @@ paths:
       summary: History stats
       tags:
       - stats
-  /api/weights:
+  /api/v1/weights:
     post:
       consumes:
       - application/json

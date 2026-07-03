@@ -141,7 +141,7 @@ diluting neutral 1.0. If no matched genre has an opinion on a dimension, the
 multiplier is 1.0 (neutral).
 
 **Optional — User-selectable active genre set (ADR-023):** Via the web UI
-(`POST /api/score` `selected_genres` field), the user may restrict which genres
+(`POST /api/v1/score` `selected_genres` field), the user may restrict which genres
 participate in multiplier calculation. Only the listed genres are treated as
 active; any matched config genre absent from the list is deselected. Deselected
 genres are recorded in the breakdown (`genre_deselected: true` on affected
@@ -249,12 +249,12 @@ genre adjustment, and its weighted contribution to the total.
 Publishing requires explicit user confirmation. In the CLI, `score add` displays
 the final score and then prompts `Publish to AniList? [y/N]`. Only a `y` response
 triggers the publish. Entering anything else (including pressing Enter) skips
-publishing silently. Via the API, the caller must send `POST /api/score/publish`
+publishing silently. Via the API, the caller must send `POST /api/v1/score/publish`
 explicitly with `media_id` and `score`. A calculated score is never automatically
 published.
 
 **FR-04a-i — Implicit dimension skipping (API)**
-When calling `POST /api/score`, any dimension defined in server config that is absent
+When calling `POST /api/v1/score`, any dimension defined in server config that is absent
 from the `scores` map is automatically treated as skipped (N/A). The client does
 not need to declare skipped dimensions explicitly. `weight_overrides` is an
 optional field for per-session weight adjustment; omitting it uses config weights.
@@ -262,7 +262,7 @@ optional field for per-session weight adjustment; omitting it uses config weight
 **FR-04b — What is published**
 The final numeric score is always written to AniList. Optionally, the scoring
 breakdown may also be appended to the list entry notes field (CLI: `--notes` flag;
-API: `notes` field in `POST /api/score/publish`). If the entry already has notes,
+API: `notes` field in `POST /api/v1/score/publish`). If the entry already has notes,
 the new block is appended after a `---` separator — existing notes are never overwritten.
 
 **FR-04c — Confirmation**
@@ -340,12 +340,12 @@ seven reference dimensions with their labels, descriptions, and weights.
 | POST | /score/publish | Publish a score to AniList |
 
 **FR-07a-i — Dimension sync contract**
-`GET /api/dimensions` returns the ordered list of scoring dimensions as configured
+`GET /api/v1/dimensions` returns the ordered list of scoring dimensions as configured
 on the server, including each dimension's key, label, description, and base weight.
 The response includes a `config_hash` field (SHA256 of the serialised dimensions
 config) that clients can store and compare to detect when the dimension list has
 changed. Frontends must use the keys returned by this endpoint as the keys in the
-`scores` map when calling `POST /api/score` — dimension keys are defined by server
+`scores` map when calling `POST /api/v1/score` — dimension keys are defined by server
 config and must not be hardcoded on the client.
 
 **FR-07b — Error envelope**

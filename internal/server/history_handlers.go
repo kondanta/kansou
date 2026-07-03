@@ -32,7 +32,7 @@ type historyListItem struct {
 //	@Produce		json
 //	@Success		200	{array}		historyListItem
 //	@Failure		503	{object}	errorResponse
-//	@Router			/api/history [get]
+//	@Router			/api/v1/history [get]
 func (s *Server) handleHistoryList(w http.ResponseWriter, r *http.Request) {
 	if !s.requireStore(w) {
 		return
@@ -64,7 +64,7 @@ func (s *Server) handleHistoryList(w http.ResponseWriter, r *http.Request) {
 //	@Success		200	{array}		store.Score
 //	@Failure		400	{object}	errorResponse
 //	@Failure		503	{object}	errorResponse
-//	@Router			/api/history/{anilist_id} [get]
+//	@Router			/api/v1/history/{anilist_id} [get]
 func (s *Server) handleHistoryDetail(w http.ResponseWriter, r *http.Request) {
 	if !s.requireStore(w) {
 		return
@@ -93,7 +93,7 @@ func (s *Server) handleHistoryDetail(w http.ResponseWriter, r *http.Request) {
 //	@Failure		400	{object}	errorResponse
 //	@Failure		404	{object}	errorResponse
 //	@Failure		503	{object}	errorResponse
-//	@Router			/api/history/{score_id} [delete]
+//	@Router			/api/v1/history/{score_id} [delete]
 func (s *Server) handleHistoryDelete(w http.ResponseWriter, r *http.Request) {
 	if !s.requireStore(w) {
 		return
