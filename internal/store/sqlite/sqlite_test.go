@@ -67,7 +67,7 @@ type dimFixture struct {
 }
 
 // score is a convenience constructor for a non-nil dimension score pointer.
-func score(v float64) *float64 { return &v }
+func score(v float64) *float64 { return new(v) }
 
 // insertDimensionScores inserts dimension_scores rows for a score id.
 func insertDimensionScores(t *testing.T, s *SQLiteStore, scoreID int, dims []dimFixture) {
@@ -256,10 +256,10 @@ func TestScoringConsistency(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ScoringConsistency: %v", err)
 	}
-	if got == nil {
+	if got == nil { //nolint:staticcheck // SA5011 false positive: t.Fatal halts execution on nil
 		t.Fatal("got nil, want a ConsistencyStat")
 	}
-	if got.Count != 1 {
+	if got.Count != 1 { //nolint:staticcheck // SA5011 false positive: t.Fatal above halts execution on nil
 		t.Errorf("count: got %d, want 1", got.Count)
 	}
 	if math.Abs(got.AvgStdDev-0.5) > floatTolerance {

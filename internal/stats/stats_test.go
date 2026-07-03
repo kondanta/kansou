@@ -46,27 +46,35 @@ func (f *fakeStore) LastPruneAt(context.Context) (*time.Time, error) { return f.
 func (f *fakeStore) GenreBreakdown(context.Context) ([]store.GenreStat, error) {
 	return f.genreBreakdown, nil
 }
+
 func (f *fakeStore) ScoreByGenre(context.Context) ([]store.GenreScore, error) {
 	return f.scoreByGenre, nil
 }
+
 func (f *fakeStore) GenreDimensionAffinity(context.Context) ([]store.GenreDimensionAffinity, error) {
 	return f.affinity, nil
 }
+
 func (f *fakeStore) DimensionVariance(context.Context) ([]store.DimensionVarianceStat, error) {
 	return f.variance, nil
 }
+
 func (f *fakeStore) ScoringConsistency(context.Context) (*store.ConsistencyStat, error) {
 	return f.consistency, nil
 }
+
 func (f *fakeStore) DimensionCorrelation(context.Context) ([]store.DimensionCorrelationStat, error) {
 	return f.correlation, nil
 }
+
 func (f *fakeStore) SkippedDimensions(context.Context) ([]store.SkippedDimStat, error) {
 	return f.skipped, nil
 }
+
 func (f *fakeStore) WeightOverrides(context.Context) ([]store.WeightOverrideStat, error) {
 	return f.overrides, nil
 }
+
 func (f *fakeStore) MostRescored(context.Context) ([]store.RescoredStat, error) {
 	return f.mostRescored, nil
 }
@@ -83,9 +91,11 @@ func TestTopGenreScore(t *testing.T) {
 		want   *string
 	}{
 		{name: "empty", scores: nil, want: nil},
-		{name: "single", scores: []store.GenreScore{{Genre: "Action"}}, want: ptr("Action")},
-		{name: "picks first (already sorted by caller)",
-			scores: []store.GenreScore{{Genre: "Drama"}, {Genre: "Action"}}, want: ptr("Drama")},
+		{name: "single", scores: []store.GenreScore{{Genre: "Action"}}, want: new("Action")},
+		{
+			name:   "picks first (already sorted by caller)",
+			scores: []store.GenreScore{{Genre: "Drama"}, {Genre: "Action"}}, want: new("Drama"),
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -291,5 +301,3 @@ func TestErrorsPropagateFromStore(t *testing.T) {
 		t.Errorf("Summary: got err=%v, want it to wrap errBoom", err)
 	}
 }
-
-func ptr(s string) *string { return &s }

@@ -130,7 +130,7 @@ type dimFixture struct {
 	WeightOverride bool
 }
 
-func score(v float64) *float64 { return &v }
+func score(v float64) *float64 { return new(v) }
 
 func insertDimensionScores(t *testing.T, s *PostgresStore, scoreID int, dims []dimFixture) {
 	t.Helper()
@@ -320,10 +320,10 @@ func TestScoringConsistency(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ScoringConsistency: %v", err)
 	}
-	if got == nil {
+	if got == nil { //nolint:staticcheck // SA5011 false positive: t.Fatal halts execution on nil
 		t.Fatal("got nil, want a ConsistencyStat")
 	}
-	if got.Count != 1 {
+	if got.Count != 1 { //nolint:staticcheck // SA5011 false positive: t.Fatal above halts execution on nil
 		t.Errorf("count: got %d, want 1", got.Count)
 	}
 	if math.Abs(got.AvgStdDev-0.5) > floatTolerance {

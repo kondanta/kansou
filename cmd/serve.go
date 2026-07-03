@@ -90,7 +90,7 @@ func resolvePort(flagValue int) int {
 func resolveCORSOrigins() []string {
 	if env := os.Getenv("KANSOU_CORS_ORIGINS"); env != "" {
 		var origins []string
-		for _, o := range strings.Split(env, ",") {
+		for o := range strings.SplitSeq(env, ",") {
 			if s := strings.TrimSpace(o); s != "" {
 				origins = append(origins, s)
 			}
