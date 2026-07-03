@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"sort"
 	"strconv"
@@ -163,10 +164,7 @@ func sortedFloatKeys(m map[string]float64) []string {
 // cloneDimensions returns a shallow copy of a dimension map, safe to mutate
 // without affecting the original config.
 func cloneDimensions(dims map[string]config.DimensionDef) map[string]config.DimensionDef {
-	out := make(map[string]config.DimensionDef, len(dims))
-	for k, v := range dims {
-		out[k] = v
-	}
+	out := maps.Clone(dims)
 	return out
 }
 
@@ -175,12 +173,9 @@ func cloneDimensions(dims map[string]config.DimensionDef) map[string]config.Dime
 func cloneGenres(genres map[string]map[string]float64) map[string]map[string]float64 {
 	out := make(map[string]map[string]float64, len(genres))
 	for genre, mults := range genres {
-		inner := make(map[string]float64, len(mults))
-		for k, v := range mults {
-			inner[k] = v
-		}
-		out[genre] = inner
+		out[genre] = maps.Clone(mults)
 	}
+
 	return out
 }
 

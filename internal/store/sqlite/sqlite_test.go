@@ -67,7 +67,7 @@ type dimFixture struct {
 }
 
 // score is a convenience constructor for a non-nil dimension score pointer.
-func score(v float64) *float64 { return &v }
+func score(v float64) *float64 { return new(v) }
 
 // insertDimensionScores inserts dimension_scores rows for a score id.
 func insertDimensionScores(t *testing.T, s *SQLiteStore, scoreID int, dims []dimFixture) {

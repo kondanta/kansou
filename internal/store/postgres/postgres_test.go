@@ -130,7 +130,7 @@ type dimFixture struct {
 	WeightOverride bool
 }
 
-func score(v float64) *float64 { return &v }
+func score(v float64) *float64 { return new(v) }
 
 func insertDimensionScores(t *testing.T, s *PostgresStore, scoreID int, dims []dimFixture) {
 	t.Helper()
