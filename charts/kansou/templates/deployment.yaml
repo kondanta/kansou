@@ -81,6 +81,8 @@ spec:
                   key: ANILIST_TOKEN
             - name: KANSOU_PORT
               value: {{ .Values.service.port | quote }}
+            - name: TRUST_PROXY
+              value: {{ .Values.trustProxy | quote }}
             {{- if .Values.corsAllowedOrigins }}
             - name: KANSOU_CORS_ORIGINS
               value: {{ join "," .Values.corsAllowedOrigins | quote }}

@@ -52,7 +52,7 @@ func minimalEngine(cfg *config.Config) *scoring.Engine {
 func newTestServer(cfg *config.Config, liveConfig bool, configPath string) *Server {
 	al := anilist.NewClient()
 	eng := minimalEngine(cfg)
-	return New(cfg, al, eng, liveConfig, configPath, nil, "", nil)
+	return New(cfg, al, eng, liveConfig, configPath, nil, "", nil, false)
 }
 
 // writeConfigFile writes a minimal valid TOML to a temp file and returns its path.
@@ -248,7 +248,7 @@ func TestHandlePostConfig_DBMode_PersistsToStore_NotDisk(t *testing.T) {
 		t.Fatalf("seeding db config: %v", err)
 	}
 	eng := minimalEngine(cfg)
-	srv := New(cfg, anilist.NewClient(), eng, true, path, st, "sqlite", nil)
+	srv := New(cfg, anilist.NewClient(), eng, true, path, st, "sqlite", nil, false)
 
 	body := configPayload{
 		Dimensions: map[string]configDimensionEntry{

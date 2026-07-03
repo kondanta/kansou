@@ -42,6 +42,15 @@ const (
 	rateLimitPublish = 5  // /score/publish — write to AniList, must be intentional
 )
 
+// clientIPKey resolves the rate-limit bucket key from the client IP
+// established by the ClientIPFromXFFTrustedProxies middleware (see
+// buildRouter), rather than r.RemoteAddr directly. Behind the Envoy gateway,
+// r.RemoteAddr is Envoy's own address, so keying off it would bucket every
+// client behind the gateway together.
+func clientIPKey(r *http.Request) (string, error) {
+	return httprate.CanonicalizeIP(middleware.GetClientIP(r.Context())), nil
+}
+
 // configSnapshot holds the config and engine as an atomic pair
 type configSnapshot struct {
 	cfg    *config.Config
@@ -59,15 +68,21 @@ type Server struct {
 	// dbType is "sqlite", "postgres", or "" (DBless). Read once at startup
 	// from KANSOU_DB_TYPE — the server never re-reads the env var per request.
 	dbType string
-	router *chi.Mux
+	// trustProxy reports whether the client IP used for rate limiting should
+	// be resolved from X-Forwarded-For (behind a reverse proxy/gateway) or
+	// from the raw TCP peer address (direct-exposed). Read once at startup
+	// from TRUST_PROXY.
+	trustProxy bool
+	router     *chi.Mux
 }
 
 // New constructs a Server wired with the provided dependencies.
 // corsOrigins is the list of CORS allowed origins; store and dbType are the
-// zero value ("", nil) in DBless mode.
+// zero value ("", nil) in DBless mode. trustProxy selects how the client IP
+// used for rate limiting is resolved — see the Server.trustProxy field doc.
 func New(
 	cfg *config.Config, al *anilist.Client, eng *scoring.Engine, liveConfig bool,
-	configPath string, st store.Store, dbType string, corsOrigins []string,
+	configPath string, st store.Store, dbType string, corsOrigins []string, trustProxy bool,
 ) *Server {
 	s := &Server{
 		al:          al,
@@ -76,6 +91,7 @@ func New(
 		corsOrigins: corsOrigins,
 		store:       st,
 		dbType:      dbType,
+		trustProxy:  trustProxy,
 	}
 	s.snapshot.Store(&configSnapshot{cfg: cfg, engine: eng})
 	s.router = s.buildRouter()
@@ -95,6 +111,15 @@ func (s *Server) buildRouter() *chi.Mux {
 	r.Use(corsMiddleware(s.corsOrigins))
 	r.Use(requestLogger)
 
+	if s.trustProxy {
+		// One trusted hop: a fronting reverse proxy/gateway (e.g. Envoy)
+		// appends itself to X-Forwarded-For. TRUST_PROXY=true opts in.
+		r.Use(middleware.ClientIPFromXFFTrustedProxies(1))
+	} else {
+		// Direct-exposed: the TCP peer is the real client (e.g. bare `docker run`).
+		r.Use(middleware.ClientIPFromRemoteAddr)
+	}
+
 	// UI — served at root. Prefers the built Vue app; falls back to the
 	// legacy single-file UI when dist hasn't been built yet.
 	r.Handle("/*", spaHandler(kansouweb.DistDirFS))
@@ -110,10 +135,10 @@ func (s *Server) buildRouter() *chi.Mux {
 	r.Get("/history", s.handleHistoryList)
 	r.Get("/history/{anilist_id}", s.handleHistoryDetail)
 	r.Delete("/history/{score_id}", s.handleHistoryDelete)
-	r.With(httprate.LimitByIP(rateLimitSearch, time.Minute)).Get("/media/search", s.handleMediaSearch)
-	r.With(httprate.LimitByIP(rateLimitFetch, time.Minute)).Get("/media/{id}", s.handleMediaFetch)
-	r.With(httprate.LimitByIP(rateLimitScore, time.Minute)).Post("/score", s.handleScore)
-	r.With(httprate.LimitByIP(rateLimitPublish, time.Minute)).Post("/score/publish", s.handleScorePublish)
+	r.With(httprate.LimitBy(rateLimitSearch, time.Minute, clientIPKey)).Get("/media/search", s.handleMediaSearch)
+	r.With(httprate.LimitBy(rateLimitFetch, time.Minute, clientIPKey)).Get("/media/{id}", s.handleMediaFetch)
+	r.With(httprate.LimitBy(rateLimitScore, time.Minute, clientIPKey)).Post("/score", s.handleScore)
+	r.With(httprate.LimitBy(rateLimitPublish, time.Minute, clientIPKey)).Post("/score/publish", s.handleScorePublish)
 	r.Post("/weights", s.handleWeights)
 
 	// Swagger UI.
@@ -169,7 +194,6 @@ func spaHandler(distFS fs.FS) http.HandlerFunc {
 // the caller (cmd/serve.go). It handles SIGINT and SIGTERM with a graceful
 // shutdown, waiting up to 10 seconds for in-flight requests to complete.
 func (s *Server) ListenAndServe(port int) error {
-
 	addr := fmt.Sprintf(":%d", port)
 	srv := &http.Server{
 		Addr:         addr,

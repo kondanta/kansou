@@ -96,7 +96,7 @@ func TestHistoryEndpoints_EndToEnd(t *testing.T) {
 // documented 503 envelope when no store is configured.
 func TestHistoryEndpoints_DBless(t *testing.T) {
 	cfg := minimalConfig()
-	s := New(cfg, nil, minimalEngine(cfg), true, "", nil, "", nil)
+	s := New(cfg, nil, minimalEngine(cfg), true, "", nil, "", nil, false)
 
 	t.Run("GET /history", func(t *testing.T) {
 		var body errorResponse
