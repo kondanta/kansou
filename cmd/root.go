@@ -3,6 +3,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -118,21 +119,18 @@ scoring session, and publishes the final weighted score back to AniList.`,
 		// --- Config loading ---
 		if app.Store != nil {
 			cfg, err := app.Store.LoadScoringConfig(ctx)
-			if err != nil {
-				return fmt.Errorf("loading scoring config from database: %w", err)
-			}
-
-			// Seed the DB on first run (empty dimensions table returned defaults).
-			if len(cfg.Dimensions) == 0 {
-				fileCfg, err := config.Load(configPath)
-				if err != nil {
-					return fmt.Errorf("loading config file for DB seed: %w", err)
+			if errors.Is(err, store.ErrNotSeeded) {
+				fileCfg, loadErr := config.Load(configPath)
+				if loadErr != nil {
+					return fmt.Errorf("loading config file for DB seed: %w", loadErr)
 				}
 				if err := app.Store.SaveScoringConfig(ctx, fileCfg); err != nil {
 					return fmt.Errorf("seeding database config: %w", err)
 				}
 				cfg = fileCfg
 				slog.Info("seeded database from config file", "dimensions", len(cfg.Dimensions))
+			} else if err != nil {
+				return fmt.Errorf("loading scoring config from database: %w", err)
 			}
 
 			slog.Debug("config loaded from database", "dimensions", len(cfg.Dimensions))
