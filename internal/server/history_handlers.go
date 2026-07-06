@@ -87,15 +87,16 @@ func (s *Server) handleHistoryDetail(w http.ResponseWriter, r *http.Request) {
 
 // handleHistoryDelete soft-deletes a score by its row ID.
 //
-//	@Summary		Delete a history entry
-//	@Description	Soft-deletes a score by its row ID (not the AniList ID). Deliberate removal from active tracking — does not promote any other score to latest. Requires a database.
-//	@Tags			history
-//	@Param			score_id	path	int	true	"scores.id primary key"
-//	@Success		204
-//	@Failure		400	{object}	errorResponse
-//	@Failure		404	{object}	errorResponse
-//	@Failure		503	{object}	errorResponse
-//	@Router			/api/v1/history/{score_id} [delete]
+//			@Summary		Delete a history entry
+//			@Description	Soft-deletes a score by its row ID (not the AniList ID). Deliberate removal from active tracking — does not promote any other score to latest. Requires a database.
+//			@Tags			history
+//			@Param			score_id	path	int	true	"scores.id primary key"
+//	            @Param                  hard            query   bool    false   "hard delete (permanent) instead of soft delete"
+//			@Success		204
+//			@Failure		400	{object}	errorResponse
+//			@Failure		404	{object}	errorResponse
+//			@Failure		503	{object}	errorResponse
+//			@Router			/api/v1/history/{score_id} [delete]
 func (s *Server) handleHistoryDelete(w http.ResponseWriter, r *http.Request) {
 	if !s.requireStore(w) {
 		return
