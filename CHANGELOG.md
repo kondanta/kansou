@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.6.0](https://github.com/kondanta/kansou/compare/v1.5.0...v1.6.0) (2026-07-06)
+
+
+### Features
+
+* **store:** show how many entries media has in /history ([#79](https://github.com/kondanta/kansou/issues/79)) ([1815c14](https://github.com/kondanta/kansou/commit/1815c14cd0f80e28e7ae63452aee94bdf4e4d26c))
+
+
+### Bug Fixes
+
+* **ci:** do not export tribbie to /web/dist as it already has dist ([#71](https://github.com/kondanta/kansou/issues/71)) ([ca062d6](https://github.com/kondanta/kansou/commit/ca062d68c83c8338c6d10325759e8a1c37cd42eb))
+* **config:** show MaxHistory data ([#74](https://github.com/kondanta/kansou/issues/74)) ([51962bb](https://github.com/kondanta/kansou/commit/51962bb216724b6b3841bdebeb172ef5be8dad48))
+* **config:** use default maxHistory if it is empty ([#82](https://github.com/kondanta/kansou/issues/82)) ([3288fee](https://github.com/kondanta/kansou/commit/3288feebe041f73da6fe2814a635b85f80e2da6b))
+* **deps:** update module github.com/go-chi/chi/v5 ( v5.3.0 → v5.3.1 ) ([#77](https://github.com/kondanta/kansou/issues/77)) ([1cbf7ea](https://github.com/kondanta/kansou/commit/1cbf7ea765af23a8174d707ca8a255b73a5f6d7d))
+* **score:** add missing coverimage field ([#78](https://github.com/kondanta/kansou/issues/78)) ([adf0962](https://github.com/kondanta/kansou/commit/adf0962e3a6683f7f23c8b44134e5a7c3dee2d13))
+* **store:** create seed error for checking if db seeded ([#80](https://github.com/kondanta/kansou/issues/80)) ([1e8d0e2](https://github.com/kondanta/kansou/commit/1e8d0e2a5afe786d504904d08d121f3deda9a746))
+* **store:** export store types as json and add coverimage ([#75](https://github.com/kondanta/kansou/issues/75)) ([ab1f949](https://github.com/kondanta/kansou/commit/ab1f94975e67da882a538361a8e0b55bad2ad38a))
+* **store:** handle seed error ([#81](https://github.com/kondanta/kansou/issues/81)) ([9484c42](https://github.com/kondanta/kansou/commit/9484c424a2551af7abb78788f44528a47b9bf2bf))
+
+
+### Documentation
+
+* **swagger:** regenerate swagger ([#76](https://github.com/kondanta/kansou/issues/76)) ([9dea4ee](https://github.com/kondanta/kansou/commit/9dea4ee7531e5fec6bf109df6302efaa509d4aa2))
+
+
+### Miscellaneous Chores
+
+* update dependencies ([#73](https://github.com/kondanta/kansou/issues/73)) ([1dd2a58](https://github.com/kondanta/kansou/commit/1dd2a586270098eb518cda8b7e664a6273ef93ce))
+
 ## [1.5.0](https://github.com/kondanta/kansou/compare/v1.4.0...v1.5.0) (2026-07-03)
 
 
