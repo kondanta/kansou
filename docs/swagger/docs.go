@@ -735,6 +735,9 @@ const docTemplate = `{
                         }
                     }
                 },
+                "max_history": {
+                    "type": "integer"
+                },
                 "max_multiplier": {
                     "type": "number"
                 },
@@ -863,6 +866,9 @@ const docTemplate = `{
             "properties": {
                 "anilist_id": {
                     "type": "integer"
+                },
+                "cover_image": {
+                    "type": "string"
                 },
                 "final_score": {
                     "type": "number"
@@ -1313,55 +1319,48 @@ const docTemplate = `{
         "store.DimensionScoreRow": {
             "type": "object",
             "properties": {
-                "appliedMultiplier": {
-                    "type": "number",
-                    "format": "float64"
+                "applied_multiplier": {
+                    "type": "number"
                 },
-                "baseWeight": {
-                    "type": "number",
-                    "format": "float64"
+                "base_weight": {
+                    "type": "number"
                 },
-                "biasResistant": {
+                "bias_resistant": {
                     "type": "boolean"
                 },
                 "contribution": {
                     "description": "nil if skipped",
-                    "type": "number",
-                    "format": "float64"
+                    "type": "number"
                 },
-                "dimensionKey": {
+                "dimension_key": {
                     "type": "string"
                 },
-                "finalWeight": {
-                    "type": "number",
-                    "format": "float64"
+                "final_weight": {
+                    "type": "number"
                 },
-                "genreDeselected": {
+                "genre_deselected": {
                     "description": "GenreDeselected is true when a deselected genre would have contributed\nto this dimension's multiplier.",
                     "type": "boolean"
                 },
                 "label": {
                     "type": "string"
                 },
-                "primaryGenreMultiplier": {
+                "primary_genre_multiplier": {
                     "description": "PrimaryGenreMultiplier is the raw multiplier the primary genre defined for\nthis dimension at scoring time. 0 when no primary genre was set or the\ndimension is bias-resistant.",
-                    "type": "number",
-                    "format": "float64"
+                    "type": "number"
                 },
                 "score": {
                     "description": "nil if skipped",
-                    "type": "number",
-                    "format": "float64"
+                    "type": "number"
                 },
-                "secondaryGenresMultiplier": {
+                "secondary_genres_multiplier": {
                     "description": "SecondaryGenresMultiplier is the contributing-only average multiplier\nacross non-primary matched genres at scoring time. 0 when no primary genre\nwas set, there were no secondary genres, or the dimension is bias-resistant.",
-                    "type": "number",
-                    "format": "float64"
+                    "type": "number"
                 },
                 "skipped": {
                     "type": "boolean"
                 },
-                "weightOverride": {
+                "weight_override": {
                     "type": "boolean"
                 }
             }
@@ -1474,7 +1473,7 @@ const docTemplate = `{
                 "genre": {
                     "type": "string"
                 },
-                "isPrimary": {
+                "is_primary": {
                     "type": "boolean"
                 }
             }
@@ -1542,13 +1541,13 @@ const docTemplate = `{
         "store.Score": {
             "type": "object",
             "properties": {
-                "activeGenres": {
+                "active_genres": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/store.MatchedGenreRow"
                     }
                 },
-                "anilistID": {
+                "anilist_id": {
                     "type": "integer"
                 },
                 "breakdown": {
@@ -1557,15 +1556,17 @@ const docTemplate = `{
                         "$ref": "#/definitions/store.DimensionScoreRow"
                     }
                 },
-                "configHash": {
+                "config_hash": {
                     "type": "string"
                 },
-                "deletedAt": {
+                "cover_image": {
                     "type": "string"
                 },
-                "finalScore": {
-                    "type": "number",
-                    "format": "float64"
+                "deleted_at": {
+                    "type": "string"
+                },
+                "final_score": {
+                    "type": "number"
                 },
                 "format": {
                     "type": "string"
@@ -1579,29 +1580,28 @@ const docTemplate = `{
                 "id": {
                     "type": "integer"
                 },
-                "isLatest": {
+                "is_latest": {
                     "type": "boolean"
                 },
-                "mediaType": {
+                "media_type": {
                     "type": "string"
                 },
-                "primaryGenre": {
+                "primary_genre": {
                     "type": "string"
                 },
-                "primaryGenreWeight": {
-                    "type": "number",
-                    "format": "float64"
+                "primary_genre_weight": {
+                    "type": "number"
                 },
-                "scoredAt": {
+                "scored_at": {
                     "type": "string"
                 },
-                "titleEnglish": {
+                "title_english": {
                     "type": "string"
                 },
-                "titleRomaji": {
+                "title_romaji": {
                     "type": "string"
                 },
-                "userSelectedGenres": {
+                "user_selected_genres": {
                     "description": "UserSelectedGenres is nil if the user did not explicitly select genres.",
                     "type": "array",
                     "items": {
