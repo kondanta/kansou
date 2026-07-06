@@ -3,4 +3,4 @@ name: kansou
 description: Anime/manga scoring server
 type: application
 version: 0.3.0
-appVersion: 1.6.0
+appVersion: 1.6.1
