@@ -234,13 +234,14 @@ func (s *SQLiteStore) SaveScore(ctx context.Context, result scoring.Result, cfg 
 	defer func() { _ = tx.Rollback() }()
 
 	// Upsert media row — titles and format may change across rescores.
-	const mediaQ = `INSERT INTO media (anilist_id, title_romaji, title_english, media_type, format, updated_at)
-	                VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+	const mediaQ = `INSERT INTO media (anilist_id, title_romaji, title_english, media_type, format, cover_image, updated_at)
+	                VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 	                ON CONFLICT(anilist_id) DO UPDATE SET
 	                    title_romaji  = excluded.title_romaji,
 	                    title_english = excluded.title_english,
 	                    media_type    = excluded.media_type,
 	                    format        = excluded.format,
+	                    cover_image   = excluded.cover_image,
 	                    updated_at    = excluded.updated_at`
 	if _, err := tx.ExecContext(ctx, mediaQ,
 		result.Meta.MediaID,
@@ -248,6 +249,7 @@ func (s *SQLiteStore) SaveScore(ctx context.Context, result scoring.Result, cfg 
 		result.Meta.TitleEnglish,
 		string(result.Meta.MediaType),
 		result.Meta.Format,
+		result.Meta.CoverImage,
 	); err != nil {
 		return fmt.Errorf("upserting media: %w", err)
 	}
@@ -411,6 +413,7 @@ type scoreRow struct {
 	PrimaryGenreWeight *float64 `db:"primary_genre_weight"`
 	ConfigHash         string   `db:"config_hash"`
 	IsLatest           bool     `db:"is_latest"`
+	CoverImage         *string  `db:"cover_image"`
 	ScoredAt           string   `db:"scored_at"`
 	UserSelectedGenres *string  `db:"user_selected_genres"` // JSON text; nil when SQL NULL
 }
@@ -442,7 +445,7 @@ type matchRow struct {
 // Returns nil, nil when no score exists for the given ID.
 func (s *SQLiteStore) LatestScore(ctx context.Context, anilistID int) (*Score, error) {
 	const q = `SELECT s.id, s.media_id, m.title_romaji, m.title_english, m.media_type, m.format,
-	                  s.final_score, s.primary_genre, s.primary_genre_weight, s.config_hash,
+	                  m.cover_image, s.final_score, s.primary_genre, s.primary_genre_weight, s.config_hash,
 	                  s.is_latest, s.scored_at, s.user_selected_genres
 	           FROM scores s
 	           JOIN media m ON m.id = s.media_id
@@ -505,6 +508,9 @@ func (s *SQLiteStore) assembleScore(ctx context.Context, anilistID int, row *sco
 	if row.PrimaryGenreWeight != nil {
 		sc.PrimaryGenreWeight = *row.PrimaryGenreWeight
 	}
+	if row.CoverImage != nil {
+		sc.CoverImage = *row.CoverImage
+	}
 	return sc, nil
 }
 
@@ -560,7 +566,7 @@ func (s *SQLiteStore) fetchMatchedGenres(ctx context.Context, scoreID int) ([]st
 // ordered by scored_at DESC.
 func (s *SQLiteStore) ScoreHistory(ctx context.Context, anilistID int) ([]Score, error) {
 	const q = `SELECT s.id, s.media_id, m.title_romaji, m.title_english, m.media_type, m.format,
-	                  s.final_score, s.primary_genre, s.primary_genre_weight, s.config_hash,
+	                  m.cover_image, s.final_score, s.primary_genre, s.primary_genre_weight, s.config_hash,
 	                  s.is_latest, s.scored_at, s.user_selected_genres
 	           FROM scores s
 	           JOIN media m ON m.id = s.media_id
@@ -596,6 +602,7 @@ type listLatestRow struct {
 	PrimaryGenreWeight *float64 `db:"primary_genre_weight"`
 	ConfigHash         string   `db:"config_hash"`
 	IsLatest           bool     `db:"is_latest"`
+	CoverImage         *string  `db:"cover_image"`
 	ScoredAt           string   `db:"scored_at"`
 }
 
@@ -605,7 +612,7 @@ type listLatestRow struct {
 // is needed; loading it for every entry here would require an expensive JOIN.
 func (s *SQLiteStore) ListLatest(ctx context.Context) ([]Score, error) {
 	const q = `SELECT s.id, m.anilist_id, m.title_romaji, m.title_english, m.media_type, m.format,
-	                  s.final_score, s.primary_genre, s.primary_genre_weight, s.config_hash,
+	                  m.cover_image, s.final_score, s.primary_genre, s.primary_genre_weight, s.config_hash,
 	                  s.is_latest, s.scored_at
 	           FROM scores s
 	           JOIN media m ON m.id = s.media_id
@@ -631,6 +638,9 @@ func (s *SQLiteStore) ListLatest(ctx context.Context) ([]Score, error) {
 		}
 		if r.PrimaryGenreWeight != nil {
 			sc.PrimaryGenreWeight = *r.PrimaryGenreWeight
+		}
+		if r.CoverImage != nil {
+			sc.CoverImage = *r.CoverImage
 		}
 		result[i] = sc
 	}

@@ -238,13 +238,14 @@ func (s *PostgresStore) SaveScore(ctx context.Context, result scoring.Result, cf
 	defer func() { _ = tx.Rollback() }()
 
 	// Upsert media row — titles and format may change across rescores.
-	const mediaQ = `INSERT INTO media (anilist_id, title_romaji, title_english, media_type, format, updated_at)
-	                VALUES ($1, $2, $3, $4, $5, NOW())
+	const mediaQ = `INSERT INTO media (anilist_id, title_romaji, title_english, media_type, format, cover_image, updated_at)
+	                VALUES ($1, $2, $3, $4, $5, $6, NOW())
 	                ON CONFLICT (anilist_id) DO UPDATE SET
 	                    title_romaji  = EXCLUDED.title_romaji,
 	                    title_english = EXCLUDED.title_english,
 	                    media_type    = EXCLUDED.media_type,
 	                    format        = EXCLUDED.format,
+	                    cover_image   = EXCLUDED.cover_image,
 	                    updated_at    = NOW()`
 	if _, err := tx.ExecContext(ctx, mediaQ,
 		result.Meta.MediaID,
@@ -252,6 +253,7 @@ func (s *PostgresStore) SaveScore(ctx context.Context, result scoring.Result, cf
 		result.Meta.TitleEnglish,
 		string(result.Meta.MediaType),
 		result.Meta.Format,
+		result.Meta.CoverImage,
 	); err != nil {
 		return fmt.Errorf("upserting media: %w", err)
 	}
@@ -390,6 +392,7 @@ type scoreRow struct {
 	PrimaryGenreWeight *float64  `db:"primary_genre_weight"`
 	ConfigHash         string    `db:"config_hash"`
 	IsLatest           bool      `db:"is_latest"`
+	CoverImage         *string   `db:"cover_image"`
 	ScoredAt           time.Time `db:"scored_at"`
 	UserSelectedGenres []byte    `db:"user_selected_genres"` // JSONB; nil when SQL NULL
 }
@@ -422,7 +425,7 @@ type matchRow struct {
 // Returns nil, nil when no score exists for the given ID.
 func (s *PostgresStore) LatestScore(ctx context.Context, anilistID int) (*Score, error) {
 	const q = `SELECT s.id, s.media_id, m.title_romaji, m.title_english, m.media_type, m.format,
-	                  s.final_score, s.primary_genre, s.primary_genre_weight, s.config_hash,
+	                  m.cover_image, s.final_score, s.primary_genre, s.primary_genre_weight, s.config_hash,
 	                  s.is_latest, s.scored_at, s.user_selected_genres
 	           FROM scores s
 	           JOIN media m ON m.id = s.media_id
@@ -481,6 +484,9 @@ func (s *PostgresStore) assembleScore(ctx context.Context, anilistID int, row *s
 	if row.PrimaryGenreWeight != nil {
 		sc.PrimaryGenreWeight = *row.PrimaryGenreWeight
 	}
+	if row.CoverImage != nil {
+		sc.CoverImage = *row.CoverImage
+	}
 	return sc, nil
 }
 
@@ -536,7 +542,7 @@ func (s *PostgresStore) fetchMatchedGenres(ctx context.Context, scoreID int) ([]
 // ordered by scored_at DESC.
 func (s *PostgresStore) ScoreHistory(ctx context.Context, anilistID int) ([]Score, error) {
 	const q = `SELECT s.id, s.media_id, m.title_romaji, m.title_english, m.media_type, m.format,
-	                  s.final_score, s.primary_genre, s.primary_genre_weight, s.config_hash,
+	                  m.cover_image, s.final_score, s.primary_genre, s.primary_genre_weight, s.config_hash,
 	                  s.is_latest, s.scored_at, s.user_selected_genres
 	           FROM scores s
 	           JOIN media m ON m.id = s.media_id
@@ -572,6 +578,7 @@ type listLatestRow struct {
 	PrimaryGenreWeight *float64  `db:"primary_genre_weight"`
 	ConfigHash         string    `db:"config_hash"`
 	IsLatest           bool      `db:"is_latest"`
+	CoverImage         *string   `db:"cover_image"`
 	ScoredAt           time.Time `db:"scored_at"`
 }
 
@@ -581,7 +588,7 @@ type listLatestRow struct {
 // is needed; loading it for every entry here would require an expensive JOIN.
 func (s *PostgresStore) ListLatest(ctx context.Context) ([]Score, error) {
 	const q = `SELECT s.id, m.anilist_id, m.title_romaji, m.title_english, m.media_type, m.format,
-	                  s.final_score, s.primary_genre, s.primary_genre_weight, s.config_hash,
+	                  m.cover_image, s.final_score, s.primary_genre, s.primary_genre_weight, s.config_hash,
 	                  s.is_latest, s.scored_at
 	           FROM scores s
 	           JOIN media m ON m.id = s.media_id
@@ -603,6 +610,9 @@ func (s *PostgresStore) ListLatest(ctx context.Context) ([]Score, error) {
 		}
 		if r.PrimaryGenreWeight != nil {
 			sc.PrimaryGenreWeight = *r.PrimaryGenreWeight
+		}
+		if r.CoverImage != nil {
+			sc.CoverImage = *r.CoverImage
 		}
 		result[i] = sc
 	}

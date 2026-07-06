@@ -154,64 +154,65 @@ type Store interface {
 
 // MediaSearchResult is one match from SearchMediaByTitle.
 type MediaSearchResult struct {
-	AnilistID    int
-	TitleRomaji  string
-	TitleEnglish string
-	MediaType    string
-	Format       string
+	AnilistID    int    `json:"anilist_id"`
+	TitleRomaji  string `json:"title_romaji"`
+	TitleEnglish string `json:"title_english"`
+	MediaType    string `json:"media_type"`
+	Format       string `json:"format"`
 }
 
 // Score is the full representation of a scoring event returned by the Store.
 type Score struct {
-	ID                 int
-	AnilistID          int
-	TitleRomaji        string
-	TitleEnglish       string
-	MediaType          string
-	Format             string
-	Genres             []string
-	FinalScore         float64
-	PrimaryGenre       string
-	PrimaryGenreWeight float64
-	ConfigHash         string
-	IsLatest           bool
-	ScoredAt           time.Time
-	DeletedAt          *time.Time
+	ID                 int        `json:"id"`
+	AnilistID          int        `json:"anilist_id"`
+	TitleRomaji        string     `json:"title_romaji"`
+	TitleEnglish       string     `json:"title_english"`
+	MediaType          string     `json:"media_type"`
+	Format             string     `json:"format"`
+	Genres             []string   `json:"genres"`
+	FinalScore         float64    `json:"final_score"`
+	PrimaryGenre       string     `json:"primary_genre"`
+	PrimaryGenreWeight float64    `json:"primary_genre_weight"`
+	ConfigHash         string     `json:"config_hash"`
+	IsLatest           bool       `json:"is_latest"`
+	CoverImage         string     `json:"cover_image"`
+	ScoredAt           time.Time  `json:"scored_at"`
+	DeletedAt          *time.Time `json:"deleted_at,omitempty"`
 	// UserSelectedGenres is nil if the user did not explicitly select genres.
-	UserSelectedGenres []string
-	Breakdown          []DimensionScoreRow
-	ActiveGenres       []MatchedGenreRow
+	UserSelectedGenres []string            `json:"user_selected_genres,omitempty"`
+	Breakdown          []DimensionScoreRow `json:"breakdown"`
+	ActiveGenres       []MatchedGenreRow   `json:"active_genres"`
 }
 
 // DimensionScoreRow is one dimension within a Score.
 type DimensionScoreRow struct {
-	DimensionKey      string
-	Label             string
-	Score             *float64 // nil if skipped
-	BaseWeight        float64
-	FinalWeight       float64
-	AppliedMultiplier float64
-	Contribution      *float64 // nil if skipped
-	Skipped           bool
-	BiasResistant     bool
-	WeightOverride    bool
+	DimensionKey      string   `json:"dimension_key"`
+	Label             string   `json:"label"`
+	Score             *float64 `json:"score"` // nil if skipped
+	BaseWeight        float64  `json:"base_weight"`
+	FinalWeight       float64  `json:"final_weight"`
+	AppliedMultiplier float64  `json:"applied_multiplier"`
+	Contribution      *float64 `json:"contribution"` // nil if skipped
+	Skipped           bool     `json:"skipped"`
+	BiasResistant     bool     `json:"bias_resistant"`
+	WeightOverride    bool     `json:"weight_override"`
 	// GenreDeselected is true when a deselected genre would have contributed
 	// to this dimension's multiplier.
-	GenreDeselected bool
+	GenreDeselected bool `json:"genre_deselected"`
 	// PrimaryGenreMultiplier is the raw multiplier the primary genre defined for
 	// this dimension at scoring time. 0 when no primary genre was set or the
 	// dimension is bias-resistant.
-	PrimaryGenreMultiplier float64
+	PrimaryGenreMultiplier float64 `json:"primary_genre_multiplier"`
 	// SecondaryGenresMultiplier is the contributing-only average multiplier
 	// across non-primary matched genres at scoring time. 0 when no primary genre
 	// was set, there were no secondary genres, or the dimension is bias-resistant.
-	SecondaryGenresMultiplier float64
+	SecondaryGenresMultiplier float64 `json:"secondary_genres_multiplier"`
 }
 
 // MatchedGenreRow is one genre entry within a Score.
 type MatchedGenreRow struct {
-	Genre     string
-	IsPrimary bool
+	Genre     string `json:"genre"`
+	IsPrimary bool   `json:"is_primary"`
 }
 
 // ConfigSnapshot is the full scoring config state persisted alongside each score.

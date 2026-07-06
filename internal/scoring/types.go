@@ -117,6 +117,9 @@ type SessionMeta struct {
 	// (Entry.UserSelectedGenres), copied through by the engine for persistence.
 	// Nil when the caller did not restrict the active genre set.
 	UserSelectedGenres []string
+	// CoverImage is the AniList extra-large cover image URL, carried through
+	// for persistence provenance. Not used by the engine itself.
+	CoverImage string
 }
 
 // BreakdownRow is the full audit trail for a single dimension's contribution
