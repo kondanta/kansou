@@ -363,6 +363,7 @@ func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 			ConfigHash:         snap.cfg.DimensionsHash,
 			PrimaryGenre:       req.PrimaryGenre,
 			PrimaryGenreWeight: snap.cfg.PrimaryGenreWeight,
+			CoverImage:         media.CoverImage,
 		},
 	}
 
