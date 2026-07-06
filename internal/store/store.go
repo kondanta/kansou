@@ -163,21 +163,25 @@ type MediaSearchResult struct {
 
 // Score is the full representation of a scoring event returned by the Store.
 type Score struct {
-	ID                 int        `json:"id"`
-	AnilistID          int        `json:"anilist_id"`
-	TitleRomaji        string     `json:"title_romaji"`
-	TitleEnglish       string     `json:"title_english"`
-	MediaType          string     `json:"media_type"`
-	Format             string     `json:"format"`
-	Genres             []string   `json:"genres"`
-	FinalScore         float64    `json:"final_score"`
-	PrimaryGenre       string     `json:"primary_genre"`
-	PrimaryGenreWeight float64    `json:"primary_genre_weight"`
-	ConfigHash         string     `json:"config_hash"`
-	IsLatest           bool       `json:"is_latest"`
-	CoverImage         string     `json:"cover_image"`
-	ScoredAt           time.Time  `json:"scored_at"`
-	DeletedAt          *time.Time `json:"deleted_at,omitempty"`
+	ID                 int      `json:"id"`
+	AnilistID          int      `json:"anilist_id"`
+	TitleRomaji        string   `json:"title_romaji"`
+	TitleEnglish       string   `json:"title_english"`
+	MediaType          string   `json:"media_type"`
+	Format             string   `json:"format"`
+	Genres             []string `json:"genres"`
+	FinalScore         float64  `json:"final_score"`
+	PrimaryGenre       string   `json:"primary_genre"`
+	PrimaryGenreWeight float64  `json:"primary_genre_weight"`
+	ConfigHash         string   `json:"config_hash"`
+	IsLatest           bool     `json:"is_latest"`
+	// EntryCount is the number of non-deleted scores for this media entry.
+	// Only populated by ListLatest; zero on rows returned by ScoreHistory or
+	// LatestScore, where the caller already has the full list to count.
+	EntryCount int        `json:"entry_count"`
+	CoverImage string     `json:"cover_image"`
+	ScoredAt   time.Time  `json:"scored_at"`
+	DeletedAt  *time.Time `json:"deleted_at,omitempty"`
 	// UserSelectedGenres is nil if the user did not explicitly select genres.
 	UserSelectedGenres []string            `json:"user_selected_genres,omitempty"`
 	Breakdown          []DimensionScoreRow `json:"breakdown"`
