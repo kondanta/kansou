@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.1](https://github.com/kondanta/kansou/compare/v1.6.0...v1.6.1) (2026-07-06)
+
+
+### Miscellaneous Chores
+
+* bump charts ([#83](https://github.com/kondanta/kansou/issues/83)) ([b4bdf82](https://github.com/kondanta/kansou/commit/b4bdf8274cfedd5352cff180841b1aadb4179882))
+
 ## [1.6.0](https://github.com/kondanta/kansou/compare/v1.5.0...v1.6.0) (2026-07-06)
 
 
