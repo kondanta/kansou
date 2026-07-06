@@ -1,14 +1,11 @@
 name: Release
-
 on:
   release:
     types:
       - published
-
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-
 jobs:
   # ── Vue UI download ───────────────────────────────────────────────────────────
   # Downloads the pre-built tribbie dist zip from its GitHub release.
@@ -18,22 +15,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-
       - name: Download tribbie release
         run: |
           version=$(cat TRIBBIE_VERSION)
           gh release download "$version" --repo sasalx/tribbie --pattern "tribbie-${version}.zip"
-          unzip "tribbie-${version}.zip" -d web/dist/
+          unzip "tribbie-${version}.zip" -d web/
           touch web/dist/.gitkeep
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: web-dist
           path: web/dist/
           if-no-files-found: error
-
   # ── Binary build ─────────────────────────────────────────────────────────────
   # All three targets cross-compile on ubuntu-latest via GOARCH/GOARM.
   # CGO is disabled — fully static binaries with no runtime dependencies.
@@ -53,20 +47,16 @@ jobs:
           - goarch: arm
             goarm: "7"
             artifact: kansou-linux-armv7
-
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: web-dist
           path: web/dist/
-
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: '1.26.4'
           cache: true
-
       - name: Build
         env:
           GOOS: linux
@@ -77,13 +67,11 @@ jobs:
           go build \
             -ldflags "-s -w -X github.com/kondanta/kansou/cmd.version=${GITHUB_REF_NAME}" \
             -o ${{ matrix.artifact }} .
-
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}
           if-no-files-found: error
-
   # ── GitHub Release ────────────────────────────────────────────────────────────
   release:
     name: GitHub Release
@@ -91,12 +79,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           merge-multiple: true
-
       - name: Create release
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3
         with:
@@ -105,7 +91,6 @@ jobs:
             kansou-linux-amd64
             kansou-linux-arm64
             kansou-linux-armv7
-
   # ── Docker image ─────────────────────────────────────────────────────────────
   # Downloads the pre-built binaries and injects them into the image — no
   # compilation here. QEMU is registered only for buildx platform awareness;
@@ -117,27 +102,20 @@ jobs:
     permissions:
       contents: read
       packages: write
-
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           merge-multiple: true
-
       - name: Mark binaries executable
         run: chmod +x kansou-linux-amd64 kansou-linux-arm64 kansou-linux-armv7
-
       - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4
-
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
-
       - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Extract image metadata
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
@@ -147,7 +125,6 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-
       - name: Build and push
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
@@ -159,7 +136,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
   # ── Helm chart ───────────────────────────────────────────────────────────────
   # Packages the chart and pushes it to ghcr.io as an OCI artifact.
   # Install with: helm install kansou oci://ghcr.io/kondanta/charts/kansou --version <chart-version>
@@ -169,23 +145,17 @@ jobs:
     permissions:
       contents: read
       packages: write
-
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-
       - name: Install Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
-
       - name: Lint chart
         run: helm lint charts/kansou
-
       - name: Login to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
-
       - name: Package chart
         run: |
           helm package charts/kansou \
             --app-version "${GITHUB_REF_NAME#v}"
-
       - name: Push chart
         run: helm push kansou-*.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
