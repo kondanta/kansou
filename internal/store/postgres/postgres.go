@@ -107,7 +107,7 @@ func runMigrations(db *sql.DB) error {
 }
 
 // LoadScoringConfig reads the current scoring config from the database.
-// Returns config.Load("") defaults when the dimensions table is empty.
+// Returns store.ErrNotSeeded when the dimensions table is empty.
 func (s *PostgresStore) LoadScoringConfig(ctx context.Context) (*config.Config, error) {
 	var scalars struct {
 		PrimaryGenreWeight float64 `db:"primary_genre_weight"`
@@ -118,7 +118,8 @@ func (s *PostgresStore) LoadScoringConfig(ctx context.Context) (*config.Config, 
 	                 FROM config_scalars WHERE id = 1`
 	if err := s.db.GetContext(ctx, &scalars, scalarQ); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return config.Load("")
+			// Defensive: seed row was removed manually — treat like unseeded.
+			return nil, store.ErrNotSeeded
 		}
 		return nil, fmt.Errorf("loading config scalars: %w", err)
 	}
@@ -138,7 +139,7 @@ func (s *PostgresStore) LoadScoringConfig(ctx context.Context) (*config.Config, 
 		return nil, fmt.Errorf("loading dimensions: %w", err)
 	}
 	if len(dimRows) == 0 {
-		return config.Load("")
+		return nil, store.ErrNotSeeded
 	}
 
 	type genreRow struct {
