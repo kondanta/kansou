@@ -167,6 +167,7 @@ func (a *App) runScoreAdd(
 			ConfigHash:         a.Config.DimensionsHash,
 			PrimaryGenre:       primaryGenre,
 			PrimaryGenreWeight: a.Config.PrimaryGenreWeight,
+			CoverImage:         media.CoverImage,
 		},
 	}
 
