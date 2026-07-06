@@ -4,7 +4,7 @@ go 1.26.4
 
 require (
 	github.com/BurntSushi/toml v1.6.0
-	github.com/go-chi/chi/v5 v5.3.0
+	github.com/go-chi/chi/v5 v5.3.1
 	github.com/go-chi/httprate v0.16.0
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/jackc/pgx/v5 v5.10.0
