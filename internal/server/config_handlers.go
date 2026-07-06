@@ -45,6 +45,7 @@ type configPayload struct {
 	PrimaryGenreWeight float64                         `json:"primary_genre_weight"`
 	MaxMultiplier      float64                         `json:"max_multiplier"`
 	ConfigHash         string                          `json:"config_hash,omitempty"`
+	MaxHistory         int                             `json:"max_history"`
 }
 
 // handleGetConfig returns the current mutable config surface.
@@ -79,6 +80,7 @@ func toConfigPayload(cfg *config.Config) configPayload {
 		PrimaryGenreWeight: cfg.PrimaryGenreWeight,
 		MaxMultiplier:      cfg.MaxMultiplier,
 		ConfigHash:         config.Hash(cfg),
+		MaxHistory:         cfg.MaxHistory,
 	}
 }
 
@@ -111,7 +113,7 @@ func (s *Server) handlePostConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	snap := s.getSnapshot()
-	newCfg, err := config.Rebuild(snap.cfg, dims, payload.Genres, payload.PrimaryGenreWeight, payload.MaxMultiplier)
+	newCfg, err := config.Rebuild(snap.cfg, dims, payload.Genres, payload.PrimaryGenreWeight, payload.MaxMultiplier, payload.MaxHistory)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return

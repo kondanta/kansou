@@ -34,6 +34,10 @@ const DefaultPrimaryGenreWeight = 0.6
 // weightSumTolerance is the allowed deviation from 1.0 for dimension weight sums.
 const weightSumTolerance = 0.001
 
+// DefaultMaxHistory is the default value for the history kansou keeps.
+// 0 Means no history, at all. By default, we do not keep any history.
+const DefaultMaxHistory = 0
+
 // DimensionDef is the TOML representation of a single scoring dimension.
 // TOML keys are snake_case and map to struct fields via tags.
 type DimensionDef struct {
@@ -443,6 +447,7 @@ func Rebuild(
 	genres map[string]map[string]float64,
 	primaryGenreWeight float64,
 	maxMultiplier float64,
+	maxHistory int,
 ) (*Config, error) {
 	pgw := primaryGenreWeight
 	raw := &rawConfig{
@@ -450,6 +455,7 @@ func Rebuild(
 		Genres:             genres,
 		MaxMultiplier:      maxMultiplier,
 		PrimaryGenreWeight: &pgw,
+		MaxHistory:         maxHistory,
 		Server:             base.Server,
 	}
 
