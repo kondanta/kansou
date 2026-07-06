@@ -99,7 +99,9 @@ type rawConfig struct {
 	// "explicitly 0.0" — 0.0 is a valid user value meaning "disable blending".
 	PrimaryGenreWeight *float64     `toml:"primary_genre_weight"`
 	Server             ServerConfig `toml:"server"`
-	MaxHistory         int          `toml:"max_history"`
+	// MaxHistory is a pointer so we can distinguish "not set" from
+	// "explicitly 0" — 0 is a valid user value meaning "keep only the latest".
+	MaxHistory *int `toml:"max_history"`
 }
 
 // Load reads the config file at path, validates it, and returns a Config.
@@ -207,8 +209,8 @@ func build(raw *rawConfig) (*Config, error) {
 	}
 
 	maxHistory := DefaultMaxHistory
-	if raw.MaxHistory != 0 {
-		maxHistory = raw.MaxHistory
+	if raw.MaxHistory != nil {
+		maxHistory = *raw.MaxHistory
 	}
 
 	// Lowercase all genre keys for case-insensitive matching.
@@ -388,13 +390,14 @@ func Write(path string, cfg *Config) error {
 // Server config is preserved so non-editable fields survive a round-trip.
 func toRaw(cfg *Config) rawConfig {
 	pgw := cfg.PrimaryGenreWeight
+	mh := cfg.MaxHistory
 	return rawConfig{
 		Dimensions:         cfg.Dimensions,
 		Genres:             cfg.Genres,
 		MaxMultiplier:      cfg.MaxMultiplier,
 		PrimaryGenreWeight: &pgw,
 		Server:             cfg.Server,
-		MaxHistory:         cfg.MaxHistory,
+		MaxHistory:         &mh,
 	}
 }
 
@@ -455,12 +458,13 @@ func Rebuild(
 	maxHistory int,
 ) (*Config, error) {
 	pgw := primaryGenreWeight
+	mh := maxHistory
 	raw := &rawConfig{
 		Dimensions:         dimensions,
 		Genres:             genres,
 		MaxMultiplier:      maxMultiplier,
 		PrimaryGenreWeight: &pgw,
-		MaxHistory:         maxHistory,
+		MaxHistory:         &mh,
 		Server:             base.Server,
 	}
 
