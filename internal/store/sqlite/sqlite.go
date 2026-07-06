@@ -1020,12 +1020,12 @@ func (s *SQLiteStore) WeightOverrides(ctx context.Context) ([]store.WeightOverri
 // historical fact independent of which score currently holds is_latest.
 func (s *SQLiteStore) MostRescored(ctx context.Context) ([]store.RescoredStat, error) {
 	type row struct {
-		AnilistID     int     `db:"anilist_id"`
-		TitleRomaji   string  `db:"title_romaji"`
-		ScoreCount    int     `db:"score_count"`
-		LatestScore   float64 `db:"latest_score"`
-		FirstScoredAt string  `db:"first_scored_at"`
-		LastScoredAt  string  `db:"last_scored_at"`
+		AnilistID     int             `db:"anilist_id"`
+		TitleRomaji   string          `db:"title_romaji"`
+		ScoreCount    int             `db:"score_count"`
+		LatestScore   sql.NullFloat64 `db:"latest_score"`
+		FirstScoredAt string          `db:"first_scored_at"`
+		LastScoredAt  string          `db:"last_scored_at"`
 	}
 	const q = `SELECT m.anilist_id, m.title_romaji, COUNT(*) AS score_count,
 	                  MAX(CASE WHEN s.is_latest THEN s.final_score END) AS latest_score,
@@ -1049,9 +1049,14 @@ func (s *SQLiteStore) MostRescored(ctx context.Context) ([]store.RescoredStat, e
 		if err != nil {
 			return nil, err
 		}
+		var latestScore *float64
+		if r.LatestScore.Valid {
+			v := r.LatestScore.Float64
+			latestScore = &v
+		}
 		result[i] = store.RescoredStat{
 			AnilistID: r.AnilistID, TitleRomaji: r.TitleRomaji, ScoreCount: r.ScoreCount,
-			LatestScore: r.LatestScore, FirstScoredAt: first, LastScoredAt: last,
+			LatestScore: latestScore, FirstScoredAt: first, LastScoredAt: last,
 		}
 	}
 	return result, nil

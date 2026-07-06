@@ -476,8 +476,11 @@ func TestMostRescored(t *testing.T) {
 	if got[0].AnilistID != 1 || got[0].ScoreCount != 2 {
 		t.Fatalf("top row: got %+v, want anilist_id=1 score_count=2", got[0])
 	}
-	if math.Abs(got[0].LatestScore-8.5) > floatTolerance {
-		t.Errorf("latest score: got %.4f, want 8.5", got[0].LatestScore)
+	if got[0].LatestScore == nil {
+		t.Fatal("latest score: got nil, want 8.5")
+	}
+	if math.Abs(*got[0].LatestScore-8.5) > floatTolerance {
+		t.Errorf("latest score: got %.4f, want 8.5", *got[0].LatestScore)
 	}
 	if got[1].AnilistID != 2 || got[1].ScoreCount != 1 {
 		t.Fatalf("second row: got %+v, want anilist_id=2 score_count=1", got[1])

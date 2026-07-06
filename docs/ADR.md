@@ -1750,3 +1750,30 @@ The `/api` chi subrouter is renamed to `/api/v1` (`internal/server/server.go`,
 - The frontend (`web/tribbie/` submodule) still needs its hardcoded fetch
   paths updated for the `/api/v1` prefix — same caveat as ADR-035, submodule
   not checked out in this environment.
+
+## ADR-037 — `RescoredStat.LatestScore` is `*float64`, not `float64`
+
+**Context:**
+`MostRescored` counts every non-deleted score per media (ADR-032: deliberate
+deletion never promotes a replacement to `is_latest`), so a media entry can
+have non-deleted history rows with none of them marked `is_latest`. The
+`latest_score` query column (`MAX(CASE WHEN s.is_latest THEN s.final_score
+END)`) then returns SQL `NULL`, which crashed the `sqlite`/`postgres` scans
+(`converting NULL to float64 is unsupported`) because `RescoredStat.LatestScore`
+was a non-pointer `float64`.
+
+**Decision:**
+`RescoredStat.LatestScore` is now `*float64`. `nil` means the media has
+scoring history but no row currently holds `is_latest` — a legitimate state
+per ADR-032, not an error.
+
+**Consequences:**
+- `internal/store/store.go`: `RescoredStat.LatestScore` changed from
+  `float64` to `*float64`.
+- `internal/store/sqlite/sqlite.go` and `internal/store/postgres/postgres.go`:
+  `MostRescored` scans `latest_score` into `sql.NullFloat64` and converts to
+  `*float64`.
+- `cmd/stats.go`: `kansou stats history` prints `n/a` in place of a latest
+  score when `LatestScore` is `nil`.
+- REST `most_rescored` responses now serialize `latest_score` as JSON `null`
+  in this case instead of `0`.
