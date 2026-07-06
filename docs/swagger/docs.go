@@ -870,6 +870,9 @@ const docTemplate = `{
                 "cover_image": {
                     "type": "string"
                 },
+                "entry_count": {
+                    "type": "integer"
+                },
                 "final_score": {
                     "type": "number"
                 },
@@ -1564,6 +1567,10 @@ const docTemplate = `{
                 },
                 "deleted_at": {
                     "type": "string"
+                },
+                "entry_count": {
+                    "description": "EntryCount is the number of non-deleted scores for this media entry.\nOnly populated by ListLatest; zero on rows returned by ScoreHistory or\nLatestScore, where the caller already has the full list to count.",
+                    "type": "integer"
                 },
                 "final_score": {
                     "type": "number"

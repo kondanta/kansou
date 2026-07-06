@@ -602,6 +602,7 @@ type listLatestRow struct {
 	PrimaryGenreWeight *float64 `db:"primary_genre_weight"`
 	ConfigHash         string   `db:"config_hash"`
 	IsLatest           bool     `db:"is_latest"`
+	EntryCount         int      `db:"entry_count"`
 	CoverImage         *string  `db:"cover_image"`
 	ScoredAt           string   `db:"scored_at"`
 }
@@ -613,7 +614,9 @@ type listLatestRow struct {
 func (s *SQLiteStore) ListLatest(ctx context.Context) ([]Score, error) {
 	const q = `SELECT s.id, m.anilist_id, m.title_romaji, m.title_english, m.media_type, m.format,
 	                  m.cover_image, s.final_score, s.primary_genre, s.primary_genre_weight, s.config_hash,
-	                  s.is_latest, s.scored_at
+	                  s.is_latest, s.scored_at,
+	                  (SELECT COUNT(*) FROM scores s2
+	                   WHERE s2.media_id = s.media_id AND s2.deleted_at IS NULL) AS entry_count
 	           FROM scores s
 	           JOIN media m ON m.id = s.media_id
 	           WHERE s.is_latest = 1 AND s.deleted_at IS NULL
@@ -631,7 +634,7 @@ func (s *SQLiteStore) ListLatest(ctx context.Context) ([]Score, error) {
 		sc := Score{
 			ID: r.ID, AnilistID: r.AnilistID, TitleRomaji: r.TitleRomaji, TitleEnglish: r.TitleEnglish,
 			MediaType: r.MediaType, Format: r.Format, FinalScore: r.FinalScore,
-			ConfigHash: r.ConfigHash, IsLatest: r.IsLatest, ScoredAt: scoredAt,
+			ConfigHash: r.ConfigHash, IsLatest: r.IsLatest, EntryCount: r.EntryCount, ScoredAt: scoredAt,
 		}
 		if r.PrimaryGenre != nil {
 			sc.PrimaryGenre = *r.PrimaryGenre

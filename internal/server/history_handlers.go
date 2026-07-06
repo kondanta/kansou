@@ -22,6 +22,7 @@ type historyListItem struct {
 	Format      string    `json:"format"`
 	CoverImage  string    `json:"cover_image"`
 	FinalScore  float64   `json:"final_score"`
+	EntryCount  int       `json:"entry_count"`
 	ScoredAt    time.Time `json:"scored_at"`
 }
 
@@ -49,7 +50,7 @@ func (s *Server) handleHistoryList(w http.ResponseWriter, r *http.Request) {
 		items[i] = historyListItem{
 			ScoreID: e.ID, AnilistID: e.AnilistID, TitleRomaji: e.TitleRomaji,
 			MediaType: e.MediaType, Format: e.Format, CoverImage: e.CoverImage,
-			FinalScore: e.FinalScore, ScoredAt: e.ScoredAt,
+			FinalScore: e.FinalScore, EntryCount: e.EntryCount, ScoredAt: e.ScoredAt,
 		}
 	}
 	writeJSON(w, http.StatusOK, items)
