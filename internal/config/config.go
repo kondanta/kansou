@@ -206,6 +206,11 @@ func build(raw *rawConfig) (*Config, error) {
 		primaryGenreWeight = *raw.PrimaryGenreWeight
 	}
 
+	maxHistory := DefaultMaxHistory
+	if raw.MaxHistory != 0 {
+		maxHistory = raw.MaxHistory
+	}
+
 	// Lowercase all genre keys for case-insensitive matching.
 	genres := lowercaseGenreKeys(raw.Genres)
 
@@ -220,7 +225,7 @@ func build(raw *rawConfig) (*Config, error) {
 		Genres:             genres,
 		MaxMultiplier:      maxMult,
 		PrimaryGenreWeight: primaryGenreWeight,
-		MaxHistory:         raw.MaxHistory,
+		MaxHistory:         maxHistory,
 		Server: ServerConfig{
 			Port:               port,
 			CORSAllowedOrigins: raw.Server.CORSAllowedOrigins,

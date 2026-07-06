@@ -19,6 +19,13 @@ import (
 // errors.Is, not string comparison.
 var ErrScoreNotFound = errors.New("score not found or already deleted")
 
+// ErrNotSeeded is returned by LoadScoringConfig when the dimensions table is
+// empty — the database has never been seeded with a scoring config. Callers
+// (see cmd/root.go) check with errors.Is and seed from the config file on
+// this signal; it is distinct from a config successfully loaded with
+// built-in defaults, which is not an error.
+var ErrNotSeeded = errors.New("scoring config not yet seeded")
+
 //go:embed migrations
 var MigrationsFS embed.FS
 
@@ -41,7 +48,8 @@ type Store interface {
 	// --- Scoring config ---
 
 	// LoadScoringConfig returns the current scoring config from the database.
-	// Returns defaults if the dimensions table is empty (first-run signal).
+	// Returns ErrNotSeeded if the dimensions table is empty — the caller must
+	// seed the database from the config file in that case.
 	LoadScoringConfig(ctx context.Context) (*config.Config, error)
 
 	// SaveScoringConfig persists the full scoring config to the database.
