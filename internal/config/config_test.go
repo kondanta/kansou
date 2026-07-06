@@ -527,7 +527,7 @@ port = 9090
 		"story":     {Label: "Story (updated)", Description: "Narrative", Weight: 0.70},
 		"enjoyment": {Label: "Enjoyment", Description: "Fun", Weight: 0.30, BiasResistant: true},
 	}
-	rebuilt, err := Rebuild(cfg, dims, nil, DefaultPrimaryGenreWeight, DefaultMaxMultiplier)
+	rebuilt, err := Rebuild(cfg, dims, nil, DefaultPrimaryGenreWeight, DefaultMaxMultiplier, DefaultMaxHistory)
 	if err != nil {
 		t.Fatalf("rebuild: %v", err)
 	}
@@ -552,7 +552,7 @@ func TestRebuild_InvalidWeights(t *testing.T) {
 		"story":     {Label: "S", Weight: 0.60},
 		"enjoyment": {Label: "E", Weight: 0.60}, // sum = 1.20, invalid
 	}
-	_, err = Rebuild(cfg, dims, nil, DefaultPrimaryGenreWeight, DefaultMaxMultiplier)
+	_, err = Rebuild(cfg, dims, nil, DefaultPrimaryGenreWeight, DefaultMaxMultiplier, DefaultMaxHistory)
 	if err == nil {
 		t.Error("expected error for weights summing to 1.20, got nil")
 	}
@@ -569,7 +569,7 @@ func TestRebuild_UnknownGenreDimension(t *testing.T) {
 	genres := map[string]map[string]float64{
 		"action": {"nonexistent_dim": 1.2},
 	}
-	_, err = Rebuild(cfg, dims, genres, DefaultPrimaryGenreWeight, DefaultMaxMultiplier)
+	_, err = Rebuild(cfg, dims, genres, DefaultPrimaryGenreWeight, DefaultMaxMultiplier, DefaultMaxHistory)
 	if err == nil {
 		t.Error("expected error for genre referencing unknown dimension, got nil")
 	}
@@ -584,10 +584,10 @@ func TestProbeWritable_WritableDir(t *testing.T) {
 
 func TestProbeWritable_ReadOnlyDir(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.Chmod(dir, 0444); err != nil {
+	if err := os.Chmod(dir, 0o444); err != nil {
 		t.Skipf("cannot set dir read-only: %v", err)
 	}
-	t.Cleanup(func() { os.Chmod(dir, 0755) }) //nolint:errcheck
+	t.Cleanup(func() { os.Chmod(dir, 0o755) }) //nolint:errcheck
 	path := filepath.Join(dir, "config.toml")
 	if err := ProbeWritable(path); err == nil {
 		t.Error("expected error for read-only dir, got nil")

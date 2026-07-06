@@ -145,6 +145,7 @@ func defaults() *Config {
 		Genres:             genres,
 		MaxMultiplier:      DefaultMaxMultiplier,
 		PrimaryGenreWeight: DefaultPrimaryGenreWeight,
+		MaxHistory:         DefaultMaxHistory,
 		Server: ServerConfig{
 			Port:               DefaultPort,
 			CORSAllowedOrigins: []string{"http://localhost:3000", "http://localhost:5173", "http://localhost:8080"},

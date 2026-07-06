@@ -302,7 +302,9 @@ func runConfigDimensionAdd(
 	dims := cloneDimensions(a.Config.Dimensions)
 	dims[key] = config.DimensionDef{Label: label, Description: description, Weight: weight, BiasResistant: biasResistant}
 
-	newCfg, err := config.Rebuild(a.Config, dims, a.Config.Genres, a.Config.PrimaryGenreWeight, a.Config.MaxMultiplier)
+	newCfg, err := config.Rebuild(
+		a.Config, dims, a.Config.Genres, a.Config.PrimaryGenreWeight, a.Config.MaxMultiplier, a.Config.MaxHistory,
+	)
 	if err != nil {
 		return fmt.Errorf("adding dimension %q: %w", key, err)
 	}
@@ -382,7 +384,9 @@ func runConfigDimensionSet(
 	dims := cloneDimensions(a.Config.Dimensions)
 	dims[key] = existing
 
-	newCfg, err := config.Rebuild(a.Config, dims, a.Config.Genres, a.Config.PrimaryGenreWeight, a.Config.MaxMultiplier)
+	newCfg, err := config.Rebuild(
+		a.Config, dims, a.Config.Genres, a.Config.PrimaryGenreWeight, a.Config.MaxMultiplier, a.Config.MaxHistory,
+	)
 	if err != nil {
 		return fmt.Errorf("updating dimension %q: %w", key, err)
 	}
@@ -465,7 +469,9 @@ func runConfigDimensionRemove(ctx context.Context, a *App, key string) error {
 	dims = rebalanceWeightsAfterRemoval(dims, target.Weight)
 	genres := removeGenreReferencesToDimension(a.Config.Genres, key)
 
-	newCfg, err := config.Rebuild(a.Config, dims, genres, a.Config.PrimaryGenreWeight, a.Config.MaxMultiplier)
+	newCfg, err := config.Rebuild(
+		a.Config, dims, genres, a.Config.PrimaryGenreWeight, a.Config.MaxMultiplier, a.Config.MaxHistory,
+	)
 	if err != nil {
 		return fmt.Errorf("removing dimension %q: %w", key, err)
 	}
@@ -524,7 +530,7 @@ func runConfigGenreSet(ctx context.Context, a *App, genre, dimension string, mul
 	genres[genreLower][dimension] = multiplier
 
 	newCfg, err := config.Rebuild(
-		a.Config, a.Config.Dimensions, genres, a.Config.PrimaryGenreWeight, a.Config.MaxMultiplier,
+		a.Config, a.Config.Dimensions, genres, a.Config.PrimaryGenreWeight, a.Config.MaxMultiplier, a.Config.MaxHistory,
 	)
 	if err != nil {
 		return fmt.Errorf("setting genre multiplier: %w", err)
@@ -578,7 +584,7 @@ func runConfigGenreRemove(ctx context.Context, a *App, genre, dimension string) 
 	}
 
 	newCfg, err := config.Rebuild(
-		a.Config, a.Config.Dimensions, genres, a.Config.PrimaryGenreWeight, a.Config.MaxMultiplier,
+		a.Config, a.Config.Dimensions, genres, a.Config.PrimaryGenreWeight, a.Config.MaxMultiplier, a.Config.MaxHistory,
 	)
 	if err != nil {
 		return fmt.Errorf("removing genre multiplier: %w", err)
