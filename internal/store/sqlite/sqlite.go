@@ -703,6 +703,51 @@ func (s *SQLiteStore) SoftDeleteScore(ctx context.Context, scoreID int) error {
 	return nil
 }
 
+// HardDeleteScore permanently removes a score row from the database. This is irreversible and
+// should only be used with extreme caution. It does not affect any other scores for the same media.
+func (s *SQLiteStore) HardDeleteScore(ctx context.Context, scoreID int) error {
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("beginning transaction: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback() }()
+
+	var mediaID int
+	err = tx.GetContext(ctx, &mediaID, `SELECT media_id FROM scores WHERE id = ?`, scoreID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("score %d: %w", scoreID, store.ErrScoreNotFound)
+		}
+		return fmt.Errorf("looking up media_id for score %d: %w", scoreID, err)
+	}
+
+	res, err := tx.ExecContext(ctx, `DELETE FROM scores WHERE id = ?`, scoreID)
+	if err != nil {
+		return fmt.Errorf("hard-deleting score %d: %w", scoreID, err)
+	}
+
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("reading rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("score %d: %w", scoreID, store.ErrScoreNotFound)
+	}
+
+	const mediaQ = `DELETE FROM media WHERE id = ? AND NOT EXISTS (SELECT 1 FROM scores WHERE media_id = ?)`
+
+	if _, err := tx.ExecContext(ctx, mediaQ, mediaID, mediaID); err != nil {
+		return fmt.Errorf("deleting orphaned media %d: %w", mediaID, err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("committing hard delete transaction: %w", err)
+	}
+
+	return nil
+}
+
 // Prune hard-deletes all soft-deleted score rows and any media entries with no
 // remaining scores. The prune timestamp is recorded in db_metadata before
 // deletion so it survives even if zero rows are deleted.
@@ -728,7 +773,6 @@ func (s *SQLiteStore) Prune(ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("reading rows affected: %w", err)
 	}
-
 	const mediaQ = `DELETE FROM media WHERE id NOT IN (SELECT DISTINCT media_id FROM scores)`
 	if _, err := tx.ExecContext(ctx, mediaQ); err != nil {
 		return 0, fmt.Errorf("deleting orphaned media: %w", err)

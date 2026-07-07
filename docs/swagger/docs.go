@@ -219,7 +219,7 @@ const docTemplate = `{
         },
         "/api/v1/history/{score_id}": {
             "delete": {
-                "description": "Soft-deletes a score by its row ID (not the AniList ID). Deliberate removal from active tracking — does not promote any other score to latest. Requires a database.",
+                "description": "Soft-deletes a score by its row ID (not the AniList ID). Deliberate removal from active tracking — does not promote any other score to latest. Requires a database.r",
                 "tags": [
                     "history"
                 ],
@@ -231,6 +231,12 @@ const docTemplate = `{
                         "name": "score_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "hard delete (permanent removal) if true, soft delete otherwise",
+                        "name": "hard",
+                        "in": "query"
                     }
                 ],
                 "responses": {
