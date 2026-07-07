@@ -88,9 +88,10 @@ func (s *Server) handleHistoryDetail(w http.ResponseWriter, r *http.Request) {
 // handleHistoryDelete soft-deletes a score by its row ID.
 //
 //	@Summary		Delete a history entry
-//	@Description	Soft-deletes a score by its row ID (not the AniList ID). Deliberate removal from active tracking — does not promote any other score to latest. Requires a database.
+//	@Description	Soft-deletes a score by its row ID (not the AniList ID). Deliberate removal from active tracking — does not promote any other score to latest. Requires a database.r
 //	@Tags			history
 //	@Param			score_id	path	int	true	"scores.id primary key"
+//	@Param                  hard            query   bool    false   "hard delete (permanent removal) if true, soft delete otherwise"
 //	@Success		204
 //	@Failure		400	{object}	errorResponse
 //	@Failure		404	{object}	errorResponse
@@ -106,7 +107,14 @@ func (s *Server) handleHistoryDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.store.SoftDeleteScore(r.Context(), scoreID); err != nil {
+	isHardDelete := r.URL.Query().Get("hard") == "true"
+	if isHardDelete {
+		err = s.store.HardDeleteScore(r.Context(), scoreID)
+	} else {
+		err = s.store.SoftDeleteScore(r.Context(), scoreID)
+	}
+
+	if err != nil {
 		if errors.Is(err, store.ErrScoreNotFound) {
 			writeError(w, http.StatusNotFound, "score not found or already deleted")
 			return

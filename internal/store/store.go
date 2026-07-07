@@ -101,6 +101,13 @@ type Store interface {
 	// the existing SaveScore path.
 	SoftDeleteScore(ctx context.Context, scoreID int) error
 
+	// HardDeleteScore deletes the given score ID from the store. Older scores stay
+	// in the database (subject to max_history). This is a destructive operation
+	// which does NOT promote any other score for the same media to is_latest.
+	// In simpler terms; the functionality is the same as SoftDeleteScore, but
+	// it removes the entry from the store.
+	HardDeleteScore(ctx context.Context, scoreID int) error
+
 	// --- Gardening ---
 
 	// Prune hard-deletes all rows where deleted_at IS NOT NULL across all

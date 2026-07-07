@@ -676,6 +676,46 @@ func (s *PostgresStore) SoftDeleteScore(ctx context.Context, scoreID int) error 
 	return nil
 }
 
+// HardDeleteScore
+func (s *PostgresStore) HardDeleteScore(ctx context.Context, scoreID int) error {
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("beginning transaction: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback() }()
+
+	var mediaID int
+	err = tx.GetContext(ctx, &mediaID, `SELECT media_id FROM scores WHERE id = $1`, scoreID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("score %d: %w", scoreID, store.ErrScoreNotFound)
+		}
+		return fmt.Errorf("looking up media_id for score %d: %w", scoreID, err)
+	}
+
+	res, err := tx.ExecContext(ctx, `DELETE FROM scores WHERE id = $1`, scoreID)
+	if err != nil {
+		return fmt.Errorf("hard-deleting score %d: %w", scoreID, err)
+	}
+
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("reading rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("score %d: %w", scoreID, store.ErrScoreNotFound)
+	}
+
+	const mediaQ = `DELETE FROM media WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM scores WHERE media_id = $2)`
+
+	if _, err := tx.ExecContext(ctx, mediaQ, mediaID, mediaID); err != nil {
+		return fmt.Errorf("deleting orphaned media %d: %w", mediaID, err)
+	}
+
+	return tx.Commit()
+}
+
 // Prune hard-deletes all soft-deleted score rows and any media entries with no
 // remaining scores. The prune timestamp is recorded in db_metadata before
 // deletion so it survives even if zero rows are deleted.

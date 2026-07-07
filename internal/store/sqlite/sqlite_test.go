@@ -635,6 +635,89 @@ func TestSoftDeleteScore_NotFoundOrAlreadyDeleted(t *testing.T) {
 	}
 }
 
+func TestSQLiteStore_HardDeleteScore(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	t.Run("Scenario A: Deletes score and removes orphaned media", func(t *testing.T) {
+		// Seed 1 media and 1 score
+		a := insertMedia(t, s, 201, "Movie A", "ANIME", []string{"Sci-Fi"})
+		scoreID := insertScore(t, s, a, 7.5, "h1", "2024-01-01T00:00:00Z", true)
+
+		// Execute Hard Delete
+		if err := s.HardDeleteScore(ctx, scoreID); err != nil {
+			t.Fatalf("HardDeleteScore: %v", err)
+		}
+
+		// Assertions: Score row should be physically gone
+		var scoreCount int
+		if err := s.db.Get(&scoreCount, `SELECT COUNT(*) FROM scores WHERE id = ?`, scoreID); err != nil {
+			t.Fatalf("checking score existence: %v", err)
+		}
+		if scoreCount != 0 {
+			t.Error("expected score row to be completely deleted from sqlite")
+		}
+
+		// Assertions: Media should be reaped as an orphan
+		var mediaCount int
+		if err := s.db.Get(&mediaCount, `SELECT COUNT(*) FROM media WHERE id = ?`, a); err != nil {
+			t.Fatalf("checking media existence: %v", err)
+		}
+		if mediaCount != 0 {
+			t.Error("expected media to be reaped as an orphan, but it still exists in sqlite")
+		}
+	})
+
+	t.Run("Scenario B: Deletes score but keeps shared media", func(t *testing.T) {
+		// Seed 1 media and 2 distinct scores pointing to it
+		a := insertMedia(t, s, 202, "Movie B", "ANIME", []string{"Mecha"})
+		scoreID1 := insertScore(t, s, a, 9.0, "h1", "2024-01-01T00:00:00Z", false)
+		scoreID2 := insertScore(t, s, a, 8.5, "h1", "2024-02-01T00:00:00Z", true)
+
+		// Delete only the first score
+		if err := s.HardDeleteScore(ctx, scoreID1); err != nil {
+			t.Fatalf("HardDeleteScore: %v", err)
+		}
+
+		// Assertions: First score should be gone
+		var scoreCount1 int
+		if err := s.db.Get(&scoreCount1, `SELECT COUNT(*) FROM scores WHERE id = ?`, scoreID1); err != nil {
+			t.Fatalf("checking score 1 existence: %v", err)
+		}
+		if scoreCount1 != 0 {
+			t.Error("expected score 1 to be deleted")
+		}
+
+		// Assertions: Second score should remain untouched
+		var scoreCount2 int
+		if err := s.db.Get(&scoreCount2, `SELECT COUNT(*) FROM scores WHERE id = ?`, scoreID2); err != nil {
+			t.Fatalf("checking score 2 existence: %v", err)
+		}
+		if scoreCount2 != 1 {
+			t.Error("expected score 2 to still exist")
+		}
+
+		// Assertions: Media should still exist because score 2 relies on it
+		var mediaCount int
+		if err := s.db.Get(&mediaCount, `SELECT COUNT(*) FROM media WHERE id = ?`, a); err != nil {
+			t.Fatalf("checking media existence: %v", err)
+		}
+		if mediaCount != 1 {
+			t.Error("expected media to be preserved because another score still references it")
+		}
+	})
+}
+
+func TestSQLiteStore_HardDeleteScore_NotFound(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	// Assertions: Should fail immediately for a nonexistent score ID
+	if err := s.HardDeleteScore(ctx, 999); err == nil {
+		t.Error("expected an error for a nonexistent score ID")
+	}
+}
+
 func TestSearchMediaByTitle(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

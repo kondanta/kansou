@@ -904,13 +904,17 @@ paths:
     delete:
       description: Soft-deletes a score by its row ID (not the AniList ID). Deliberate
         removal from active tracking — does not promote any other score to latest.
-        Requires a database.
+        Requires a database.r
       parameters:
       - description: scores.id primary key
         in: path
         name: score_id
         required: true
         type: integer
+      - description: hard delete (permanent removal) if true, soft delete otherwise
+        in: query
+        name: hard
+        type: boolean
       responses:
         "204":
           description: No Content

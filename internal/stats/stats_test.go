@@ -41,6 +41,7 @@ func (f *fakeStore) SearchMediaByTitle(context.Context, string) ([]store.MediaSe
 	return nil, nil
 }
 func (f *fakeStore) SoftDeleteScore(context.Context, int) error      { return nil }
+func (f *fakeStore) HardDeleteScore(context.Context, int) error      { return nil }
 func (f *fakeStore) Prune(context.Context) (int64, error)            { return 0, nil }
 func (f *fakeStore) LastPruneAt(context.Context) (*time.Time, error) { return f.lastPruneAt, nil }
 func (f *fakeStore) GenreBreakdown(context.Context) ([]store.GenreStat, error) {
