@@ -676,7 +676,8 @@ func (s *PostgresStore) SoftDeleteScore(ctx context.Context, scoreID int) error 
 	return nil
 }
 
-// HardDeleteScore
+// HardDeleteScore permanently removes a score row from the database. This is irreversible and
+// should only be used with extreme caution. It does not affect any other scores for the same media.
 func (s *PostgresStore) HardDeleteScore(ctx context.Context, scoreID int) error {
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
