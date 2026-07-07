@@ -106,8 +106,6 @@ func (s *Server) handleHistoryDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// shouldHardDelete := chi.URL.Query()
-	// slog.Debug("Checking ?hard in the query", "hard", shouldHardDelete)
 	if err := s.store.SoftDeleteScore(r.Context(), scoreID); err != nil {
 		if errors.Is(err, store.ErrScoreNotFound) {
 			writeError(w, http.StatusNotFound, "score not found or already deleted")

@@ -412,11 +412,41 @@ func TestMostRescored(t *testing.T) {
 	if got[0].AnilistID != 1 || got[0].ScoreCount != 2 {
 		t.Fatalf("top row: got %+v, want anilist_id=1 score_count=2", got[0])
 	}
-	if math.Abs(got[0].LatestScore-8.5) > floatTolerance {
-		t.Errorf("latest score: got %.4f, want 8.5", got[0].LatestScore)
+	if got[0].LatestScore == nil {
+		t.Fatal("latest score: got nil, want 8.5")
+	}
+	if math.Abs(*got[0].LatestScore-8.5) > floatTolerance {
+		t.Errorf("latest score: got %.4f, want 8.5", *got[0].LatestScore)
 	}
 	if got[1].AnilistID != 2 || got[1].ScoreCount != 1 {
 		t.Fatalf("second row: got %+v, want anilist_id=2 score_count=1", got[1])
+	}
+}
+
+// TestMostRescoredNoLatest covers a media whose latest score was manually
+// soft-deleted without a replacement being scored yet — no non-deleted row
+// has is_latest=1, so LatestScore must come back nil instead of erroring.
+func TestMostRescoredNoLatest(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	a := insertMedia(t, s, 1, "Rescored Show", "ANIME", []string{"Action"})
+	insertScore(t, s, a, 7.0, "h1", "2024-01-01T00:00:00Z", false)
+	latest := insertScore(t, s, a, 8.5, "h2", "2024-02-01T00:00:00Z", true)
+
+	if err := s.SoftDeleteScore(ctx, latest); err != nil {
+		t.Fatalf("SoftDeleteScore: %v", err)
+	}
+
+	got, err := s.MostRescored(ctx)
+	if err != nil {
+		t.Fatalf("MostRescored: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d rows, want 1: %+v", len(got), got)
+	}
+	if got[0].LatestScore != nil {
+		t.Errorf("latest score: got %v, want nil", *got[0].LatestScore)
 	}
 }
 

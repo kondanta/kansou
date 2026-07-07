@@ -345,10 +345,14 @@ type WeightOverrideStat struct {
 
 // RescoredStat holds rescore count data for one media entry.
 type RescoredStat struct {
-	AnilistID     int
-	TitleRomaji   string
-	ScoreCount    int
-	LatestScore   float64
+	AnilistID   int
+	TitleRomaji string
+	ScoreCount  int
+	// LatestScore is nil if every non-deleted score for this media has had
+	// is_latest unset (e.g. the latest score was removed via SoftDeleteScore
+	// without a replacement being scored yet). ScoreCount is still counted
+	// from non-deleted rows regardless.
+	LatestScore   *float64
 	FirstScoredAt time.Time
 	LastScoredAt  time.Time
 }

@@ -199,7 +199,11 @@ func runStatsHistory(ctx context.Context, st *stats.Stats) error {
 			if i >= maxHistoryRows {
 				break
 			}
-			fmt.Printf("  %-30s %d times  (latest %.2f)\n", r.TitleRomaji, r.ScoreCount, r.LatestScore)
+			latest := "n/a"
+			if r.LatestScore != nil {
+				latest = fmt.Sprintf("%.2f", *r.LatestScore)
+			}
+			fmt.Printf("  %-30s %d times  (latest %s)\n", r.TitleRomaji, r.ScoreCount, latest)
 		}
 	}
 

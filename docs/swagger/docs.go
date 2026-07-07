@@ -1530,6 +1530,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "latestScore": {
+                    "description": "LatestScore is nil if every non-deleted score for this media has had\nis_latest unset (e.g. the latest score was removed via SoftDeleteScore\nwithout a replacement being scored yet). ScoreCount is still counted\nfrom non-deleted rows regardless.",
                     "type": "number",
                     "format": "float64"
                 },
