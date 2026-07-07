@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -39,7 +40,7 @@ func (a *App) mediaFindCmd() *cobra.Command {
 Does not start a scoring session. Useful for verifying the correct entry before scoring.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return a.runMediaFind(args, urlFlag, typeFlag)
+			return a.runMediaFind(cmd.Context(), args, urlFlag, typeFlag)
 		},
 	}
 
@@ -49,7 +50,7 @@ Does not start a scoring session. Useful for verifying the correct entry before 
 }
 
 // runMediaFind fetches media by search query or URL and prints a summary table.
-func (a *App) runMediaFind(args []string, urlFlag, typeFlag string) error {
+func (a *App) runMediaFind(ctx context.Context, args []string, urlFlag, typeFlag string) error {
 	var media *anilist.Media
 	var err error
 
@@ -64,12 +65,12 @@ func (a *App) runMediaFind(args []string, urlFlag, typeFlag string) error {
 		if parseErr != nil {
 			return parseErr
 		}
-		media, err = a.AniList.FetchByID(id)
+		media, err = a.AniList.FetchByID(ctx, id)
 		if err != nil {
 			return err
 		}
 	case len(args) > 0:
-		results, searchErr := a.AniList.SearchByNameMulti(args[0], mediaType)
+		results, searchErr := a.AniList.SearchByNameMulti(ctx, args[0], mediaType)
 		if searchErr != nil {
 			return searchErr
 		}

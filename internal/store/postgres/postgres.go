@@ -20,6 +20,7 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"github.com/kondanta/kansou/internal/config"
+	"github.com/kondanta/kansou/internal/logger"
 	"github.com/kondanta/kansou/internal/scoring"
 	"github.com/kondanta/kansou/internal/store"
 )
@@ -42,6 +43,9 @@ type PostgresStore struct {
 
 // New connects to Postgres, runs migrations, and returns a ready PostgresStore.
 func New(ctx context.Context, cfg PostgresConfig) (*PostgresStore, error) {
+	log := logger.FromContext(ctx)
+	log.Debug("postgres: connecting", "host", cfg.Host, "port", cfg.Port, "db", cfg.DBName)
+
 	poolCfg, err := buildPoolConfig(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("building postgres config: %w", err)
@@ -53,15 +57,18 @@ func New(ctx context.Context, cfg PostgresConfig) (*PostgresStore, error) {
 	}
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
+		log.Error("postgres: ping failed", "host", cfg.Host, "err", err)
 		return nil, fmt.Errorf("pinging postgres: %w", err)
 	}
 
 	sqlDB := stdlib.OpenDBFromPool(pool)
 	if err := runMigrations(sqlDB); err != nil {
 		pool.Close()
+		log.Error("postgres: migrations failed", "err", err)
 		return nil, err
 	}
 
+	log.Info("postgres: store ready", "host", cfg.Host, "db", cfg.DBName)
 	return &PostgresStore{
 		pool: pool,
 		db:   sqlx.NewDb(sqlDB, "pgx5"),
@@ -187,6 +194,8 @@ func (s *PostgresStore) LoadScoringConfig(ctx context.Context) (*config.Config, 
 
 // SaveScoringConfig persists the full scoring config in a single transaction.
 func (s *PostgresStore) SaveScoringConfig(ctx context.Context, cfg *config.Config) error {
+	log := logger.FromContext(ctx)
+	log.Debug("postgres: saving scoring config", "dimensions", len(cfg.Dimensions))
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("beginning transaction: %w", err)
@@ -226,12 +235,18 @@ func (s *PostgresStore) SaveScoringConfig(ctx context.Context, cfg *config.Confi
 		}
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("committing scoring config: %w", err)
+	}
+	log.Info("postgres: scoring config saved")
+	return nil
 }
 
 // SaveScore saves a completed scoring session atomically across all four tables:
 // media, scores, dimension_scores, and score_matched_genres.
 func (s *PostgresStore) SaveScore(ctx context.Context, result scoring.Result, cfg *config.Config, maxHistory int) error {
+	log := logger.FromContext(ctx)
+	log.Debug("postgres: saving score", "media_id", result.Meta.MediaID, "final_score", result.FinalScore)
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("beginning transaction: %w", err)
@@ -376,7 +391,11 @@ func (s *PostgresStore) SaveScore(ctx context.Context, result scoring.Result, cf
 		}
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("committing score: %w", err)
+	}
+	log.Info("postgres: score saved", "media_id", result.Meta.MediaID)
+	return nil
 }
 
 // scoreRow is the scanning target for the scores+media JOIN query.
@@ -657,6 +676,7 @@ func (s *PostgresStore) SearchMediaByTitle(ctx context.Context, query string) ([
 // store.DeletedReasonManual for why this never conflicts with max_history
 // gardening in SaveScore.
 func (s *PostgresStore) SoftDeleteScore(ctx context.Context, scoreID int) error {
+	log := logger.FromContext(ctx)
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE scores
 		 SET deleted_at = NOW(), deleted_reason = $1, is_latest = FALSE
@@ -664,6 +684,7 @@ func (s *PostgresStore) SoftDeleteScore(ctx context.Context, scoreID int) error 
 		store.DeletedReasonManual, scoreID,
 	)
 	if err != nil {
+		log.Error("postgres: soft-delete failed", "score_id", scoreID, "err", err)
 		return fmt.Errorf("soft-deleting score %d: %w", scoreID, err)
 	}
 	n, err := res.RowsAffected()
@@ -673,12 +694,15 @@ func (s *PostgresStore) SoftDeleteScore(ctx context.Context, scoreID int) error 
 	if n == 0 {
 		return fmt.Errorf("score %d: %w", scoreID, store.ErrScoreNotFound)
 	}
+	log.Info("postgres: score soft-deleted", "score_id", scoreID)
 	return nil
 }
 
 // HardDeleteScore permanently removes a score row from the database. This is irreversible and
 // should only be used with extreme caution. It does not affect any other scores for the same media.
 func (s *PostgresStore) HardDeleteScore(ctx context.Context, scoreID int) error {
+	log := logger.FromContext(ctx)
+	log.Debug("postgres: hard-deleting score", "score_id", scoreID)
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("beginning transaction: %w", err)
@@ -714,7 +738,11 @@ func (s *PostgresStore) HardDeleteScore(ctx context.Context, scoreID int) error 
 		return fmt.Errorf("deleting orphaned media %d: %w", mediaID, err)
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("committing hard delete transaction: %w", err)
+	}
+	log.Info("postgres: score hard-deleted", "score_id", scoreID, "media_id", mediaID)
+	return nil
 }
 
 // Prune hard-deletes all soft-deleted score rows and any media entries with no
@@ -722,6 +750,8 @@ func (s *PostgresStore) HardDeleteScore(ctx context.Context, scoreID int) error 
 // deletion so it survives even if zero rows are deleted.
 // Returns the number of score rows hard-deleted.
 func (s *PostgresStore) Prune(ctx context.Context) (int64, error) {
+	log := logger.FromContext(ctx)
+	log.Debug("postgres: pruning soft-deleted scores")
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return 0, fmt.Errorf("beginning transaction: %w", err)
@@ -749,7 +779,11 @@ func (s *PostgresStore) Prune(ctx context.Context) (int64, error) {
 		return 0, fmt.Errorf("deleting orphaned media: %w", err)
 	}
 
-	return n, tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("committing prune transaction: %w", err)
+	}
+	log.Info("postgres: prune complete", "scores_deleted", n)
+	return n, nil
 }
 
 // LastPruneAt returns the timestamp of the last prune operation.

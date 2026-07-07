@@ -76,7 +76,7 @@ func (s *Server) handleMediaSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	mediaType := r.URL.Query().Get("type")
 
-	results, err := s.al.SearchByNameMulti(q, mediaType)
+	results, err := s.al.SearchByNameMulti(r.Context(), q, mediaType)
 	if err != nil {
 		handleAnilistErr(w, err)
 		return
@@ -109,7 +109,7 @@ func (s *Server) handleMediaFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	media, err := s.al.FetchByID(id)
+	media, err := s.al.FetchByID(r.Context(), id)
 	if err != nil {
 		handleAnilistErr(w, err)
 		return
@@ -322,7 +322,7 @@ func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch media to get genres and title for provenance.
-	media, err := s.al.FetchByID(req.MediaID)
+	media, err := s.al.FetchByID(r.Context(), req.MediaID)
 	if err != nil {
 		handleAnilistErr(w, err)
 		return
@@ -489,7 +489,7 @@ func (s *Server) handleWeights(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	media, err := s.al.FetchByID(req.MediaID)
+	media, err := s.al.FetchByID(r.Context(), req.MediaID)
 	if err != nil {
 		handleAnilistErr(w, err)
 		return
@@ -572,7 +572,7 @@ func (s *Server) handleScorePublish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pub, err := s.al.PublishScore(req.MediaID, req.Score, req.Notes)
+	pub, err := s.al.PublishScore(r.Context(), req.MediaID, req.Score, req.Notes)
 	if err != nil {
 		handleAnilistErr(w, err)
 		return

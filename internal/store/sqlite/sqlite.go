@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"github.com/kondanta/kansou/internal/config"
+	"github.com/kondanta/kansou/internal/logger"
 	"github.com/kondanta/kansou/internal/scoring"
 	"github.com/kondanta/kansou/internal/store"
 )
@@ -32,6 +34,7 @@ type SQLiteStore struct {
 // New opens (or creates) a SQLite database at path, runs migrations, enables
 // WAL mode and foreign key enforcement, and returns a ready SQLiteStore.
 func New(path string) (*SQLiteStore, error) {
+	slog.Debug("sqlite: opening store", "path", path)
 	expanded, err := expandPath(path)
 	if err != nil {
 		return nil, fmt.Errorf("expanding db path: %w", err)
@@ -53,9 +56,11 @@ func New(path string) (*SQLiteStore, error) {
 	}
 	if err := runMigrations(db, expanded); err != nil {
 		_ = db.Close()
+		slog.Error("sqlite: migrations failed", "path", expanded, "err", err)
 		return nil, err
 	}
 
+	slog.Info("sqlite: store ready", "path", expanded)
 	return &SQLiteStore{db: sqlx.NewDb(db, "sqlite")}, nil
 }
 
@@ -182,6 +187,8 @@ func (s *SQLiteStore) LoadScoringConfig(ctx context.Context) (*config.Config, er
 // SaveScoringConfig persists the full scoring config in a single transaction.
 // The existing dimensions and genre_multipliers rows are replaced atomically.
 func (s *SQLiteStore) SaveScoringConfig(ctx context.Context, cfg *config.Config) error {
+	log := logger.FromContext(ctx)
+	log.Debug("sqlite: saving scoring config", "dimensions", len(cfg.Dimensions))
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("beginning transaction: %w", err)
@@ -221,12 +228,18 @@ func (s *SQLiteStore) SaveScoringConfig(ctx context.Context, cfg *config.Config)
 		}
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("committing scoring config: %w", err)
+	}
+	log.Info("sqlite: scoring config saved")
+	return nil
 }
 
 // SaveScore saves a completed scoring session atomically across all four tables:
 // media, scores, dimension_scores, and score_matched_genres.
 func (s *SQLiteStore) SaveScore(ctx context.Context, result scoring.Result, cfg *config.Config, maxHistory int) error {
+	log := logger.FromContext(ctx)
+	log.Debug("sqlite: saving score", "media_id", result.Meta.MediaID, "final_score", result.FinalScore)
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("beginning transaction: %w", err)
@@ -378,7 +391,11 @@ func (s *SQLiteStore) SaveScore(ctx context.Context, result scoring.Result, cfg 
 		}
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("committing score: %w", err)
+	}
+	log.Info("sqlite: score saved", "media_id", result.Meta.MediaID)
+	return nil
 }
 
 // boolToInt converts a bool to 1 or 0 for SQLite INTEGER columns.
@@ -684,6 +701,7 @@ func (s *SQLiteStore) SearchMediaByTitle(ctx context.Context, query string) ([]s
 // store.DeletedReasonManual for why this never conflicts with max_history
 // gardening in SaveScore.
 func (s *SQLiteStore) SoftDeleteScore(ctx context.Context, scoreID int) error {
+	log := logger.FromContext(ctx)
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE scores
 		 SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), deleted_reason = ?, is_latest = 0
@@ -691,6 +709,7 @@ func (s *SQLiteStore) SoftDeleteScore(ctx context.Context, scoreID int) error {
 		store.DeletedReasonManual, scoreID,
 	)
 	if err != nil {
+		log.Error("sqlite: soft-delete failed", "score_id", scoreID, "err", err)
 		return fmt.Errorf("soft-deleting score %d: %w", scoreID, err)
 	}
 	n, err := res.RowsAffected()
@@ -700,12 +719,15 @@ func (s *SQLiteStore) SoftDeleteScore(ctx context.Context, scoreID int) error {
 	if n == 0 {
 		return fmt.Errorf("score %d: %w", scoreID, store.ErrScoreNotFound)
 	}
+	log.Info("sqlite: score soft-deleted", "score_id", scoreID)
 	return nil
 }
 
 // HardDeleteScore permanently removes a score row from the database. This is irreversible and
 // should only be used with extreme caution. It does not affect any other scores for the same media.
 func (s *SQLiteStore) HardDeleteScore(ctx context.Context, scoreID int) error {
+	log := logger.FromContext(ctx)
+	log.Debug("sqlite: hard-deleting score", "score_id", scoreID)
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("beginning transaction: %w", err)
@@ -745,6 +767,7 @@ func (s *SQLiteStore) HardDeleteScore(ctx context.Context, scoreID int) error {
 		return fmt.Errorf("committing hard delete transaction: %w", err)
 	}
 
+	log.Info("sqlite: score hard-deleted", "score_id", scoreID, "media_id", mediaID)
 	return nil
 }
 
@@ -753,6 +776,8 @@ func (s *SQLiteStore) HardDeleteScore(ctx context.Context, scoreID int) error {
 // deletion so it survives even if zero rows are deleted.
 // Returns the number of score rows hard-deleted.
 func (s *SQLiteStore) Prune(ctx context.Context) (int64, error) {
+	log := logger.FromContext(ctx)
+	log.Debug("sqlite: pruning soft-deleted scores")
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return 0, fmt.Errorf("beginning transaction: %w", err)
@@ -778,7 +803,11 @@ func (s *SQLiteStore) Prune(ctx context.Context) (int64, error) {
 		return 0, fmt.Errorf("deleting orphaned media: %w", err)
 	}
 
-	return n, tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("committing prune transaction: %w", err)
+	}
+	log.Info("sqlite: prune complete", "scores_deleted", n)
+	return n, nil
 }
 
 // LastPruneAt returns the timestamp of the last prune operation.

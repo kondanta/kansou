@@ -109,6 +109,8 @@ Reads `~/.config/kansou/config.toml`. Validates that base weights sum to 1.0. Ap
 ### Logger — `internal/logger/`
 Configures the application-wide `log/slog` default logger. `Setup(isServer bool)` is called once in `main` before any other initialisation. CLI mode uses a custom coloured text handler (plain text if not a TTY or `NO_COLOR` is set). Server mode uses the stdlib JSON handler. Log level is controlled by the `LOG_LEVEL` environment variable (`debug`, `info`, `warn`, `error`; default `info`).
 
+`WithContext(ctx, *slog.Logger) context.Context` and `FromContext(ctx) *slog.Logger` let a request-scoped logger (e.g. one with `request_id` attached by `internal/server/middleware.go`) flow through call chains — HTTP handler → `internal/anilist` → `internal/store` — via `context.Context` instead of being threaded as an explicit parameter. See ADR-038.
+
 ### AniList Client — `internal/anilist/`
 A thin wrapper around `net/http`. Contains typed Go functions for each GraphQL operation. Reads `ANILIST_TOKEN` from the environment. Returns typed response structs. Never logs the token. Hard fails on non-200 responses or network errors.
 
