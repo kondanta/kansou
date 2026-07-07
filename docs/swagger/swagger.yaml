@@ -665,6 +665,11 @@ definitions:
       lastScoredAt:
         type: string
       latestScore:
+        description: |-
+          LatestScore is nil if every non-deleted score for this media has had
+          is_latest unset (e.g. the latest score was removed via SoftDeleteScore
+          without a replacement being scored yet). ScoreCount is still counted
+          from non-deleted rows regardless.
         format: float64
         type: number
       scoreCount:
