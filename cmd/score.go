@@ -82,7 +82,7 @@ func (a *App) runScoreAdd(
 		return err
 	}
 
-	media, err := fetchMedia(args, urlFlag, mediaType, a.AniList)
+	media, err := fetchMedia(ctx, args, urlFlag, mediaType, a.AniList)
 	if errors.Is(err, errUserCancelled) {
 		return nil
 	}
@@ -202,7 +202,7 @@ func (a *App) runScoreAdd(
 		notes = formatNote(result)
 	}
 
-	pub, pubErr := a.AniList.PublishScore(media.ID, result.FinalScore, notes)
+	pub, pubErr := a.AniList.PublishScore(ctx, media.ID, result.FinalScore, notes)
 	if pubErr != nil {
 		return fmt.Errorf(
 			"publishing score to AniList (your calculated score was %.2f): %w",
@@ -219,16 +219,18 @@ func (a *App) runScoreAdd(
 
 // fetchMedia resolves the target media entry from either a direct URL or a
 // search query. Returns errUserCancelled if the user aborts a search picker.
-func fetchMedia(args []string, urlFlag, mediaType string, client *anilist.Client) (*anilist.Media, error) {
+func fetchMedia(
+	ctx context.Context, args []string, urlFlag, mediaType string, client *anilist.Client,
+) (*anilist.Media, error) {
 	switch {
 	case urlFlag != "":
 		id, err := anilist.ParseMediaURL(urlFlag)
 		if err != nil {
 			return nil, err
 		}
-		return client.FetchByID(id)
+		return client.FetchByID(ctx, id)
 	case len(args) > 0:
-		results, err := client.SearchByNameMulti(args[0], mediaType)
+		results, err := client.SearchByNameMulti(ctx, args[0], mediaType)
 		if err != nil {
 			return nil, err
 		}

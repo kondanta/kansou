@@ -2,16 +2,18 @@ package anilist
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/kondanta/kansou/internal/logger"
 )
 
 const (
@@ -45,7 +47,7 @@ func NewClient() *Client {
 // mediaType may be "ANIME", "MANGA", or "" to search all types.
 // Returns an error if the network is unreachable, AniList returns an error,
 // or no results are found.
-func (c *Client) SearchByNameMulti(search, mediaType string) ([]Media, error) {
+func (c *Client) SearchByNameMulti(ctx context.Context, search, mediaType string) ([]Media, error) {
 	vars := map[string]any{ // interface{} required: GraphQL variables are heterogeneous
 		"search":  search,
 		"perPage": searchPageSize,
@@ -54,8 +56,9 @@ func (c *Client) SearchByNameMulti(search, mediaType string) ([]Media, error) {
 		vars["type"] = mediaType
 	}
 
-	slog.Debug("anilist: search", "query", search, "type", mediaType)
-	resp, err := c.do(searchPageQuery, vars, false)
+	log := logger.FromContext(ctx)
+	log.Debug("anilist: search", "query", search, "type", mediaType)
+	resp, err := c.do(ctx, searchPageQuery, vars, false)
 	if err != nil {
 		return nil, err
 	}
@@ -83,19 +86,19 @@ func (c *Client) SearchByNameMulti(search, mediaType string) ([]Media, error) {
 	for i, m := range result.Data.Page.Media {
 		media[i] = *m.toMedia()
 	}
-	slog.Debug("anilist: search results", "count", len(media), "query", search)
+	log.Debug("anilist: search results", "count", len(media), "query", search)
 	return media, nil
 }
 
 // FetchByID retrieves a media entry by its AniList ID.
 // Returns an error if the network is unreachable or AniList returns an error.
-func (c *Client) FetchByID(id int) (*Media, error) {
+func (c *Client) FetchByID(ctx context.Context, id int) (*Media, error) {
 	vars := map[string]any{ // interface{} required: GraphQL variables are heterogeneous
 		"id": id,
 	}
 
-	slog.Debug("anilist: fetch by id", "id", id)
-	resp, err := c.do(fetchByIDQuery, vars, false)
+	logger.FromContext(ctx).Debug("anilist: fetch by id", "id", id)
+	resp, err := c.do(ctx, fetchByIDQuery, vars, false)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +152,7 @@ func ParseMediaURL(rawURL string) (int, error) {
 // If notes is non-empty, the existing list entry notes are fetched first and the
 // new scoring block is appended before saving, so prior notes are preserved.
 // Requires ANILIST_TOKEN to be set; returns an error if it is missing or empty.
-func (c *Client) PublishScore(mediaID int, score float64, notes string) (*PublishResult, error) {
+func (c *Client) PublishScore(ctx context.Context, mediaID int, score float64, notes string) (*PublishResult, error) {
 	if c.token == "" {
 		return nil, fmt.Errorf(
 			"ANILIST_TOKEN environment variable is not set\n       set it with: export ANILIST_TOKEN=your_token_here\n       see docs/ANILIST_INTEGRATION.md for how to obtain a token",
@@ -163,7 +166,7 @@ func (c *Client) PublishScore(mediaID int, score float64, notes string) (*Publis
 	mutation := publishMutation
 
 	if notes != "" {
-		existing := c.fetchExistingNotes(mediaID)
+		existing := c.fetchExistingNotes(ctx, mediaID)
 		combined := notes
 		if existing != "" {
 			combined = existing + "\n\n---\n\n" + notes
@@ -172,9 +175,11 @@ func (c *Client) PublishScore(mediaID int, score float64, notes string) (*Publis
 		mutation = publishWithNotesMutation
 	}
 
-	slog.Debug("anilist: publishing score", "media_id", mediaID, "score", score, "with_notes", notes != "")
-	resp, err := c.do(mutation, vars, true)
+	log := logger.FromContext(ctx)
+	log.Debug("anilist: publishing score", "media_id", mediaID, "score", score, "with_notes", notes != "")
+	resp, err := c.do(ctx, mutation, vars, true)
 	if err != nil {
+		log.Error("anilist: publish failed", "media_id", mediaID, "err", err)
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -206,11 +211,11 @@ func (c *Client) PublishScore(mediaID int, score float64, notes string) (*Publis
 // fetchExistingNotes retrieves the authenticated user's current list entry notes
 // for mediaID. Returns an empty string if the entry has no notes, is not on the
 // user's list, or if the request fails — note fetching failure must not block publishing.
-func (c *Client) fetchExistingNotes(mediaID int) string {
+func (c *Client) fetchExistingNotes(ctx context.Context, mediaID int) string {
 	vars := map[string]any{ // interface{} required: GraphQL variables are heterogeneous
 		"mediaId": mediaID,
 	}
-	resp, err := c.do(fetchListEntryNotesQuery, vars, true)
+	resp, err := c.do(ctx, fetchListEntryNotesQuery, vars, true)
 	if err != nil {
 		return ""
 	}
@@ -237,7 +242,9 @@ func (c *Client) fetchExistingNotes(mediaID int) string {
 
 // do executes a GraphQL request. If withAuth is true, the Authorization header
 // is included. The caller is responsible for closing resp.Body.
-func (c *Client) do(query string, variables map[string]any, withAuth bool) (*http.Response, error) {
+func (c *Client) do(ctx context.Context, query string, variables map[string]any, withAuth bool) (*http.Response, error) {
+	log := logger.FromContext(ctx)
+
 	body, err := json.Marshal(map[string]any{ // interface{} required: GraphQL request body is heterogeneous
 		"query":     query,
 		"variables": variables,
@@ -246,7 +253,7 @@ func (c *Client) do(query string, variables map[string]any, withAuth bool) (*htt
 		return nil, fmt.Errorf("marshalling GraphQL request: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, apiEndpoint, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiEndpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("building AniList request: %w", err)
 	}
@@ -258,14 +265,17 @@ func (c *Client) do(query string, variables map[string]any, withAuth bool) (*htt
 
 	resp, err := c.http.Do(req)
 	if err != nil {
+		log.Error("anilist: request failed", "err", err)
 		return nil, &UpstreamError{StatusCode: 0, err: fmt.Errorf("AniList is currently unreachable: %w", err)}
 	}
 	if resp.StatusCode != http.StatusOK {
 		body, err := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
 		_ = resp.Body.Close()
 		if err != nil {
+			log.Error("anilist: non-200 response, failed to read body", "status", resp.StatusCode, "err", err)
 			return nil, &UpstreamError{StatusCode: resp.StatusCode, err: fmt.Errorf("AniList returned HTTP %d (could not read error body: %w)", resp.StatusCode, err)}
 		}
+		log.Error("anilist: non-200 response", "status", resp.StatusCode, "body", strings.TrimSpace(string(body)))
 		return nil, &UpstreamError{StatusCode: resp.StatusCode, err: fmt.Errorf("AniList returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))}
 	}
 	return resp, nil

@@ -7,10 +7,35 @@
 package logger
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"strings"
 )
+
+// ctxKey is an unexported type to avoid collisions with context keys
+// defined in other packages.
+type ctxKey struct{}
+
+// WithContext returns a copy of ctx carrying l. Retrieve it later with
+// FromContext. This lets a request-scoped logger (e.g. one with a
+// request_id attached) flow through call chains without threading a
+// *slog.Logger parameter through every function signature.
+func WithContext(ctx context.Context, l *slog.Logger) context.Context {
+	return context.WithValue(ctx, ctxKey{}, l)
+}
+
+// FromContext returns the logger previously stored in ctx by WithContext.
+// If ctx is nil or carries no logger, it returns slog.Default().
+func FromContext(ctx context.Context) *slog.Logger {
+	if ctx == nil {
+		return slog.Default()
+	}
+	if l, ok := ctx.Value(ctxKey{}).(*slog.Logger); ok {
+		return l
+	}
+	return slog.Default()
+}
 
 // Setup configures the global slog default logger.
 // isServer selects the handler: JSON (stderr) for server mode,

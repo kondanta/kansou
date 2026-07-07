@@ -1777,3 +1777,69 @@ per ADR-032, not an error.
   score when `LatestScore` is `nil`.
 - REST `most_rescored` responses now serialize `latest_score` as JSON `null`
   in this case instead of `0`.
+
+## ADR-038 — Request-scoped structured logging via context, not global slog
+
+**Context:**
+`internal/logger` wraps `log/slog` and sets a process-wide default logger,
+but usage was shallow and inconsistent: `internal/anilist` called the global
+`slog.*` functions directly (no correlation to the HTTP request that
+triggered them), and `internal/store/sqlite`/`internal/store/postgres` had
+zero logging at all — every failure was wrapped with `fmt.Errorf` and
+returned with no operator-visible trace. `internal/server/middleware.go`'s
+`requestLogger` logged once per request (method/status/latency/request_id)
+but never made that `request_id` available to code called underneath, so
+correlating an AniList timeout or a DB failure to the request that caused it
+was impossible. No prior ADR ever documented a logging strategy, so there
+was also no shared convention for Debug vs Info vs Warn vs Error.
+
+This ADR also corrects a prior misreading of the CLAUDE.md rule "never print
+to stdout from business logic": that rule concerns `fmt.Print*`-to-stdout
+pollution of piped/scripted CLI output. It does not, and never did, prohibit
+`slog` calls (which write to stderr) from `internal/store`, `internal/anilist`,
+or `internal/scoring`.
+
+**Decision:**
+`internal/logger` gains `WithContext(ctx, *slog.Logger) context.Context` and
+`FromContext(ctx) *slog.Logger`. `requestLogger` (`internal/server/middleware.go`)
+attaches a `request_id`-scoped logger to the request context before calling
+the handler chain. `internal/anilist.Client`'s public methods (`SearchByNameMulti`,
+`FetchByID`, `PublishScore`) and its internal `do` now take `ctx` as their
+first parameter, retrieve the logger via `logger.FromContext(ctx)`, and log
+Debug on request start and Error on non-200/network failures — replacing the
+prior direct calls to the global `slog.*` functions. `internal/store/sqlite`
+and `internal/store/postgres` log Debug at the start of write/critical
+operations (`New`, `SaveScore`, `SaveScoringConfig`, `SoftDeleteScore`,
+`HardDeleteScore`, `Prune`) and Error at their failure points, also via
+`logger.FromContext(ctx)`. Read-only analytics queries (`GenreBreakdown`,
+`ScoreByGenre`, etc.) are left uninstrumented for now — their failure modes
+are the same generic SQL errors already covered by the error return, and
+instrumenting all ~15 of them added little signal for the diff size.
+
+Level conventions:
+- **Debug**: individual operation start, query parameters, outbound AniList
+  request — visible only with `LOG_LEVEL=debug`.
+- **Info**: HTTP request summary, server/store startup, successful
+  writes/deletes.
+- **Warn**: reserved for recoverable/degraded conditions (none introduced by
+  this change).
+- **Error**: operation failed and is being returned as an error to the caller.
+- slog has no `Fatal` level. Unrecoverable startup errors log at Error, then
+  the caller in `cmd/`/`main.go` does `os.Exit(1)` after printing a
+  human-readable message, per the existing "no `log.Fatal` outside `main.go`"
+  rule.
+
+**Consequences:**
+- `internal/logger/logger.go`: new exported `WithContext`/`FromContext` API.
+- `internal/server/middleware.go`: `requestLogger` now injects a
+  `request_id`-scoped logger into the request context.
+- `internal/anilist/client.go`: `SearchByNameMulti`, `FetchByID`,
+  `PublishScore`, and the unexported `do`/`fetchExistingNotes` now take
+  `ctx context.Context` as their first parameter — a breaking change to
+  this package's public API. All call sites in `cmd/media.go`, `cmd/score.go`,
+  and `internal/server/handlers.go` updated to pass `cmd.Context()` /
+  `r.Context()` through.
+- `internal/store/sqlite/sqlite.go`, `internal/store/postgres/postgres.go`:
+  write/delete/migration paths now log via `logger.FromContext(ctx)`.
+- CLI product output (`fmt.Print*` to stdout) is unaffected — logging goes to
+  stderr exclusively, per existing `internal/logger.Setup` behavior.

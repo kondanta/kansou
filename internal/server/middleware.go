@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5/middleware"
+
+	"github.com/kondanta/kansou/internal/logger"
 )
 
 // corsMiddleware returns a middleware that sets CORS headers for allowed origins.
@@ -52,20 +54,26 @@ func securityHeaders(next http.Handler) http.Handler {
 
 // requestLogger returns a middleware that logs each request using slog.
 // It records the HTTP method, path, status code, response size, latency,
-// and the chi request ID.
+// and the chi request ID. It also attaches a request-scoped logger (with
+// request_id pre-set) to the request context via logger.WithContext, so
+// handlers and everything they call (anilist, store) can retrieve it with
+// logger.FromContext and have their log lines correlate to this request.
 func requestLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 
+		reqID := middleware.GetReqID(r.Context())
+		reqLogger := slog.Default().With("request_id", reqID)
+		r = r.WithContext(logger.WithContext(r.Context(), reqLogger))
+
 		defer func() {
-			slog.Info("request",
+			reqLogger.Info("request",
 				"method", r.Method,
 				"path", r.URL.Path,
 				"status", ww.Status(),
 				"bytes", ww.BytesWritten(),
 				"latency", time.Since(start).String(),
-				"request_id", middleware.GetReqID(r.Context()),
 			)
 		}()
 
