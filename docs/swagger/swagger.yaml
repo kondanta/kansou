@@ -904,7 +904,7 @@ paths:
     delete:
       description: Soft-deletes a score by its row ID (not the AniList ID). Deliberate
         removal from active tracking — does not promote any other score to latest.
-        Requires a database.r
+        Requires a database.
       parameters:
       - description: scores.id primary key
         in: path
@@ -931,6 +931,35 @@ paths:
           schema:
             $ref: '#/definitions/server.errorResponse'
       summary: Delete a history entry
+      tags:
+      - history
+  /api/v1/history/{score_id}/promote:
+    post:
+      description: Restores a soft-deleted score by its row ID, making it the active
+        (is_latest = 1) score for its media, while simultaneously soft-deleting the
+        currently active score. Requires a database.
+      parameters:
+      - description: scores.id primary key
+        in: path
+        name: score_id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Promote a history entry
       tags:
       - history
   /api/v1/media/{id}:

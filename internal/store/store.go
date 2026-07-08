@@ -40,6 +40,8 @@ const (
 	// DeletedReasonMaxHistory marks a row pruned automatically by max_history
 	// retention inside SaveScore.
 	DeletedReasonMaxHistory = "max_history"
+	// DeleteReasonPromote marks a row removed by PromoteScore, which promotes the previous score to is_latest=true.
+	DeletedReasonPromote = "promote"
 )
 
 // Store is the persistence interface for kansou. All database access goes
@@ -107,6 +109,10 @@ type Store interface {
 	// In simpler terms; the functionality is the same as SoftDeleteScore, but
 	// it removes the entry from the store.
 	HardDeleteScore(ctx context.Context, scoreID int) error
+
+	// PromoteScore promotes the previous score as the latest score for a given media entry.
+	// It sets is_latest = true on the previous score and is_latest = false on the current latest score.
+	PromoteScore(ctx context.Context, anilistID int) error
 
 	// --- Gardening ---
 

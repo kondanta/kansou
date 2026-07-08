@@ -88,7 +88,7 @@ func (s *Server) handleHistoryDetail(w http.ResponseWriter, r *http.Request) {
 // handleHistoryDelete soft-deletes a score by its row ID.
 //
 //	@Summary		Delete a history entry
-//	@Description	Soft-deletes a score by its row ID (not the AniList ID). Deliberate removal from active tracking — does not promote any other score to latest. Requires a database.r
+//	@Description	Soft-deletes a score by its row ID (not the AniList ID). Deliberate removal from active tracking — does not promote any other score to latest. Requires a database.
 //	@Tags			history
 //	@Param			score_id	path	int	true	"scores.id primary key"
 //	@Param                  hard            query   bool    false   "hard delete (permanent removal) if true, soft delete otherwise"
@@ -123,5 +123,42 @@ func (s *Server) handleHistoryDelete(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "deleting score")
 		return
 	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleHistoryPromote restores a soft-deleted score, making it the active score.
+//
+//	@Summary		Promote a history entry
+//	@Description	Restores a soft-deleted score by its row ID, making it the active (is_latest = 1) score for its media, while simultaneously soft-deleting the currently active score. Requires a database.
+//	@Tags			history
+//	@Param			score_id	path	int	true	"scores.id primary key"
+//	@Success		204
+//	@Failure		400	{object}	errorResponse
+//	@Failure		404	{object}	errorResponse
+//	@Failure		503	{object}	errorResponse
+//	@Router			/api/v1/history/{score_id}/promote [post]
+func (s *Server) handleHistoryPromote(w http.ResponseWriter, r *http.Request) {
+	if !s.requireStore(w) {
+		return
+	}
+
+	scoreID, err := strconv.Atoi(chi.URLParam(r, "score_id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "score_id must be an integer")
+		return
+	}
+
+	if err := s.store.PromoteScore(r.Context(), scoreID); err != nil {
+		if errors.Is(err, store.ErrScoreNotFound) {
+			writeError(w, http.StatusNotFound, "score not found")
+			return
+		}
+		slog.Error("promoting score", "err", err, "score_id", scoreID)
+		writeError(w, http.StatusInternalServerError, "promoting score")
+		return
+	}
+
+	// 204 No Content is appropriate here just like in handleHistoryDelete,
+	// since the client doesn't need data returned upon success.
 	w.WriteHeader(http.StatusNoContent)
 }

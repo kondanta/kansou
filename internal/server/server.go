@@ -139,6 +139,7 @@ func (s *Server) buildRouter() *chi.Mux {
 		r.Get("/history", s.handleHistoryList)
 		r.Get("/history/{anilist_id}", s.handleHistoryDetail)
 		r.Delete("/history/{score_id}", s.handleHistoryDelete)
+		r.Post("/history/{score_id}/promote", s.handleHistoryPromote)
 		r.With(httprate.LimitBy(rateLimitSearch, time.Minute, clientIPKey)).Get("/media/search", s.handleMediaSearch)
 		r.With(httprate.LimitBy(rateLimitFetch, time.Minute, clientIPKey)).Get("/media/{id}", s.handleMediaFetch)
 		r.With(httprate.LimitBy(rateLimitScore, time.Minute, clientIPKey)).Post("/score", s.handleScore)
