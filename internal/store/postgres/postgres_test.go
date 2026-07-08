@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -752,6 +754,88 @@ func TestHardDeleteScore_NotFound(t *testing.T) {
 	if err := s.HardDeleteScore(ctx, 999999); err == nil {
 		t.Error("expected an error for a nonexistent score ID")
 	}
+}
+
+func TestPostgresStore_PromoteScore(t *testing.T) {
+	s := requireStore(t)
+	ctx := context.Background()
+
+	t.Run("Scenario A: Promotes target score and demotes current latest", func(t *testing.T) {
+		a := insertMedia(t, s, 301, "Show A", "ANIME", []string{"Action"})
+
+		// Insert an older score (simulating a past score or soft-deleted one)
+		olderScore := insertScore(t, s, a, 7.0, "h1", day(1), false)
+		// Insert the current active score
+		latestScore := insertScore(t, s, a, 9.0, "h1", day(2), true)
+
+		if err := s.PromoteScore(ctx, olderScore); err != nil {
+			t.Fatalf("PromoteScore: %v", err)
+		}
+
+		// Assertions: The older score should now be active and undeleted
+		var isLatest bool
+		var deletedAt sql.NullTime
+		err := s.db.QueryRow(`SELECT is_latest, deleted_at FROM scores WHERE id = $1`, olderScore).Scan(&isLatest, &deletedAt)
+		if err != nil {
+			t.Fatalf("checking older score: %v", err)
+		}
+		if !isLatest {
+			t.Error("expected older score to be marked as active (is_latest = true)")
+		}
+		if deletedAt.Valid {
+			t.Error("expected older score to have NULL deleted_at")
+		}
+
+		// Assertions: The previously active score should be demoted and soft-deleted
+		var demotedLatest bool
+		var demotedReason sql.NullString
+		err = s.db.QueryRow(`SELECT is_latest, deleted_at, deleted_reason FROM scores WHERE id = $1`, latestScore).Scan(&demotedLatest, &deletedAt, &demotedReason)
+		if err != nil {
+			t.Fatalf("checking demoted score: %v", err)
+		}
+		if demotedLatest {
+			t.Error("expected previous latest score to be demoted (is_latest = false)")
+		}
+		if !deletedAt.Valid {
+			t.Error("expected previous latest score to have a deleted_at timestamp populated")
+		}
+		if demotedReason.String != store.DeletedReasonPromote {
+			t.Errorf("expected deleted_reason %q, got %q", store.DeletedReasonPromote, demotedReason.String)
+		}
+	})
+
+	t.Run("Scenario B: Promoting an already-latest score is a safe no-op", func(t *testing.T) {
+		b := insertMedia(t, s, 302, "Show B", "ANIME", []string{"Drama"})
+		latestScore := insertScore(t, s, b, 8.0, "h1", day(1), true)
+
+		if err := s.PromoteScore(ctx, latestScore); err != nil {
+			t.Fatalf("PromoteScore: %v", err)
+		}
+
+		// Ensure it didn't accidentally demote/soft-delete itself
+		var isLatest bool
+		var deletedAt sql.NullTime
+		err := s.db.QueryRow(`SELECT is_latest, deleted_at FROM scores WHERE id = $1`, latestScore).Scan(&isLatest, &deletedAt)
+		if err != nil {
+			t.Fatalf("checking safe no-op score: %v", err)
+		}
+		if !isLatest {
+			t.Error("expected score to still be marked as active")
+		}
+		if deletedAt.Valid {
+			t.Error("expected score to still have NULL deleted_at")
+		}
+	})
+
+	t.Run("Scenario C: Returns ErrScoreNotFound for missing score", func(t *testing.T) {
+		err := s.PromoteScore(ctx, 999999)
+		if err == nil {
+			t.Fatal("expected an error for a nonexistent score ID")
+		}
+		if !errors.Is(err, store.ErrScoreNotFound) {
+			t.Errorf("expected ErrScoreNotFound, got: %v", err)
+		}
+	})
 }
 
 func TestSearchMediaByTitle(t *testing.T) {

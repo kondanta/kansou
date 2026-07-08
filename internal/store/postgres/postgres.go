@@ -745,6 +745,60 @@ func (s *PostgresStore) HardDeleteScore(ctx context.Context, scoreID int) error 
 	return nil
 }
 
+// PromoteScore restores a soft-deleted score, making it the active (is_latest = TRUE)
+// score for its media. It simultaneously soft-deletes the currently active score
+// for that same media to ensure only one score is latest.
+func (s *PostgresStore) PromoteScore(ctx context.Context, scoreID int) error {
+	log := logger.FromContext(ctx)
+	log.Debug("postgres: promoting score", "score_id", scoreID)
+
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("beginning transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var mediaID int
+	err = tx.GetContext(ctx, &mediaID, `SELECT media_id FROM scores WHERE id = $1`, scoreID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("score %d: %w", scoreID, store.ErrScoreNotFound)
+		}
+		return fmt.Errorf("looking up media_id for score %d: %w", scoreID, err)
+	}
+
+	const demoteQ = `UPDATE scores
+                         SET is_latest = FALSE,
+                         deleted_at = NOW(),
+			 deleted_reason = $1
+            	         WHERE media_id = $2 AND is_latest = TRUE AND id != $3
+                        `
+	if _, err := tx.ExecContext(ctx, demoteQ, store.DeletedReasonPromote, mediaID, scoreID); err != nil {
+		return fmt.Errorf("demoting previous latest score for media %d: %w", mediaID, err)
+	}
+
+	const promoteQ = `UPDATE scores
+			 SET is_latest = TRUE,
+			 deleted_at = NULL,
+			 deleted_reason = NULL
+			 WHERE id = $1
+               		 `
+	res, err := tx.ExecContext(ctx, promoteQ, scoreID)
+	if err != nil {
+		return fmt.Errorf("promoting score %d: %w", scoreID, err)
+	}
+
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("reading rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("score %d: %w", scoreID, store.ErrScoreNotFound)
+	}
+
+	return tx.Commit()
+}
+
 // Prune hard-deletes all soft-deleted score rows and any media entries with no
 // remaining scores. The prune timestamp is recorded in db_metadata before
 // deletion so it survives even if zero rows are deleted.
