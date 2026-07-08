@@ -11,6 +11,9 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
+
+	"github.com/lmittmann/tint"
 )
 
 // ctxKey is an unexported type to avoid collisions with context keys
@@ -44,13 +47,23 @@ func FromContext(ctx context.Context) *slog.Logger {
 // Valid values: debug, info, warn, error (case-insensitive). Default: info.
 func Setup(isServer bool) {
 	level := parseLevel(os.Getenv("LOG_LEVEL"))
+	env := strings.ToLower(strings.TrimSpace(os.Getenv("APP_ENV")))
 
 	var handler slog.Handler
+
 	if isServer {
-		handler = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-			Level:     level,
-			AddSource: level == slog.LevelDebug,
-		})
+		if env == "dev" || env == "development" || env == "local" {
+			handler = tint.NewHandler(os.Stderr, &tint.Options{
+				Level:      level,
+				TimeFormat: time.TimeOnly,
+				AddSource:  level == slog.LevelDebug,
+			})
+		} else {
+			handler = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+				Level:     level,
+				AddSource: level == slog.LevelDebug,
+			})
+		}
 	} else {
 		handler = newCLIHandler(os.Stderr, level)
 	}
