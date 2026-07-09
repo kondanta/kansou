@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.7.0](https://github.com/kondanta/kansou/compare/v1.6.1...v1.7.0) (2026-07-09)
+
+
+### Features
+
+* **charts:** add defaultPodOptions ([#101](https://github.com/kondanta/kansou/issues/101)) ([6d8a7e4](https://github.com/kondanta/kansou/commit/6d8a7e4c1a4f5b75c2542579d5cfc3d85721c21f))
+* **github-release:** update release sasalx/tribbie ( v0.2.0 → v0.3.0 ) ([#88](https://github.com/kondanta/kansou/issues/88)) ([2c2d7a1](https://github.com/kondanta/kansou/commit/2c2d7a1de074abfe965c627657bce8eaa27f6db3))
+* **history:** enable server to perform HardDelete for history ([#91](https://github.com/kondanta/kansou/issues/91)) ([b1ef507](https://github.com/kondanta/kansou/commit/b1ef50773a1e089c5c70588fd446d1e340232b2d))
+* **history:** enable switching between previous scores ([#97](https://github.com/kondanta/kansou/issues/97)) ([0609e48](https://github.com/kondanta/kansou/commit/0609e48a59bdff819ab6d3e49cbb11c4141fbaa7))
+* **tint:** add tint for local development ([#100](https://github.com/kondanta/kansou/issues/100)) ([ed3e1d7](https://github.com/kondanta/kansou/commit/ed3e1d73a42bda5d929fa3302155914c6f03e1b7))
+
+
+### Bug Fixes
+
+* **container:** update image golang ( 1.26.4 → 1.26.5 ) ([#93](https://github.com/kondanta/kansou/issues/93)) ([51ee57c](https://github.com/kondanta/kansou/commit/51ee57c888bb906a460fcd2aed84ac31d363f9a4))
+* **dependency:** bump crypto transitive dependency ([#96](https://github.com/kondanta/kansou/issues/96)) ([1127264](https://github.com/kondanta/kansou/commit/1127264483e778a1d988d5fccc59c64280f3610a))
+* **server:** allow DELETE verb in Access-Control-Allow-Methods  ([#87](https://github.com/kondanta/kansou/issues/87)) ([bf74b1c](https://github.com/kondanta/kansou/commit/bf74b1c06b1cc5eec28597c026be9b14b6390ddc))
+* **store:** make score nillable ([#85](https://github.com/kondanta/kansou/issues/85)) ([5fb0b50](https://github.com/kondanta/kansou/commit/5fb0b5080dc6a9421636a20276c50b5125849df1))
+
+
+### Miscellaneous Chores
+
+* bump go version ([#95](https://github.com/kondanta/kansou/issues/95)) ([dda6080](https://github.com/kondanta/kansou/commit/dda60806169bab168965f27f15c322f9f7019309))
+
+
+### Code Refactoring
+
+* **log:** add structured logging ([#92](https://github.com/kondanta/kansou/issues/92)) ([8b0533c](https://github.com/kondanta/kansou/commit/8b0533c5e4427b08bed8f99162c6dffa9d1bd4c1))
+
 ## [1.6.1](https://github.com/kondanta/kansou/compare/v1.6.0...v1.6.1) (2026-07-06)
 
 
