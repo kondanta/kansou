@@ -240,3 +240,6 @@ defaultPodOptions:
 #               operator: In
 #               values:
 #                 - amd64
+
+# Additional environment variables to inject from ConfigMaps or Secrets
+envFrom: []
