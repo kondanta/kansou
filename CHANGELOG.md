@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/kondanta/kansou/compare/v1.7.0...v1.8.0) (2026-07-09)
+
+
+### Features
+
+* **charts:** add envFrom to values ([#102](https://github.com/kondanta/kansou/issues/102)) ([e4aedce](https://github.com/kondanta/kansou/commit/e4aedcee0e2b29e154e94a5658b982921ea70f0e))
+
 ## [1.7.0](https://github.com/kondanta/kansou/compare/v1.6.1...v1.7.0) (2026-07-09)
 
 
