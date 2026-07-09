@@ -1,15 +1,12 @@
 replicaCount: 1
-
 image:
   repository: ghcr.io/kondanta/kansou
   # tag defaults to Chart.appVersion when left empty
   tag: ""
   pullPolicy: IfNotPresent
-
 service:
   type: ClusterIP
   port: 8080
-
 httpRoute:
   enabled: false
   # Gateway this HTTPRoute attaches to.
@@ -24,7 +21,6 @@ httpRoute:
   hostnames: []
   #   - kansou.example.com
   path: "/"
-
 # clientTrafficPolicy configures an Envoy Gateway ClientTrafficPolicy to ensure
 # correct X-Forwarded-For handling for per-IP rate limiting.
 #
@@ -48,7 +44,6 @@ clientTrafficPolicy:
   # real client IP. Set to 1 for a single Envoy Gateway with no additional
   # proxies in front of it.
   numTrustedHops: 1
-
 # liveConfig enables GET /config and POST /config endpoints for runtime config editing.
 # When enabled, config is stored on a PVC so that POST /config changes survive pod
 # restarts. An init container seeds the PVC from the ConfigMap on first run only —
@@ -64,16 +59,14 @@ liveConfig:
     # storageClassName: ""  # leave empty to use the cluster default StorageClass
     storageClassName: ""
     accessMode: ReadWriteOnce
-
 # ANILIST_TOKEN injected as an environment variable.
 # Set this via --set anilistToken=<token> or a values override file.
 # Never commit a real token here.
 anilistToken: ""
-
 # Optional persistent scoring history (KANSOU_DB_TYPE, see ADR-027/028).
 # Leave db.type empty to run stateless, exactly as kansou always has.
 db:
-  type: ""  # "" (stateless), "sqlite", or "postgres"
+  type: "" # "" (stateless), "sqlite", or "postgres"
   sqlite:
     # Path must live under /data — that's where the chart mounts the PVC.
     path: /data/kansou.db
@@ -90,18 +83,15 @@ db:
     # Set via --set db.postgres.password=... or a values override file.
     # Never commit a real password here. Stored in the chart's Secret.
     password: ""
-
 # KANSOU_CORS_ORIGINS — comma-separated CORS allowed origins for the REST
 # server (ADR-030). Empty uses kansou's built-in default.
 corsAllowedOrigins: []
-
 # TRUST_PROXY — resolve the client IP used for per-IP rate limiting from
 # X-Forwarded-For instead of the raw TCP peer address. Defaults to true
 # because Kubernetes ingress/gateway (e.g. Envoy Gateway) sits in front of
 # the Service and adds itself as one hop. Set to false only if the Service
 # is exposed directly (e.g. type: LoadBalancer with no fronting proxy).
 trustProxy: true
-
 # Raw config.toml content. Mounted into the container at /etc/kansou/config.toml.
 # This matches kansou's built-in defaults. Override any value in your own values file.
 config: |
@@ -228,7 +218,6 @@ config: |
 
   # Server port/CORS are configured via KANSOU_PORT / KANSOU_CORS_ORIGINS
   # (see values.service.port and values.corsAllowedOrigins) — not here.
-
 resources:
   requests:
     cpu: 100m
@@ -236,7 +225,18 @@ resources:
   limits:
     cpu: 500m
     memory: 256Mi
-
 serviceAccount:
   create: true
   name: ""
+defaultPodOptions:
+  affinity: {}
+# Example usage:
+# affinity:
+#   nodeAffinity:
+#     requiredDuringSchedulingIgnoredDuringExecution:
+#       nodeSelectorTerms:
+#         - matchExpressions:
+#             - key: kubernetes.io/arch
+#               operator: In
+#               values:
+#                 - amd64
