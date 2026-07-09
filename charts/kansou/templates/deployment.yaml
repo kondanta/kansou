@@ -115,6 +115,10 @@ spec:
                   name: {{ include "kansou.fullname" . }}
                   key: POSTGRES_PASSWORD
             {{- end }}
+          {{- if .Values.envFrom }}
+          envFrom:
+            {{- toYaml .Values.envFrom | nindent 12 }}
+          {{- end }}
           livenessProbe:
             httpGet:
               path: /health
