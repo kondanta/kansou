@@ -243,3 +243,11 @@ defaultPodOptions:
 
 # Additional environment variables to inject from ConfigMaps or Secrets
 envFrom: []
+extraInitContainers: []
+# Example usage for initializing a Postgres database:
+# extraInitContainers:
+#   - name: init-db
+#     image: "ghcr.io/home-operations/postgres-init:18.4.0@sha256:ebd9d30add17acdf935d73eb004758c7dfd9388aaa605fda70ad74378ab92aec"
+#     envFrom:
+#       - secretRef:
+#           name: kansou-secret
