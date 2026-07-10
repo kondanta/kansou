@@ -13,6 +13,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -120,10 +122,6 @@ func (s *Server) buildRouter() *chi.Mux {
 		r.Use(middleware.ClientIPFromRemoteAddr)
 	}
 
-	// UI — served at root. Prefers the built Vue app; falls back to the
-	// legacy single-file UI when dist hasn't been built yet.
-	r.Handle("/*", spaHandler(kansouweb.DistDirFS))
-
 	// Health check stays at root — outside /api/v1 — for load balancer/orchestrator
 	// probes that expect a fixed, unprefixed path.
 	r.Get("/health", s.handleHealth)
@@ -157,6 +155,10 @@ func (s *Server) buildRouter() *chi.Mux {
 		httpSwagger.URL("/swagger/doc.json"),
 	))
 
+	// UI — served at root. Prefers the built Vue app; falls back to the
+	// legacy single-file UI when dist hasn't been built yet.
+	r.Handle("/*", spaHandler(kansouweb.DistDirFS))
+
 	return r
 }
 
@@ -168,17 +170,30 @@ func spaHandler(distFS fs.FS) http.HandlerFunc {
 	fileServer := http.FileServer(http.FS(distFS))
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Strip leading slash for fs.FS open calls.
-		path := r.URL.Path
-		if len(path) > 0 && path[0] == '/' {
-			path = path[1:]
+		reqPath := r.URL.Path
+		if len(reqPath) > 0 && reqPath[0] == '/' {
+			reqPath = reqPath[1:]
 		}
-		if path == "" {
-			path = "index.html"
+		if reqPath == "" {
+			reqPath = "index.html"
 		}
 
-		_, err := distFS.Open(path)
+		_, err := distFS.Open(reqPath)
 		if err == nil {
 			fileServer.ServeHTTP(w, r)
+			return
+		}
+
+		// API calls should not end up in spaHandler, at all
+		// and we should return 404 accordingly if it ever
+		// happens.
+		// Such as: /undefined/api/v1/<actual endpoint>
+		ext := path.Ext(r.URL.Path)
+		isApiRequest := strings.Contains(r.URL.Path, "/api")
+		isMissingAsset := ext != "" && ext != ".html"
+
+		if isApiRequest || isMissingAsset {
+			http.NotFound(w, r)
 			return
 		}
 
