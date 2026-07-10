@@ -5,9 +5,11 @@ linters:
   default: none
   enable:
     - copyloopvar
+    - cyclop
     - dupl
     - errcheck
     - goconst
+    - gocritic
     - gocyclo
     - govet
     - ineffassign
@@ -21,7 +23,10 @@ linters:
     - unconvert
     - unparam
     - unused
+    - whitespace
   settings:
+    cyclop:
+      max-complexity: 15
     goconst:
       ignore-tests: true
     lll:
@@ -35,6 +40,7 @@ linters:
     rules:
       - path: (.+)_test.go
         linters:
+          - cyclop
           - goconst
       - linters:
           - dupl
@@ -46,8 +52,12 @@ linters:
       - examples$
 formatters:
   enable:
+    - gci
     - gofmt
+    - gofumpt
     - goimports
+    - golines
+    - swaggo
   exclusions:
     generated: lax
     paths:

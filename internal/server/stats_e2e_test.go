@@ -36,8 +36,22 @@ func seedTwoScores(t *testing.T, ctx context.Context, st *sqlite.SQLiteStore) {
 		characters float64
 		genres     []string
 	}{
-		{mediaID: 1, title: "Test Show A", finalScore: 8.2, story: 9.0, characters: 7.0, genres: []string{"Action", "Drama"}},
-		{mediaID: 2, title: "Test Show B", finalScore: 7.0, story: 6.0, characters: 9.0, genres: []string{"Action"}},
+		{
+			mediaID:    1,
+			title:      "Test Show A",
+			finalScore: 8.2,
+			story:      9.0,
+			characters: 7.0,
+			genres:     []string{"Action", "Drama"},
+		},
+		{
+			mediaID:    2,
+			title:      "Test Show B",
+			finalScore: 7.0,
+			story:      6.0,
+			characters: 9.0,
+			genres:     []string{"Action"},
+		},
 	}
 	for _, sess := range sessions {
 		result := scoring.Result{
@@ -217,6 +231,9 @@ func TestStatsEndpoints_DBless(t *testing.T) {
 		t.Errorf("db-info: got db=%+v, want nil in DBless mode", db)
 	}
 	if info["live_config"] != true {
-		t.Errorf("db-info: got live_config=%+v, want true (server built with liveConfig=true)", info["live_config"])
+		t.Errorf(
+			"db-info: got live_config=%+v, want true (server built with liveConfig=true)",
+			info["live_config"],
+		)
 	}
 }

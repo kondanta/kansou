@@ -6,9 +6,8 @@ import (
 	"math"
 	"strings"
 
-	"github.com/spf13/cobra"
-
 	"github.com/kondanta/kansou/internal/stats"
+	"github.com/spf13/cobra"
 )
 
 // statsCmd returns the `kansou stats` cobra command.
@@ -40,7 +39,10 @@ Requires a database (KANSOU_DB_TYPE must be set).`,
 			case "history":
 				return runStatsHistory(ctx, st)
 			default:
-				return fmt.Errorf("unknown stats category %q — valid options: genres, dimensions, history", args[0])
+				return fmt.Errorf(
+					"unknown stats category %q — valid options: genres, dimensions, history",
+					args[0],
+				)
 			}
 		},
 	}
@@ -60,20 +62,36 @@ func runStatsSummary(ctx context.Context, st *stats.Stats) error {
 		fmt.Println("Top genre:             no data yet")
 	}
 	if sum.TopScoringGenre != nil {
-		fmt.Printf("Highest scoring genre: %s (avg %.2f)\n", sum.TopScoringGenre.Genre, sum.TopScoringGenre.AvgScore)
+		fmt.Printf(
+			"Highest scoring genre: %s (avg %.2f)\n",
+			sum.TopScoringGenre.Genre,
+			sum.TopScoringGenre.AvgScore,
+		)
 	}
 	if sum.OverallConsistency != nil {
 		fmt.Printf("Scoring consistency:   avg std dev %.2f across %d dimensions\n",
 			sum.OverallConsistency.AvgStdDev, sum.OverallConsistency.Count)
 	}
 	if sum.MostConsistentDim != nil {
-		fmt.Printf("Most consistent:       %s (std dev %.2f)\n", sum.MostConsistentDim.Label, sum.MostConsistentDim.StdDev)
+		fmt.Printf(
+			"Most consistent:       %s (std dev %.2f)\n",
+			sum.MostConsistentDim.Label,
+			sum.MostConsistentDim.StdDev,
+		)
 	}
 	if sum.LeastConsistentDim != nil {
-		fmt.Printf("Least consistent:      %s (std dev %.2f)\n", sum.LeastConsistentDim.Label, sum.LeastConsistentDim.StdDev)
+		fmt.Printf(
+			"Least consistent:      %s (std dev %.2f)\n",
+			sum.LeastConsistentDim.Label,
+			sum.LeastConsistentDim.StdDev,
+		)
 	}
 	if sum.MostRescored != nil {
-		fmt.Printf("Most rescored:         %s (%d times)\n", sum.MostRescored.TitleRomaji, sum.MostRescored.ScoreCount)
+		fmt.Printf(
+			"Most rescored:         %s (%d times)\n",
+			sum.MostRescored.TitleRomaji,
+			sum.MostRescored.ScoreCount,
+		)
 	}
 	fmt.Printf("Outliers detected:     %d\n", sum.OutlierCount)
 	if sum.LastPruneAt != nil {
@@ -112,7 +130,13 @@ func runStatsGenres(ctx context.Context, st *stats.Stats) error {
 
 	fmt.Println("\nAverage score by genre:")
 	for _, r := range g.ByGenre {
-		fmt.Printf("  %-15s %s %.2f  (n=%d)\n", r.Genre, asciiBar(r.AvgScore, 10, 20), r.AvgScore, r.Count)
+		fmt.Printf(
+			"  %-15s %s %.2f  (n=%d)\n",
+			r.Genre,
+			asciiBar(r.AvgScore, 10, 20),
+			r.AvgScore,
+			r.Count,
+		)
 	}
 
 	if len(g.Affinity) == 0 {
@@ -143,7 +167,14 @@ func runStatsDimensions(ctx context.Context, st *stats.Stats) error {
 
 	fmt.Println("Dimension variance (lower std dev = more consistent):")
 	for _, v := range d.DimensionVariance {
-		fmt.Printf("  %-15s %s %.2f  (avg %.2f, n=%d)\n", v.Label, asciiBar(v.StdDev, 3, 20), v.StdDev, v.AvgScore, v.Count)
+		fmt.Printf(
+			"  %-15s %s %.2f  (avg %.2f, n=%d)\n",
+			v.Label,
+			asciiBar(v.StdDev, 3, 20),
+			v.StdDev,
+			v.AvgScore,
+			v.Count,
+		)
 	}
 	if d.ScoringConsistency != nil {
 		fmt.Printf("\nOverall consistency: avg std dev %.2f across %d dimensions\n",
@@ -152,7 +183,9 @@ func runStatsDimensions(ctx context.Context, st *stats.Stats) error {
 
 	fmt.Println("\nDimension correlation:")
 	if d.CorrelationInsufficient {
-		fmt.Println("  Insufficient data — at least 25 shared scored entries required per dimension pair")
+		fmt.Println(
+			"  Insufficient data — at least 25 shared scored entries required per dimension pair",
+		)
 	} else {
 		for _, c := range d.DimensionCorrelation {
 			fmt.Printf("  %-15s ↔ %-15s %+.2f\n", c.DimensionA, c.DimensionB, c.Correlation)
@@ -166,7 +199,14 @@ func runStatsDimensions(ctx context.Context, st *stats.Stats) error {
 			if sk.TotalCount > 0 {
 				rate = float64(sk.SkipCount) / float64(sk.TotalCount) * 100
 			}
-			fmt.Printf("  %-15s %-6s %d/%d  (%.0f%%)\n", sk.Label, sk.MediaType, sk.SkipCount, sk.TotalCount, rate)
+			fmt.Printf(
+				"  %-15s %-6s %d/%d  (%.0f%%)\n",
+				sk.Label,
+				sk.MediaType,
+				sk.SkipCount,
+				sk.TotalCount,
+				rate,
+			)
 		}
 	}
 

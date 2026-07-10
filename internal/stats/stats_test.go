@@ -53,7 +53,9 @@ func (f *fakeStore) ScoreByGenre(context.Context) ([]store.GenreScore, error) {
 	return f.scoreByGenre, nil
 }
 
-func (f *fakeStore) GenreDimensionAffinity(context.Context) ([]store.GenreDimensionAffinity, error) {
+func (f *fakeStore) GenreDimensionAffinity(
+	context.Context,
+) ([]store.GenreDimensionAffinity, error) {
 	return f.affinity, nil
 }
 
@@ -65,7 +67,9 @@ func (f *fakeStore) ScoringConsistency(context.Context) (*store.ConsistencyStat,
 	return f.consistency, nil
 }
 
-func (f *fakeStore) DimensionCorrelation(context.Context) ([]store.DimensionCorrelationStat, error) {
+func (f *fakeStore) DimensionCorrelation(
+	context.Context,
+) ([]store.DimensionCorrelationStat, error) {
 	return f.correlation, nil
 }
 
@@ -80,7 +84,13 @@ func (f *fakeStore) WeightOverrides(context.Context) ([]store.WeightOverrideStat
 func (f *fakeStore) MostRescored(context.Context) ([]store.RescoredStat, error) {
 	return f.mostRescored, nil
 }
-func (f *fakeStore) Outliers(context.Context) ([]store.OutlierStat, error) { return f.outliers, nil }
+
+func (f *fakeStore) Outliers(
+	context.Context,
+) ([]store.OutlierStat, error) {
+	return f.outliers, nil
+}
+
 func (f *fakeStore) ConfigImpact(context.Context) ([]store.ConfigImpactStat, error) {
 	return f.configImpact, nil
 }
@@ -161,8 +171,16 @@ func TestSummary_MostRescoredGating(t *testing.T) {
 		wantNil  bool
 	}{
 		{name: "no history", rescored: nil, wantNil: true},
-		{name: "scored once is not a rescore", rescored: []store.RescoredStat{{AnilistID: 1, ScoreCount: 1}}, wantNil: true},
-		{name: "scored twice surfaces as most rescored", rescored: []store.RescoredStat{{AnilistID: 1, ScoreCount: 2}}, wantNil: false},
+		{
+			name:     "scored once is not a rescore",
+			rescored: []store.RescoredStat{{AnilistID: 1, ScoreCount: 1}},
+			wantNil:  true,
+		},
+		{
+			name:     "scored twice surfaces as most rescored",
+			rescored: []store.RescoredStat{{AnilistID: 1, ScoreCount: 2}},
+			wantNil:  false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -211,16 +229,26 @@ func TestDimensions_CorrelationInsufficientFlag(t *testing.T) {
 		want        bool
 	}{
 		{name: "empty means insufficient", correlation: nil, want: true},
-		{name: "any result means sufficient", correlation: []store.DimensionCorrelationStat{{DimensionA: "a", DimensionB: "b"}}, want: false},
+		{
+			name:        "any result means sufficient",
+			correlation: []store.DimensionCorrelationStat{{DimensionA: "a", DimensionB: "b"}},
+			want:        false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resp, err := New(&fakeStore{correlation: tt.correlation}).Dimensions(context.Background())
+			resp, err := New(
+				&fakeStore{correlation: tt.correlation},
+			).Dimensions(context.Background())
 			if err != nil {
 				t.Fatalf("Dimensions: %v", err)
 			}
 			if resp.CorrelationInsufficient != tt.want {
-				t.Errorf("CorrelationInsufficient: got %v, want %v", resp.CorrelationInsufficient, tt.want)
+				t.Errorf(
+					"CorrelationInsufficient: got %v, want %v",
+					resp.CorrelationInsufficient,
+					tt.want,
+				)
 			}
 		})
 	}
@@ -246,7 +274,8 @@ func TestGenresAndHistoryBundle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Genres: %v", err)
 	}
-	if len(g.Breakdown) != 2 || g.Breakdown[0].Genre != "Action" || g.Breakdown[1].Genre != "Drama" {
+	if len(g.Breakdown) != 2 || g.Breakdown[0].Genre != "Action" ||
+		g.Breakdown[1].Genre != "Drama" {
 		t.Errorf("Breakdown: got %+v, want [Action, Drama]", g.Breakdown)
 	}
 	if len(g.ByGenre) != 1 || g.ByGenre[0].Genre != "Romance" {

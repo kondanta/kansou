@@ -276,7 +276,11 @@ func TestLoad_MaxMultiplier_Default(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if cfg.MaxMultiplier != DefaultMaxMultiplier {
-		t.Errorf("expected default max_multiplier %.1f, got %.1f", DefaultMaxMultiplier, cfg.MaxMultiplier)
+		t.Errorf(
+			"expected default max_multiplier %.1f, got %.1f",
+			DefaultMaxMultiplier,
+			cfg.MaxMultiplier,
+		)
 	}
 }
 
@@ -353,7 +357,11 @@ func TestLoad_DefaultConfig_MaxMultiplier(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if cfg.MaxMultiplier != DefaultMaxMultiplier {
-		t.Errorf("default config: expected max_multiplier %.1f, got %.1f", DefaultMaxMultiplier, cfg.MaxMultiplier)
+		t.Errorf(
+			"default config: expected max_multiplier %.1f, got %.1f",
+			DefaultMaxMultiplier,
+			cfg.MaxMultiplier,
+		)
 	}
 }
 
@@ -429,7 +437,9 @@ story = 1.2
 	h1 := Hash(cfg)
 	h2 := Hash(cfg)
 	if h1 != h2 {
-		t.Error("Hash is not deterministic: same *Config produced different hashes on successive calls")
+		t.Error(
+			"Hash is not deterministic: same *Config produced different hashes on successive calls",
+		)
 	}
 }
 
@@ -527,7 +537,14 @@ port = 9090
 		"story":     {Label: "Story (updated)", Description: "Narrative", Weight: 0.70},
 		"enjoyment": {Label: "Enjoyment", Description: "Fun", Weight: 0.30, BiasResistant: true},
 	}
-	rebuilt, err := Rebuild(cfg, dims, nil, DefaultPrimaryGenreWeight, DefaultMaxMultiplier, DefaultMaxHistory)
+	rebuilt, err := Rebuild(
+		cfg,
+		dims,
+		nil,
+		DefaultPrimaryGenreWeight,
+		DefaultMaxMultiplier,
+		DefaultMaxHistory,
+	)
 	if err != nil {
 		t.Fatalf("rebuild: %v", err)
 	}
@@ -539,7 +556,10 @@ port = 9090
 	}
 	// Server config must be preserved from base.
 	if rebuilt.Server.Port != 9090 {
-		t.Errorf("server port: got %d, want 9090 (should be preserved from base)", rebuilt.Server.Port)
+		t.Errorf(
+			"server port: got %d, want 9090 (should be preserved from base)",
+			rebuilt.Server.Port,
+		)
 	}
 }
 
@@ -552,7 +572,14 @@ func TestRebuild_InvalidWeights(t *testing.T) {
 		"story":     {Label: "S", Weight: 0.60},
 		"enjoyment": {Label: "E", Weight: 0.60}, // sum = 1.20, invalid
 	}
-	_, err = Rebuild(cfg, dims, nil, DefaultPrimaryGenreWeight, DefaultMaxMultiplier, DefaultMaxHistory)
+	_, err = Rebuild(
+		cfg,
+		dims,
+		nil,
+		DefaultPrimaryGenreWeight,
+		DefaultMaxMultiplier,
+		DefaultMaxHistory,
+	)
 	if err == nil {
 		t.Error("expected error for weights summing to 1.20, got nil")
 	}
@@ -569,7 +596,14 @@ func TestRebuild_UnknownGenreDimension(t *testing.T) {
 	genres := map[string]map[string]float64{
 		"action": {"nonexistent_dim": 1.2},
 	}
-	_, err = Rebuild(cfg, dims, genres, DefaultPrimaryGenreWeight, DefaultMaxMultiplier, DefaultMaxHistory)
+	_, err = Rebuild(
+		cfg,
+		dims,
+		genres,
+		DefaultPrimaryGenreWeight,
+		DefaultMaxMultiplier,
+		DefaultMaxHistory,
+	)
 	if err == nil {
 		t.Error("expected error for genre referencing unknown dimension, got nil")
 	}

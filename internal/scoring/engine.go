@@ -58,7 +58,12 @@ func (e *Engine) Score(entry Entry) (Result, error) {
 	}
 
 	// Delegate weight computation to Weights().
-	weightRows := e.Weights(genreSource, entry.PrimaryGenre, entry.SkippedDimensions, entry.WeightOverrides)
+	weightRows := e.Weights(
+		genreSource,
+		entry.PrimaryGenre,
+		entry.SkippedDimensions,
+		entry.WeightOverrides,
+	)
 
 	// Build BreakdownRows from WeightRows and the per-dimension scores.
 	breakdown := make([]BreakdownRow, len(weightRows))
@@ -185,7 +190,11 @@ func (e *Engine) Weights(
 		multiplier := 1.0
 		if !def.BiasResistant {
 			var primaryMult, secondaryGenresMult float64
-			multiplier, primaryMult, secondaryGenresMult, _ = e.blendedMultiplier(key, primaryGenreLower, matchedGenres)
+			multiplier, primaryMult, secondaryGenresMult, _ = e.blendedMultiplier(
+				key,
+				primaryGenreLower,
+				matchedGenres,
+			)
 			row.PrimaryGenreMultiplier = primaryMult
 			row.SecondaryGenresMultiplier = secondaryGenresMult
 		}
@@ -229,7 +238,10 @@ func (e *Engine) validateEntry(entry Entry) error {
 	// --weight override on a skipped dimension?
 	for key := range entry.WeightOverrides {
 		if entry.SkippedDimensions[key] {
-			return fmt.Errorf("dimension %q was both weight-overridden and skipped — these are mutually exclusive", key)
+			return fmt.Errorf(
+				"dimension %q was both weight-overridden and skipped — these are mutually exclusive",
+				key,
+			)
 		}
 	}
 

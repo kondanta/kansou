@@ -9,9 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/spf13/cobra"
-
 	"github.com/kondanta/kansou/internal/anilist"
+	"github.com/spf13/cobra"
 )
 
 // errUserCancelled is returned by interactive prompts when the user aborts with EOF (Ctrl+D).
@@ -158,7 +157,12 @@ func printMediaCard(m *anilist.Media) {
 	if m.MediaType == "MANGA" {
 		mediaTypeLabel = "Manga"
 	}
-	fmt.Printf("│  %-12s│  %-*s│\n", "Type", width-18, truncate(mediaTypeLabel+" ("+m.Format+")", width-18))
+	fmt.Printf(
+		"│  %-12s│  %-*s│\n",
+		"Type",
+		width-18,
+		truncate(mediaTypeLabel+" ("+m.Format+")", width-18),
+	)
 	fmt.Printf("│  %-12s│  %-*s│\n", "Status", width-18, truncate(m.Status, width-18))
 	if m.Episodes > 0 {
 		fmt.Printf("│  %-12s│  %-*s│\n", "Episodes", width-18, strconv.Itoa(m.Episodes))
@@ -167,11 +171,20 @@ func printMediaCard(m *anilist.Media) {
 		fmt.Printf("│  %-12s│  %-*s│\n", "Chapters", width-18, strconv.Itoa(m.Chapters))
 	}
 
-	anilistURL := fmt.Sprintf("https://anilist.co/%s/%d", strings.ToLower(string(m.MediaType)), m.ID)
+	anilistURL := fmt.Sprintf(
+		"https://anilist.co/%s/%d",
+		strings.ToLower(string(m.MediaType)),
+		m.ID,
+	)
 	fmt.Printf("│  %-12s│  %-*s│\n", "AniList", width-18, truncate(anilistURL, width-18))
 
 	fmt.Printf("├%s┤\n", line)
-	fmt.Printf("│  %-12s│  %-*s│\n", "Genres", width-18, truncate(strings.Join(m.Genres, ", "), width-18))
+	fmt.Printf(
+		"│  %-12s│  %-*s│\n",
+		"Genres",
+		width-18,
+		truncate(strings.Join(m.Genres, ", "), width-18),
+	)
 
 	fmt.Printf("├%s┤\n", line)
 	community := fmt.Sprintf("AniList avg: %d  /  mean: %d", m.AverageScore, m.MeanScore)

@@ -7,11 +7,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/spf13/cobra"
-
 	"github.com/kondanta/kansou/internal/config"
 	"github.com/kondanta/kansou/internal/logger"
 	"github.com/kondanta/kansou/internal/server"
+	"github.com/spf13/cobra"
 )
 
 // defaultCORSOrigins are the origins allowed when KANSOU_CORS_ORIGINS is not set.
@@ -46,8 +45,11 @@ Swagger UI is available at /swagger/index.html.`,
 
 			// Warn if the deprecated [server] block is present in the config file.
 			if a.Config.Server.Port != 0 || len(a.Config.Server.CORSAllowedOrigins) > 0 {
-				fmt.Fprintf(os.Stderr, "warning: [server] in config.toml is deprecated and ignored — "+
-					"use KANSOU_PORT and KANSOU_CORS_ORIGINS env vars instead\n")
+				fmt.Fprintf(
+					os.Stderr,
+					"warning: [server] in config.toml is deprecated and ignored — "+
+						"use KANSOU_PORT and KANSOU_CORS_ORIGINS env vars instead\n",
+				)
 			}
 
 			port := resolvePort(portFlag)
@@ -55,7 +57,17 @@ Swagger UI is available at /swagger/index.html.`,
 			dbType := os.Getenv("KANSOU_DB_TYPE")
 			trustProxy := resolveTrustProxy()
 
-			srv := server.New(a.Config, a.AniList, a.Engine, liveConfig, a.ConfigPath, a.Store, dbType, corsOrigins, trustProxy)
+			srv := server.New(
+				a.Config,
+				a.AniList,
+				a.Engine,
+				liveConfig,
+				a.ConfigPath,
+				a.Store,
+				dbType,
+				corsOrigins,
+				trustProxy,
+			)
 			if err := srv.ListenAndServe(port); err != nil {
 				slog.Error("server error", "err", err)
 				os.Exit(1)

@@ -10,9 +10,8 @@ import (
 	"testing"
 	"time"
 
-	tcpg "github.com/testcontainers/testcontainers-go/modules/postgres"
-
 	"github.com/kondanta/kansou/internal/store"
+	tcpg "github.com/testcontainers/testcontainers-go/modules/postgres"
 )
 
 const floatTolerance = 1e-9
@@ -91,7 +90,13 @@ func requireStore(t *testing.T) *PostgresStore {
 	return sharedStore
 }
 
-func insertMedia(t *testing.T, s *PostgresStore, anilistID int, title, mediaType string, genres []string) int {
+func insertMedia(
+	t *testing.T,
+	s *PostgresStore,
+	anilistID int,
+	title, mediaType string,
+	genres []string,
+) int {
 	t.Helper()
 	var id int
 	err := s.db.QueryRow(
@@ -103,20 +108,36 @@ func insertMedia(t *testing.T, s *PostgresStore, anilistID int, title, mediaType
 		t.Fatalf("inserting media: %v", err)
 	}
 	for _, g := range genres {
-		if _, err := s.db.Exec(`INSERT INTO media_genres (media_id, genre) VALUES ($1, $2)`, id, g); err != nil {
+		if _, err := s.db.Exec(
+			`INSERT INTO media_genres (media_id, genre) VALUES ($1, $2)`,
+			id,
+			g,
+		); err != nil {
 			t.Fatalf("inserting media genre: %v", err)
 		}
 	}
 	return id
 }
 
-func insertScore(t *testing.T, s *PostgresStore, mediaID int, finalScore float64, configHash string, scoredAt time.Time, isLatest bool) int {
+func insertScore(
+	t *testing.T,
+	s *PostgresStore,
+	mediaID int,
+	finalScore float64,
+	configHash string,
+	scoredAt time.Time,
+	isLatest bool,
+) int {
 	t.Helper()
 	var id int
 	err := s.db.QueryRow(
 		`INSERT INTO scores (media_id, final_score, config_hash, config_snapshot, is_latest, scored_at)
 		 VALUES ($1, $2, $3, '{}', $4, $5) RETURNING id`,
-		mediaID, finalScore, configHash, isLatest, scoredAt,
+		mediaID,
+		finalScore,
+		configHash,
+		isLatest,
+		scoredAt,
 	).Scan(&id)
 	if err != nil {
 		t.Fatalf("inserting score: %v", err)
@@ -156,7 +177,9 @@ func insertDimensionScores(t *testing.T, s *PostgresStore, scoreID int, dims []d
 func insertMatchedGenre(t *testing.T, s *PostgresStore, scoreID int, genre string) {
 	t.Helper()
 	if _, err := s.db.Exec(
-		`INSERT INTO score_matched_genres (score_id, genre, is_primary) VALUES ($1, $2, FALSE)`, scoreID, genre,
+		`INSERT INTO score_matched_genres (score_id, genre, is_primary) VALUES ($1, $2, FALSE)`,
+		scoreID,
+		genre,
 	); err != nil {
 		t.Fatalf("inserting matched genre: %v", err)
 	}
@@ -245,9 +268,24 @@ func TestGenreDimensionAffinity(t *testing.T) {
 	scoreB := insertScore(t, s, b, 7.0, "h1", day(2), true)
 	scoreC := insertScore(t, s, c, 8.5, "h1", day(3), true)
 
-	insertDimensionScores(t, s, scoreA, []dimFixture{{Key: "story", Label: "Story", Score: score(9.0)}})
-	insertDimensionScores(t, s, scoreB, []dimFixture{{Key: "story", Label: "Story", Score: score(7.0)}})
-	insertDimensionScores(t, s, scoreC, []dimFixture{{Key: "story", Label: "Story", Score: score(8.0)}})
+	insertDimensionScores(
+		t,
+		s,
+		scoreA,
+		[]dimFixture{{Key: "story", Label: "Story", Score: score(9.0)}},
+	)
+	insertDimensionScores(
+		t,
+		s,
+		scoreB,
+		[]dimFixture{{Key: "story", Label: "Story", Score: score(7.0)}},
+	)
+	insertDimensionScores(
+		t,
+		s,
+		scoreC,
+		[]dimFixture{{Key: "story", Label: "Story", Score: score(8.0)}},
+	)
 
 	insertMatchedGenre(t, s, scoreA, "Action")
 	insertMatchedGenre(t, s, scoreA, "Drama")
@@ -285,7 +323,12 @@ func seedDimensionVarianceFixture(t *testing.T, s *PostgresStore) {
 	for i, v := range scores {
 		m := insertMedia(t, s, i+1, fmt.Sprintf("Show %d", i+1), "ANIME", []string{"Action"})
 		sc := insertScore(t, s, m, v, "h1", day(i+1), true)
-		insertDimensionScores(t, s, sc, []dimFixture{{Key: "story", Label: "Story", Score: score(v)}})
+		insertDimensionScores(
+			t,
+			s,
+			sc,
+			[]dimFixture{{Key: "story", Label: "Story", Score: score(v)}},
+		)
 	}
 }
 
@@ -412,9 +455,24 @@ func TestSkippedDimensions(t *testing.T) {
 	scB := insertScore(t, s, b, 7.0, "h1", day(2), true)
 	scC := insertScore(t, s, c, 9.0, "h1", day(3), true)
 
-	insertDimensionScores(t, s, scA, []dimFixture{{Key: "story", Label: "Story", Score: score(8.0)}})
-	insertDimensionScores(t, s, scB, []dimFixture{{Key: "story", Label: "Story", Score: nil}}) // skipped
-	insertDimensionScores(t, s, scC, []dimFixture{{Key: "story", Label: "Story", Score: score(9.0)}})
+	insertDimensionScores(
+		t,
+		s,
+		scA,
+		[]dimFixture{{Key: "story", Label: "Story", Score: score(8.0)}},
+	)
+	insertDimensionScores(
+		t,
+		s,
+		scB,
+		[]dimFixture{{Key: "story", Label: "Story", Score: nil}},
+	) // skipped
+	insertDimensionScores(
+		t,
+		s,
+		scC,
+		[]dimFixture{{Key: "story", Label: "Story", Score: score(9.0)}},
+	)
 
 	got, err := s.SkippedDimensions(ctx)
 	if err != nil {
@@ -426,10 +484,18 @@ func TestSkippedDimensions(t *testing.T) {
 		byType[r.MediaType] = r
 	}
 	if anime := byType["ANIME"]; anime.SkipCount != 1 || anime.TotalCount != 2 {
-		t.Errorf("ANIME: got skip=%d total=%d, want skip=1 total=2", anime.SkipCount, anime.TotalCount)
+		t.Errorf(
+			"ANIME: got skip=%d total=%d, want skip=1 total=2",
+			anime.SkipCount,
+			anime.TotalCount,
+		)
 	}
 	if manga := byType["MANGA"]; manga.SkipCount != 0 || manga.TotalCount != 1 {
-		t.Errorf("MANGA: got skip=%d total=%d, want skip=0 total=1", manga.SkipCount, manga.TotalCount)
+		t.Errorf(
+			"MANGA: got skip=%d total=%d, want skip=0 total=1",
+			manga.SkipCount,
+			manga.TotalCount,
+		)
 	}
 }
 
@@ -442,8 +508,18 @@ func TestWeightOverrides(t *testing.T) {
 	scA := insertScore(t, s, a, 8.0, "h1", day(1), true)
 	scB := insertScore(t, s, b, 7.0, "h1", day(2), true)
 
-	insertDimensionScores(t, s, scA, []dimFixture{{Key: "story", Label: "Story", Score: score(8.0), WeightOverride: true}})
-	insertDimensionScores(t, s, scB, []dimFixture{{Key: "story", Label: "Story", Score: score(7.0)}})
+	insertDimensionScores(
+		t,
+		s,
+		scA,
+		[]dimFixture{{Key: "story", Label: "Story", Score: score(8.0), WeightOverride: true}},
+	)
+	insertDimensionScores(
+		t,
+		s,
+		scB,
+		[]dimFixture{{Key: "story", Label: "Story", Score: score(7.0)}},
+	)
 
 	got, err := s.WeightOverrides(ctx)
 	if err != nil {
@@ -499,11 +575,21 @@ func TestOutliers(t *testing.T) {
 	for i := 1; i <= 9; i++ {
 		m := insertMedia(t, s, i, fmt.Sprintf("Show %d", i), "ANIME", []string{"Action"})
 		sc := insertScore(t, s, m, 7.0, "h1", day(i), true)
-		insertDimensionScores(t, s, sc, []dimFixture{{Key: "story", Label: "Story", Score: score(7.0)}})
+		insertDimensionScores(
+			t,
+			s,
+			sc,
+			[]dimFixture{{Key: "story", Label: "Story", Score: score(7.0)}},
+		)
 	}
 	outlierMedia := insertMedia(t, s, 10, "Outlier Show", "ANIME", []string{"Action"})
 	outlierScoreID := insertScore(t, s, outlierMedia, 3.0, "h1", day(10), true)
-	insertDimensionScores(t, s, outlierScoreID, []dimFixture{{Key: "story", Label: "Story", Score: score(3.0)}})
+	insertDimensionScores(
+		t,
+		s,
+		outlierScoreID,
+		[]dimFixture{{Key: "story", Label: "Story", Score: score(3.0)}},
+	)
 
 	got, err := s.Outliers(ctx)
 	if err != nil {
@@ -561,8 +647,18 @@ func TestScoreHistory(t *testing.T) {
 	a := insertMedia(t, s, 1, "Show A", "ANIME", []string{"Action"})
 	older := insertScore(t, s, a, 6.0, "h1", day(1), false)
 	newer := insertScore(t, s, a, 8.0, "h1", day(2), true)
-	insertDimensionScores(t, s, older, []dimFixture{{Key: "story", Label: "Story", Score: score(6.0)}})
-	insertDimensionScores(t, s, newer, []dimFixture{{Key: "story", Label: "Story", Score: score(8.0)}})
+	insertDimensionScores(
+		t,
+		s,
+		older,
+		[]dimFixture{{Key: "story", Label: "Story", Score: score(6.0)}},
+	)
+	insertDimensionScores(
+		t,
+		s,
+		newer,
+		[]dimFixture{{Key: "story", Label: "Story", Score: score(8.0)}},
+	)
 
 	got, err := s.ScoreHistory(ctx, 1)
 	if err != nil {
@@ -573,7 +669,11 @@ func TestScoreHistory(t *testing.T) {
 	}
 	// Ordered scored_at DESC — newest first.
 	if got[0].FinalScore != 8.0 || got[1].FinalScore != 6.0 {
-		t.Errorf("order: got %.1f, %.1f — want 8.0, 6.0 (newest first)", got[0].FinalScore, got[1].FinalScore)
+		t.Errorf(
+			"order: got %.1f, %.1f — want 8.0, 6.0 (newest first)",
+			got[0].FinalScore,
+			got[1].FinalScore,
+		)
 	}
 	if len(got[0].Breakdown) != 1 || got[0].Breakdown[0].DimensionKey != "story" {
 		t.Errorf("expected full breakdown to be populated: %+v", got[0].Breakdown)
@@ -588,7 +688,12 @@ func TestListLatest(t *testing.T) {
 	b := insertMedia(t, s, 2, "Show B", "ANIME", []string{"Drama"})
 	insertScore(t, s, a, 6.0, "h1", day(1), false) // older, not latest
 	latestA := insertScore(t, s, a, 8.0, "h1", day(20), true)
-	insertDimensionScores(t, s, latestA, []dimFixture{{Key: "story", Label: "Story", Score: score(8.0)}})
+	insertDimensionScores(
+		t,
+		s,
+		latestA,
+		[]dimFixture{{Key: "story", Label: "Story", Score: score(8.0)}},
+	)
 	insertScore(t, s, b, 7.0, "h1", day(15), true)
 
 	got, err := s.ListLatest(ctx)
@@ -600,7 +705,11 @@ func TestListLatest(t *testing.T) {
 	}
 	// Ordered scored_at DESC.
 	if got[0].AnilistID != 1 || got[1].AnilistID != 2 {
-		t.Errorf("order: got anilist_ids %d, %d — want 1, 2 (newest first)", got[0].AnilistID, got[1].AnilistID)
+		t.Errorf(
+			"order: got anilist_ids %d, %d — want 1, 2 (newest first)",
+			got[0].AnilistID,
+			got[1].AnilistID,
+		)
 	}
 	if got[0].Breakdown != nil || got[0].ActiveGenres != nil {
 		t.Errorf("ListLatest must not populate Breakdown/ActiveGenres, got %+v", got[0])
@@ -626,7 +735,10 @@ func TestSoftDeleteScore(t *testing.T) {
 		t.Fatalf("LatestScore: %v", err)
 	}
 	if latestScore != nil {
-		t.Errorf("LatestScore: got %+v, want nil (no promotion after deliberate delete)", latestScore)
+		t.Errorf(
+			"LatestScore: got %+v, want nil (no promotion after deliberate delete)",
+			latestScore,
+		)
 	}
 
 	list, err := s.ListLatest(ctx)
@@ -647,7 +759,11 @@ func TestSoftDeleteScore(t *testing.T) {
 	}
 
 	var reason string
-	if err := s.db.Get(&reason, `SELECT deleted_reason FROM scores WHERE id = $1`, latest); err != nil {
+	if err := s.db.Get(
+		&reason,
+		`SELECT deleted_reason FROM scores WHERE id = $1`,
+		latest,
+	); err != nil {
 		t.Fatalf("reading deleted_reason: %v", err)
 	}
 	if reason != store.DeletedReasonManual {
@@ -689,7 +805,11 @@ func TestHardDeleteScore(t *testing.T) {
 
 		// Assertions: Score row should be completely removed from the DB
 		var scoreCount int
-		if err := s.db.Get(&scoreCount, `SELECT COUNT(*) FROM scores WHERE id = $1`, scoreID); err != nil {
+		if err := s.db.Get(
+			&scoreCount,
+			`SELECT COUNT(*) FROM scores WHERE id = $1`,
+			scoreID,
+		); err != nil {
 			t.Fatalf("checking score existence: %v", err)
 		}
 		if scoreCount != 0 {
@@ -719,7 +839,11 @@ func TestHardDeleteScore(t *testing.T) {
 
 		// Assertions: First score should be gone
 		var scoreCount1 int
-		if err := s.db.Get(&scoreCount1, `SELECT COUNT(*) FROM scores WHERE id = $1`, scoreID1); err != nil {
+		if err := s.db.Get(
+			&scoreCount1,
+			`SELECT COUNT(*) FROM scores WHERE id = $1`,
+			scoreID1,
+		); err != nil {
 			t.Fatalf("checking score 1 existence: %v", err)
 		}
 		if scoreCount1 != 0 {
@@ -728,7 +852,11 @@ func TestHardDeleteScore(t *testing.T) {
 
 		// Assertions: Second score should remain untouched
 		var scoreCount2 int
-		if err := s.db.Get(&scoreCount2, `SELECT COUNT(*) FROM scores WHERE id = $1`, scoreID2); err != nil {
+		if err := s.db.Get(
+			&scoreCount2,
+			`SELECT COUNT(*) FROM scores WHERE id = $1`,
+			scoreID2,
+		); err != nil {
 			t.Fatalf("checking score 2 existence: %v", err)
 		}
 		if scoreCount2 != 1 {
@@ -775,7 +903,8 @@ func TestPostgresStore_PromoteScore(t *testing.T) {
 		// Assertions: The older score should now be active and undeleted
 		var isLatest bool
 		var deletedAt sql.NullTime
-		err := s.db.QueryRow(`SELECT is_latest, deleted_at FROM scores WHERE id = $1`, olderScore).Scan(&isLatest, &deletedAt)
+		err := s.db.QueryRow(`SELECT is_latest, deleted_at FROM scores WHERE id = $1`, olderScore).
+			Scan(&isLatest, &deletedAt)
 		if err != nil {
 			t.Fatalf("checking older score: %v", err)
 		}
@@ -789,7 +918,8 @@ func TestPostgresStore_PromoteScore(t *testing.T) {
 		// Assertions: The previously active score should be demoted and soft-deleted
 		var demotedLatest bool
 		var demotedReason sql.NullString
-		err = s.db.QueryRow(`SELECT is_latest, deleted_at, deleted_reason FROM scores WHERE id = $1`, latestScore).Scan(&demotedLatest, &deletedAt, &demotedReason)
+		err = s.db.QueryRow(`SELECT is_latest, deleted_at, deleted_reason FROM scores WHERE id = $1`, latestScore).
+			Scan(&demotedLatest, &deletedAt, &demotedReason)
 		if err != nil {
 			t.Fatalf("checking demoted score: %v", err)
 		}
@@ -800,7 +930,11 @@ func TestPostgresStore_PromoteScore(t *testing.T) {
 			t.Error("expected previous latest score to have a deleted_at timestamp populated")
 		}
 		if demotedReason.String != store.DeletedReasonPromote {
-			t.Errorf("expected deleted_reason %q, got %q", store.DeletedReasonPromote, demotedReason.String)
+			t.Errorf(
+				"expected deleted_reason %q, got %q",
+				store.DeletedReasonPromote,
+				demotedReason.String,
+			)
 		}
 	})
 
@@ -815,7 +949,8 @@ func TestPostgresStore_PromoteScore(t *testing.T) {
 		// Ensure it didn't accidentally demote/soft-delete itself
 		var isLatest bool
 		var deletedAt sql.NullTime
-		err := s.db.QueryRow(`SELECT is_latest, deleted_at FROM scores WHERE id = $1`, latestScore).Scan(&isLatest, &deletedAt)
+		err := s.db.QueryRow(`SELECT is_latest, deleted_at FROM scores WHERE id = $1`, latestScore).
+			Scan(&isLatest, &deletedAt)
 		if err != nil {
 			t.Fatalf("checking safe no-op score: %v", err)
 		}
@@ -852,7 +987,11 @@ func TestSearchMediaByTitle(t *testing.T) {
 		want  []int // expected AnilistIDs, in order
 	}{
 		{name: "case-insensitive substring match", query: "frieren", want: []int{1}},
-		{name: "matches multiple", query: "o", want: []int{2, 1}}, // "Attack on..." < "Frieren: Beyond..." alphabetically
+		{
+			name:  "matches multiple",
+			query: "o",
+			want:  []int{2, 1},
+		}, // "Attack on..." < "Frieren: Beyond..." alphabetically
 		{name: "no match", query: "nonexistent", want: nil},
 	}
 	for _, tt := range tests {

@@ -3,12 +3,11 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
-
-	"github.com/spf13/cobra"
 
 	"github.com/kondanta/kansou/internal/anilist"
 	"github.com/kondanta/kansou/internal/config"
@@ -17,6 +16,7 @@ import (
 	"github.com/kondanta/kansou/internal/store"
 	"github.com/kondanta/kansou/internal/store/postgres"
 	"github.com/kondanta/kansou/internal/store/sqlite"
+	"github.com/spf13/cobra"
 )
 
 // version is the build version, overridable at link time:
@@ -78,71 +78,18 @@ scoring session, and publishes the final weighted score back to AniList.`,
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 
-		// --- Store initialisation ---
-		dbType := os.Getenv("KANSOU_DB_TYPE")
-		switch dbType {
-		case "sqlite":
-			path := os.Getenv("KANSOU_DB_PATH")
-			if path == "" {
-				path = "~/.local/share/kansou/kansou.db"
-			}
-			s, err := sqlite.New(path)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "error: opening sqlite database: %v\n", err)
-				os.Exit(1)
-			}
-			app.Store = s
-
-		case "postgres":
-			pgcfg := postgres.PostgresConfig{
-				Host:     os.Getenv("POSTGRES_HOST"),
-				Port:     os.Getenv("POSTGRES_PORT"),
-				User:     os.Getenv("POSTGRES_USER"),
-				Password: os.Getenv("POSTGRES_PASSWORD"),
-				DBName:   os.Getenv("POSTGRES_DB"),
-			}
-			s, err := postgres.New(ctx, pgcfg)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "error: opening postgres database: %v\n", err)
-				os.Exit(1)
-			}
-			app.Store = s
-
-		case "":
-			app.Store = nil // DBless mode
-
-		default:
-			fmt.Fprintf(os.Stderr, "error: unknown KANSOU_DB_TYPE %q — must be \"sqlite\" or \"postgres\"\n", dbType)
+		st, err := initStore(ctx)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
+		app.Store = st
 
-		// --- Config loading ---
-		if app.Store != nil {
-			cfg, err := app.Store.LoadScoringConfig(ctx)
-			if errors.Is(err, store.ErrNotSeeded) {
-				fileCfg, loadErr := config.Load(configPath)
-				if loadErr != nil {
-					return fmt.Errorf("loading config file for DB seed: %w", loadErr)
-				}
-				if err := app.Store.SaveScoringConfig(ctx, fileCfg); err != nil {
-					return fmt.Errorf("seeding database config: %w", err)
-				}
-				cfg = fileCfg
-				slog.Info("seeded database from config file", "dimensions", len(cfg.Dimensions))
-			} else if err != nil {
-				return fmt.Errorf("loading scoring config from database: %w", err)
-			}
-
-			slog.Debug("config loaded from database", "dimensions", len(cfg.Dimensions))
-			app.Config = cfg
-		} else {
-			cfg, err := config.Load(configPath)
-			if err != nil {
-				return fmt.Errorf("loading config: %w", err)
-			}
-			slog.Debug("config loaded", "dimensions", len(cfg.Dimensions))
-			app.Config = cfg
+		cfg, err := loadAppConfig(ctx, app.Store, configPath)
+		if err != nil {
+			return err
 		}
+		app.Config = cfg
 
 		resolved, err := config.ResolvePath(configPath)
 		if err != nil {
@@ -174,6 +121,79 @@ scoring session, and publishes the final weighted score back to AniList.`,
 	if exitCode != 0 {
 		os.Exit(exitCode)
 	}
+}
+
+// initStore opens the persistence layer selected by KANSOU_DB_TYPE, or
+// returns a nil Store for DBless mode when the variable is unset.
+func initStore(ctx context.Context) (store.Store, error) {
+	dbType := os.Getenv("KANSOU_DB_TYPE")
+	switch dbType {
+	case "sqlite":
+		path := os.Getenv("KANSOU_DB_PATH")
+		if path == "" {
+			path = "~/.local/share/kansou/kansou.db"
+		}
+		s, err := sqlite.New(path)
+		if err != nil {
+			return nil, fmt.Errorf("opening sqlite database: %w", err)
+		}
+		return s, nil
+
+	case "postgres":
+		pgcfg := postgres.PostgresConfig{
+			Host:     os.Getenv("POSTGRES_HOST"),
+			Port:     os.Getenv("POSTGRES_PORT"),
+			User:     os.Getenv("POSTGRES_USER"),
+			Password: os.Getenv("POSTGRES_PASSWORD"),
+			DBName:   os.Getenv("POSTGRES_DB"),
+		}
+		s, err := postgres.New(ctx, pgcfg)
+		if err != nil {
+			return nil, fmt.Errorf("opening postgres database: %w", err)
+		}
+		return s, nil
+
+	case "":
+		return nil, nil
+
+	default:
+		return nil, fmt.Errorf(
+			"unknown KANSOU_DB_TYPE %q — must be \"sqlite\" or \"postgres\"", dbType,
+		)
+	}
+}
+
+// loadAppConfig loads the scoring config from st if configured, seeding it
+// from the config file on first run, or falls back to the config file
+// directly in DBless mode.
+func loadAppConfig(ctx context.Context, st store.Store, configPath string) (*config.Config, error) {
+	if st == nil {
+		cfg, err := config.Load(configPath)
+		if err != nil {
+			return nil, fmt.Errorf("loading config: %w", err)
+		}
+		slog.Debug("config loaded", "dimensions", len(cfg.Dimensions))
+		return cfg, nil
+	}
+
+	cfg, err := st.LoadScoringConfig(ctx)
+	if errors.Is(err, store.ErrNotSeeded) {
+		fileCfg, loadErr := config.Load(configPath)
+		if loadErr != nil {
+			return nil, fmt.Errorf("loading config file for DB seed: %w", loadErr)
+		}
+		if err := st.SaveScoringConfig(ctx, fileCfg); err != nil {
+			return nil, fmt.Errorf("seeding database config: %w", err)
+		}
+		slog.Info("seeded database from config file", "dimensions", len(fileCfg.Dimensions))
+		return fileCfg, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("loading scoring config from database: %w", err)
+	}
+
+	slog.Debug("config loaded from database", "dimensions", len(cfg.Dimensions))
+	return cfg, nil
 }
 
 // newEngine converts config dimensions into a scoring.Engine.

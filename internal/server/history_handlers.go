@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-
 	"github.com/kondanta/kansou/internal/store"
 )
 
@@ -62,10 +61,10 @@ func (s *Server) handleHistoryList(w http.ResponseWriter, r *http.Request) {
 //	@Description	Returns all non-deleted scores for one AniList media ID, newest first, with full breakdown. Requires a database.
 //	@Tags			history
 //	@Produce		json
-//	@Param			anilist_id	path	int	true	"AniList media ID"
-//	@Success		200	{array}		store.Score
-//	@Failure		400	{object}	errorResponse
-//	@Failure		503	{object}	errorResponse
+//	@Param			anilist_id	path		int	true	"AniList media ID"
+//	@Success		200			{array}		store.Score
+//	@Failure		400			{object}	errorResponse
+//	@Failure		503			{object}	errorResponse
 //	@Router			/api/v1/history/{anilist_id} [get]
 func (s *Server) handleHistoryDetail(w http.ResponseWriter, r *http.Request) {
 	if !s.requireStore(w) {
@@ -90,8 +89,8 @@ func (s *Server) handleHistoryDetail(w http.ResponseWriter, r *http.Request) {
 //	@Summary		Delete a history entry
 //	@Description	Soft-deletes a score by its row ID (not the AniList ID). Deliberate removal from active tracking — does not promote any other score to latest. Requires a database.
 //	@Tags			history
-//	@Param			score_id	path	int	true	"scores.id primary key"
-//	@Param                  hard            query   bool    false   "hard delete (permanent removal) if true, soft delete otherwise"
+//	@Param			score_id	path	int		true	"scores.id primary key"
+//	@Param			hard		query	bool	false	"hard delete (permanent removal) if true, soft delete otherwise"
 //	@Success		204
 //	@Failure		400	{object}	errorResponse
 //	@Failure		404	{object}	errorResponse

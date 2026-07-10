@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -11,8 +12,8 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-
 	"github.com/kondanta/kansou/internal/anilist"
+	"github.com/kondanta/kansou/internal/config"
 	"github.com/kondanta/kansou/internal/scoring"
 )
 
@@ -61,12 +62,12 @@ type mediaResponse struct {
 //	@Description	Search AniList for anime or manga by name. Returns up to 5 results sorted by relevance.
 //	@Tags			media
 //	@Produce		json
-//	@Param			q		query	string	true	"Search query"
-//	@Param			type	query	string	false	"Media type: ANIME or MANGA"
-//	@Success		200	{array}		mediaResponse
-//	@Failure		400	{object}	errorResponse
-//	@Failure		404	{object}	errorResponse
-//	@Failure		502	{object}	errorResponse
+//	@Param			q		query		string	true	"Search query"
+//	@Param			type	query		string	false	"Media type: ANIME or MANGA"
+//	@Success		200		{array}		mediaResponse
+//	@Failure		400		{object}	errorResponse
+//	@Failure		404		{object}	errorResponse
+//	@Failure		502		{object}	errorResponse
 //	@Router			/api/v1/media/search [get]
 func (s *Server) handleMediaSearch(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
@@ -309,23 +310,8 @@ func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 
 	snap := s.getSnapshot()
 
-	if req.MediaID == 0 {
-		writeError(w, http.StatusBadRequest, "media_id is required")
+	if !validateScoreRequest(w, req) {
 		return
-	}
-	if len(req.Scores) == 0 {
-		writeError(w, http.StatusBadRequest, "scores map is required and must not be empty")
-		return
-	}
-	for key, v := range req.Scores {
-		if math.IsNaN(v) || math.IsInf(v, 0) {
-			writeError(w, http.StatusBadRequest, "score for "+key+" must be a finite number")
-			return
-		}
-		if v < 1 || v > 10 {
-			writeError(w, http.StatusBadRequest, "score for "+key+" must be between 1 and 10")
-			return
-		}
 	}
 
 	// Fetch media to get genres and title for provenance.
@@ -335,27 +321,76 @@ func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Any configured dimension absent from req.Scores is implicitly skipped.
+	if req.PrimaryGenre != "" &&
+		!containsGenreCaseInsensitive(
+			activeGenres(media.Genres, req.SelectedGenres),
+			req.PrimaryGenre,
+		) {
+		writeError(
+			w,
+			http.StatusBadRequest,
+			"primary_genre "+req.PrimaryGenre+" is not in the active genre set",
+		)
+		return
+	}
+
+	entry := buildScoreEntry(req, media, snap.cfg)
+
+	result, err := snap.engine.Score(entry)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	s.persistScoreResult(r.Context(), result, snap.cfg)
+
+	writeJSON(w, http.StatusOK, toScoreResponse(result))
+}
+
+// validateScoreRequest checks that req has a media ID, a non-empty score
+// map, and only finite in-range scores. Writes a 400 response and returns
+// false on the first violation.
+func validateScoreRequest(w http.ResponseWriter, req scoreRequest) bool {
+	if req.MediaID == 0 {
+		writeError(w, http.StatusBadRequest, "media_id is required")
+		return false
+	}
+	if len(req.Scores) == 0 {
+		writeError(w, http.StatusBadRequest, "scores map is required and must not be empty")
+		return false
+	}
+	for key, v := range req.Scores {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			writeError(w, http.StatusBadRequest, "score for "+key+" must be a finite number")
+			return false
+		}
+		if v < 1 || v > 10 {
+			writeError(w, http.StatusBadRequest, "score for "+key+" must be between 1 and 10")
+			return false
+		}
+	}
+	return true
+}
+
+// buildScoreEntry assembles a scoring.Entry from the score request and the
+// fetched media, marking any configured dimension absent from the request's
+// scores as implicitly skipped.
+func buildScoreEntry(req scoreRequest, media *anilist.Media, cfg *config.Config) scoring.Entry {
 	skipped := make(map[string]bool)
-	for _, key := range snap.cfg.DimensionOrder {
+	for _, key := range cfg.DimensionOrder {
 		if _, ok := req.Scores[key]; !ok {
 			skipped[key] = true
 		}
 	}
-	if req.WeightOverrides == nil {
-		req.WeightOverrides = map[string]float64{}
+	overrides := req.WeightOverrides
+	if overrides == nil {
+		overrides = map[string]float64{}
 	}
 
-	// Validate primary_genre: must be present in the active genre set.
-	if req.PrimaryGenre != "" && !containsGenreCaseInsensitive(activeGenres(media.Genres, req.SelectedGenres), req.PrimaryGenre) {
-		writeError(w, http.StatusBadRequest, "primary_genre "+req.PrimaryGenre+" is not in the active genre set")
-		return
-	}
-
-	entry := scoring.Entry{
+	return scoring.Entry{
 		Scores:             req.Scores,
 		SkippedDimensions:  skipped,
-		WeightOverrides:    req.WeightOverrides,
+		WeightOverrides:    overrides,
 		Genres:             media.Genres,
 		UserSelectedGenres: req.SelectedGenres,
 		PrimaryGenre:       req.PrimaryGenre,
@@ -367,26 +402,27 @@ func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 			Format:             media.Format,
 			AniListURL:         aniListURL(media),
 			AllGenres:          media.Genres,
-			ConfigHash:         snap.cfg.DimensionsHash,
+			ConfigHash:         cfg.DimensionsHash,
 			PrimaryGenre:       req.PrimaryGenre,
-			PrimaryGenreWeight: snap.cfg.PrimaryGenreWeight,
+			PrimaryGenreWeight: cfg.PrimaryGenreWeight,
 			CoverImage:         media.CoverImage,
 		},
 	}
+}
 
-	result, err := snap.engine.Score(entry)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+// persistScoreResult saves the result to the configured Store, if any,
+// logging rather than failing the request if the save errors.
+func (s *Server) persistScoreResult(
+	ctx context.Context,
+	result scoring.Result,
+	cfg *config.Config,
+) {
+	if s.store == nil {
 		return
 	}
-
-	if s.store != nil {
-		if saveErr := s.store.SaveScore(r.Context(), result, snap.cfg, snap.cfg.MaxHistory); saveErr != nil {
-			slog.Error("saving score to database", "err", saveErr)
-		}
+	if err := s.store.SaveScore(ctx, result, cfg, cfg.MaxHistory); err != nil {
+		slog.Error("saving score to database", "err", err)
 	}
-
-	writeJSON(w, http.StatusOK, toScoreResponse(result))
 }
 
 // weightsRequest is the request body for POST /weights.
@@ -486,7 +522,11 @@ func (s *Server) handleWeights(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if v <= 0 || v > 1 {
-			writeError(w, http.StatusBadRequest, "weight_overrides value for "+key+" must be > 0 and ≤ 1")
+			writeError(
+				w,
+				http.StatusBadRequest,
+				"weight_overrides value for "+key+" must be > 0 and ≤ 1",
+			)
 			return
 		}
 		overrideSum += v
@@ -507,11 +547,20 @@ func (s *Server) handleWeights(w http.ResponseWriter, r *http.Request) {
 
 	// Validate primary_genre against the active genre set.
 	if req.PrimaryGenre != "" && !containsGenreCaseInsensitive(genreSource, req.PrimaryGenre) {
-		writeError(w, http.StatusBadRequest, "primary_genre "+req.PrimaryGenre+" is not in the active genre set")
+		writeError(
+			w,
+			http.StatusBadRequest,
+			"primary_genre "+req.PrimaryGenre+" is not in the active genre set",
+		)
 		return
 	}
 
-	rows := snap.engine.Weights(genreSource, req.PrimaryGenre, req.SkippedDimensions, req.WeightOverrides)
+	rows := snap.engine.Weights(
+		genreSource,
+		req.PrimaryGenre,
+		req.SkippedDimensions,
+		req.WeightOverrides,
+	)
 
 	dimRows := make([]weightDimensionRow, len(rows))
 	effectiveSum := 0.0
@@ -616,7 +665,8 @@ func decodeBody(w http.ResponseWriter, r *http.Request, v any) bool {
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v) //nolint:errcheck // write errors on closed connections are not actionable
+	json.NewEncoder(w).
+		Encode(v) //nolint:errcheck // write errors on closed connections are not actionable
 }
 
 // writeError writes a JSON error envelope with the given status and message.
@@ -637,7 +687,10 @@ func handleAnilistErr(w http.ResponseWriter, err error) {
 }
 
 // toMediaResponse converts an anilist.Media to a mediaResponse.
-func toMediaResponse(m *anilist.Media, genreConfigStatus []anilist.GenreConfigStatus) mediaResponse {
+func toMediaResponse(
+	m *anilist.Media,
+	genreConfigStatus []anilist.GenreConfigStatus,
+) mediaResponse {
 	return mediaResponse{
 		ID:           m.ID,
 		TitleRomaji:  m.TitleRomaji,

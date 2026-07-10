@@ -203,7 +203,10 @@ func build(raw *rawConfig) (*Config, error) {
 	primaryGenreWeight := DefaultPrimaryGenreWeight
 	if raw.PrimaryGenreWeight != nil {
 		if *raw.PrimaryGenreWeight < 0.0 || *raw.PrimaryGenreWeight > 1.0 {
-			return nil, fmt.Errorf("primary_genre_weight %.4f must be between 0.0 and 1.0", *raw.PrimaryGenreWeight)
+			return nil, fmt.Errorf(
+				"primary_genre_weight %.4f must be between 0.0 and 1.0",
+				*raw.PrimaryGenreWeight,
+			)
 		}
 		primaryGenreWeight = *raw.PrimaryGenreWeight
 	}
@@ -244,7 +247,11 @@ func validateWeights(dims map[string]DimensionDef) error {
 		sum += d.Weight
 	}
 	if math.Abs(sum-1.0) > weightSumTolerance {
-		return fmt.Errorf("dimension weights sum to %.4f, must be 1.0 (±%.3f)", sum, weightSumTolerance)
+		return fmt.Errorf(
+			"dimension weights sum to %.4f, must be 1.0 (±%.3f)",
+			sum,
+			weightSumTolerance,
+		)
 	}
 	return nil
 }
@@ -254,7 +261,11 @@ func validateGenreKeys(genres map[string]map[string]float64, dims map[string]Dim
 	for genre, multipliers := range genres {
 		for key := range multipliers {
 			if _, ok := dims[key]; !ok {
-				return fmt.Errorf("genre %q references unknown dimension %q — not present in [dimensions]", genre, key)
+				return fmt.Errorf(
+					"genre %q references unknown dimension %q — not present in [dimensions]",
+					genre,
+					key,
+				)
 			}
 		}
 	}
@@ -276,7 +287,13 @@ func validateMultipliers(genres map[string]map[string]float64, maxMult float64) 
 func validateGenreMultipliers(genre string, multipliers map[string]float64, maxMult float64) error {
 	for dim, val := range multipliers {
 		if val <= 0.0 || val > maxMult {
-			return fmt.Errorf("genre %q dimension %q: multiplier %.4f must be > 0.0 and ≤ %.4f", genre, dim, val, maxMult)
+			return fmt.Errorf(
+				"genre %q dimension %q: multiplier %.4f must be > 0.0 and ≤ %.4f",
+				genre,
+				dim,
+				val,
+				maxMult,
+			)
 		}
 	}
 	return nil
@@ -374,7 +391,6 @@ func Write(path string, cfg *Config) error {
 	if err := toml.NewEncoder(tmp).Encode(toRaw(cfg)); err != nil {
 		_ = tmp.Close()
 		return fmt.Errorf("encoding config: %w", err)
-
 	}
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("closing temp config file: %w", err)
@@ -428,7 +444,6 @@ func Hash(cfg *Config) string {
 		for _, dim := range dimKeys {
 			_, _ = fmt.Fprintf(h, "genre=%s:dim=%s:mult=%.6f\n", genre, dim, mults[dim])
 		}
-
 	}
 
 	_, _ = fmt.Fprintf(h, "pgw=%.6f\n", cfg.PrimaryGenreWeight)

@@ -8,10 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/spf13/cobra"
-
 	"github.com/kondanta/kansou/internal/config"
 	"github.com/kondanta/kansou/internal/store/sqlite"
+	"github.com/spf13/cobra"
 )
 
 // seedTestConfig returns a minimal, valid two-dimension config for config
@@ -78,9 +77,12 @@ func TestConfigCmd_DBMode_EndToEnd(t *testing.T) {
 	t.Run("genre set rejects multiplier above max_multiplier", func(t *testing.T) {
 		testConfigGenreSetRejectsExcessiveMultiplier(t, ctx, app)
 	})
-	t.Run("dimension remove rebalances remaining weights and strips referencing genre multipliers", func(t *testing.T) {
-		testConfigDimensionRemoveRebalances(t, ctx, app, reload)
-	})
+	t.Run(
+		"dimension remove rebalances remaining weights and strips referencing genre multipliers",
+		func(t *testing.T) {
+			testConfigDimensionRemoveRebalances(t, ctx, app, reload)
+		},
+	)
 	t.Run("dimension remove refuses to remove the last dimension", func(t *testing.T) {
 		testConfigDimensionRemoveFloor(t, ctx, app, reload)
 	})
@@ -181,7 +183,10 @@ func testConfigGenreSetThenRemove(t *testing.T, ctx context.Context, app *App, r
 	}
 	reload()
 	if _, ok := app.Config.Genres["action"]; ok {
-		t.Errorf("genre should be fully removed once its only multiplier is gone: %+v", app.Config.Genres)
+		t.Errorf(
+			"genre should be fully removed once its only multiplier is gone: %+v",
+			app.Config.Genres,
+		)
 	}
 }
 
@@ -201,7 +206,12 @@ func testConfigGenreSetRejectsExcessiveMultiplier(t *testing.T, ctx context.Cont
 	}
 }
 
-func testConfigDimensionRemoveRebalances(t *testing.T, ctx context.Context, app *App, reload func()) {
+func testConfigDimensionRemoveRebalances(
+	t *testing.T,
+	ctx context.Context,
+	app *App,
+	reload func(),
+) {
 	setCmd := app.configGenreSetCmd()
 	setCmd.SetContext(ctx)
 	if err := setCmd.RunE(setCmd, []string{"Drama", "pacing", "1.1"}); err != nil {
@@ -237,7 +247,10 @@ func testConfigDimensionRemoveRebalances(t *testing.T, ctx context.Context, app 
 		t.Errorf("weights sum to %.6f after removal, want 1.0", sum)
 	}
 	if _, ok := app.Config.Genres["drama"]; ok {
-		t.Errorf("drama genre multiplier referencing removed dimension should be gone too: %+v", app.Config.Genres)
+		t.Errorf(
+			"drama genre multiplier referencing removed dimension should be gone too: %+v",
+			app.Config.Genres,
+		)
 	}
 }
 
@@ -250,7 +263,11 @@ func testConfigDimensionRemoveFloor(t *testing.T, ctx context.Context, app *App,
 	}
 	reload()
 	if len(app.Config.Dimensions) != 1 {
-		t.Fatalf("expected exactly 1 dimension remaining, got %d: %+v", len(app.Config.Dimensions), app.Config.Dimensions)
+		t.Fatalf(
+			"expected exactly 1 dimension remaining, got %d: %+v",
+			len(app.Config.Dimensions),
+			app.Config.Dimensions,
+		)
 	}
 
 	var lastKey string
@@ -320,13 +337,17 @@ func TestConfigCmd_DBless_EndToEnd(t *testing.T) {
 			t.Fatalf("reloading active config: %v", err)
 		}
 		if reimported.Dimensions["story"].Weight != 0.6 {
-			t.Errorf("round-trip lost data: got weight %v, want 0.6", reimported.Dimensions["story"].Weight)
+			t.Errorf(
+				"round-trip lost data: got weight %v, want 0.6",
+				reimported.Dimensions["story"].Weight,
+			)
 		}
 	})
 
 	t.Run("import rejects a missing file", func(t *testing.T) {
 		importCmd := app.configImportCmd()
-		if err := importCmd.Flags().Set("file", filepath.Join(dir, "does-not-exist.toml")); err != nil {
+		if err := importCmd.Flags().
+			Set("file", filepath.Join(dir, "does-not-exist.toml")); err != nil {
 			t.Fatal(err)
 		}
 		if err := importCmd.RunE(importCmd, nil); err == nil {
