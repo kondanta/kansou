@@ -687,6 +687,17 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "anilist.GenreConfigStatus": {
+            "type": "object",
+            "properties": {
+                "isConfigured": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "server.breakdownRowResponse": {
             "type": "object",
             "properties": {
@@ -990,7 +1001,7 @@ const docTemplate = `{
                 "genres": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/anilist.GenreConfigStatus"
                     }
                 },
                 "id": {

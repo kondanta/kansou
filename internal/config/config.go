@@ -214,7 +214,7 @@ func build(raw *rawConfig) (*Config, error) {
 	}
 
 	// Lowercase all genre keys for case-insensitive matching.
-	genres := lowercaseGenreKeys(raw.Genres)
+	genres := LowercaseGenreKeys(raw.Genres)
 
 	// Preserve dimension insertion order by using TOML decode order.
 	// BurntSushi/toml does not guarantee map iteration order, so we re-decode
@@ -290,8 +290,8 @@ func validatePort(port int) error {
 	return nil
 }
 
-// lowercaseGenreKeys returns a copy of the genre map with all top-level keys lowercased.
-func lowercaseGenreKeys(genres map[string]map[string]float64) map[string]map[string]float64 {
+// LowercaseGenreKeys returns a copy of the genre map with all top-level keys lowercased.
+func LowercaseGenreKeys(genres map[string]map[string]float64) map[string]map[string]float64 {
 	out := make(map[string]map[string]float64, len(genres))
 	for genre, multipliers := range genres {
 		out[strings.ToLower(genre)] = multipliers
