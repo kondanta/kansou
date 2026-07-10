@@ -103,7 +103,11 @@ func (st *Stats) History(ctx context.Context) (*HistoryStats, error) {
 	if err != nil {
 		return nil, fmt.Errorf("config impact: %w", err)
 	}
-	return &HistoryStats{MostRescored: mostRescored, Outliers: outliers, ConfigImpact: configImpact}, nil
+	return &HistoryStats{
+		MostRescored: mostRescored,
+		Outliers:     outliers,
+		ConfigImpact: configImpact,
+	}, nil
 }
 
 // Summary aggregates one headline metric per stats category, for the bare
@@ -189,7 +193,9 @@ func topGenreScore(scores []store.GenreScore) *store.GenreScore {
 
 // variancExtremes returns pointers to the lowest- and highest-std-dev
 // dimensions, or nil, nil if variance is empty.
-func variancExtremes(variance []store.DimensionVarianceStat) (mostConsistent, leastConsistent *store.DimensionVarianceStat) {
+func variancExtremes(
+	variance []store.DimensionVarianceStat,
+) (mostConsistent, leastConsistent *store.DimensionVarianceStat) {
 	if len(variance) == 0 {
 		return nil, nil
 	}

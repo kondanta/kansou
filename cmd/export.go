@@ -5,9 +5,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/spf13/cobra"
-
 	"github.com/kondanta/kansou/internal/export"
+	"github.com/spf13/cobra"
 )
 
 // exportCmd returns the `export` cobra command.
@@ -29,7 +28,8 @@ Requires a database (KANSOU_DB_TYPE must be set).`,
 			return runExport(cmd, a, output)
 		},
 	}
-	cmd.Flags().StringVar(&output, "output", "", "Output file path (default: kansou-export-YYYY-MM-DD.html)")
+	cmd.Flags().
+		StringVar(&output, "output", "", "Output file path (default: kansou-export-YYYY-MM-DD.html)")
 	return cmd
 }
 

@@ -19,7 +19,6 @@ import (
 	migsqlite "github.com/golang-migrate/migrate/v4/database/sqlite"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jmoiron/sqlx"
-
 	"github.com/kondanta/kansou/internal/config"
 	"github.com/kondanta/kansou/internal/logger"
 	"github.com/kondanta/kansou/internal/scoring"
@@ -237,16 +236,62 @@ func (s *SQLiteStore) SaveScoringConfig(ctx context.Context, cfg *config.Config)
 
 // SaveScore saves a completed scoring session atomically across all four tables:
 // media, scores, dimension_scores, and score_matched_genres.
-func (s *SQLiteStore) SaveScore(ctx context.Context, result scoring.Result, cfg *config.Config, maxHistory int) error {
+func (s *SQLiteStore) SaveScore(
+	ctx context.Context,
+	result scoring.Result,
+	cfg *config.Config,
+	maxHistory int,
+) error {
 	log := logger.FromContext(ctx)
-	log.Debug("sqlite: saving score", "media_id", result.Meta.MediaID, "final_score", result.FinalScore)
+	log.Debug(
+		"sqlite: saving score",
+		"media_id",
+		result.Meta.MediaID,
+		"final_score",
+		result.FinalScore,
+	)
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("beginning transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Upsert media row — titles and format may change across rescores.
+	mediaRowID, err := upsertMedia(ctx, tx, result.Meta)
+	if err != nil {
+		return err
+	}
+
+	if err := replaceMediaGenres(ctx, tx, mediaRowID, result.Meta.AllGenres); err != nil {
+		return err
+	}
+
+	scoreID, err := insertScoreRow(ctx, tx, mediaRowID, result, cfg)
+	if err != nil {
+		return err
+	}
+
+	if err := insertDimensionScoreRows(ctx, tx, scoreID, result.Breakdown); err != nil {
+		return err
+	}
+
+	if err := insertMatchedGenres(ctx, tx, scoreID, result.Meta); err != nil {
+		return err
+	}
+
+	if err := pruneScoreHistory(ctx, tx, mediaRowID, maxHistory); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("committing score: %w", err)
+	}
+	log.Info("sqlite: score saved", "media_id", result.Meta.MediaID)
+	return nil
+}
+
+// upsertMedia inserts or updates the media row and returns its row id.
+// Titles, format, and cover image may change across rescores.
+func upsertMedia(ctx context.Context, tx *sqlx.Tx, meta scoring.SessionMeta) (int, error) {
 	const mediaQ = `INSERT INTO media (anilist_id, title_romaji, title_english, media_type, format, cover_image, updated_at)
 	                VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 	                ON CONFLICT(anilist_id) DO UPDATE SET
@@ -257,67 +302,83 @@ func (s *SQLiteStore) SaveScore(ctx context.Context, result scoring.Result, cfg 
 	                    cover_image   = excluded.cover_image,
 	                    updated_at    = excluded.updated_at`
 	if _, err := tx.ExecContext(ctx, mediaQ,
-		result.Meta.MediaID,
-		result.Meta.TitleRomaji,
-		result.Meta.TitleEnglish,
-		string(result.Meta.MediaType),
-		result.Meta.Format,
-		result.Meta.CoverImage,
+		meta.MediaID,
+		meta.TitleRomaji,
+		meta.TitleEnglish,
+		string(meta.MediaType),
+		meta.Format,
+		meta.CoverImage,
 	); err != nil {
-		return fmt.Errorf("upserting media: %w", err)
+		return 0, fmt.Errorf("upserting media: %w", err)
 	}
 
 	var mediaRowID int
 	if err := tx.GetContext(ctx, &mediaRowID,
-		`SELECT id FROM media WHERE anilist_id = ?`, result.Meta.MediaID,
+		`SELECT id FROM media WHERE anilist_id = ?`, meta.MediaID,
 	); err != nil {
-		return fmt.Errorf("fetching media row id: %w", err)
+		return 0, fmt.Errorf("fetching media row id: %w", err)
 	}
+	return mediaRowID, nil
+}
 
-	// Replace media genres — the genre list can change between AniList syncs.
-	if _, err := tx.ExecContext(ctx, `DELETE FROM media_genres WHERE media_id = ?`, mediaRowID); err != nil {
+// replaceMediaGenres clears and re-inserts a media row's genres, since the
+// genre list can change between AniList syncs.
+func replaceMediaGenres(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	mediaRowID int,
+	genres []string,
+) error {
+	if _, err := tx.ExecContext(
+		ctx,
+		`DELETE FROM media_genres WHERE media_id = ?`,
+		mediaRowID,
+	); err != nil {
 		return fmt.Errorf("clearing media genres: %w", err)
 	}
 	const mgQ = `INSERT OR IGNORE INTO media_genres (media_id, genre) VALUES (?, ?)`
-	for _, g := range result.Meta.AllGenres {
+	for _, g := range genres {
 		if _, err := tx.ExecContext(ctx, mgQ, mediaRowID, g); err != nil {
 			return fmt.Errorf("inserting media genre %q: %w", g, err)
 		}
 	}
+	return nil
+}
 
+// insertScore marks any previous latest score for the media as no longer
+// latest, inserts the new score row, and returns its id.
+func insertScoreRow(
+	ctx context.Context, tx *sqlx.Tx, mediaRowID int, result scoring.Result, cfg *config.Config,
+) (int64, error) {
 	snapshotBytes, err := json.Marshal(store.BuildConfigSnapshot(cfg))
 	if err != nil {
-		return fmt.Errorf("marshalling config snapshot: %w", err)
+		return 0, fmt.Errorf("marshalling config snapshot: %w", err)
 	}
 
 	var userSelectedGenresStr *string
 	if len(result.Meta.UserSelectedGenres) > 0 {
 		usgBytes, marshalErr := json.Marshal(result.Meta.UserSelectedGenres)
 		if marshalErr != nil {
-			return fmt.Errorf("marshalling user_selected_genres: %w", marshalErr)
+			return 0, fmt.Errorf("marshalling user_selected_genres: %w", marshalErr)
 		}
 		usg := string(usgBytes)
 		userSelectedGenresStr = &usg
 	}
 
 	var primaryGenreStr *string
+	var primaryGenreWeightPtr *float64
 	if result.Meta.PrimaryGenre != "" {
 		pg := result.Meta.PrimaryGenre
 		primaryGenreStr = &pg
-	}
-
-	var primaryGenreWeightPtr *float64
-	if result.Meta.PrimaryGenre != "" {
 		pgw := result.Meta.PrimaryGenreWeight
 		primaryGenreWeightPtr = &pgw
 	}
 
-	// Unset is_latest on the previous latest score before inserting the new one.
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE scores SET is_latest = 0 WHERE media_id = ? AND is_latest = 1`,
 		mediaRowID,
 	); err != nil {
-		return fmt.Errorf("unsetting previous is_latest: %w", err)
+		return 0, fmt.Errorf("unsetting previous is_latest: %w", err)
 	}
 
 	const scoreQ = `INSERT INTO scores
@@ -334,19 +395,28 @@ func (s *SQLiteStore) SaveScore(ctx context.Context, result scoring.Result, cfg 
 		userSelectedGenresStr,
 	)
 	if err != nil {
-		return fmt.Errorf("inserting score: %w", err)
+		return 0, fmt.Errorf("inserting score: %w", err)
 	}
 	scoreID, err := scoreRes.LastInsertId()
 	if err != nil {
-		return fmt.Errorf("getting score id: %w", err)
+		return 0, fmt.Errorf("getting score id: %w", err)
 	}
+	return scoreID, nil
+}
 
+// insertDimensionScores writes one dimension_scores row per breakdown entry.
+func insertDimensionScoreRows(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	scoreID int64,
+	breakdown []scoring.BreakdownRow,
+) error {
 	const dimQ = `INSERT INTO dimension_scores
 	                  (score_id, dimension_key, label, score, base_weight, final_weight,
 	                   applied_multiplier, contribution, skipped, bias_resistant, weight_override, genre_deselected,
 	                   primary_genre_multiplier, secondary_genres_multiplier)
 	              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	for _, row := range result.Breakdown {
+	for _, row := range breakdown {
 		var scoreVal, contribVal *float64
 		if !row.Skipped {
 			sv, cv := row.Score, row.Contribution
@@ -362,39 +432,56 @@ func (s *SQLiteStore) SaveScore(ctx context.Context, result scoring.Result, cfg 
 			return fmt.Errorf("inserting dimension score %q: %w", row.Key, err)
 		}
 	}
+	return nil
+}
 
+// insertMatchedGenres writes one score_matched_genres row per active genre,
+// flagging whichever one (if any) was designated primary.
+func insertMatchedGenres(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	scoreID int64,
+	meta scoring.SessionMeta,
+) error {
 	const matchQ = `INSERT INTO score_matched_genres (score_id, genre, is_primary) VALUES (?, ?, ?)`
-	primaryLower := strings.ToLower(result.Meta.PrimaryGenre)
-	for _, genre := range result.Meta.GenresActive {
+	primaryLower := strings.ToLower(meta.PrimaryGenre)
+	for _, genre := range meta.GenresActive {
 		isPrimary := primaryLower != "" && genre == primaryLower
 		if _, err := tx.ExecContext(ctx, matchQ, scoreID, genre, boolToInt(isPrimary)); err != nil {
 			return fmt.Errorf("inserting matched genre %q: %w", genre, err)
 		}
 	}
+	return nil
+}
 
-	// Apply max_history retention: 0 = keep 1 (latest only), N = keep N, -1 = keep all.
-	if maxHistory >= 0 {
-		keepCount := maxHistory
-		if keepCount == 0 {
-			keepCount = 1
-		}
-		const pruneQ = `UPDATE scores
-		                SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), deleted_reason = ?
-		                WHERE media_id = ? AND deleted_at IS NULL
-		                  AND id NOT IN (
-		                      SELECT id FROM scores
-		                      WHERE media_id = ? AND deleted_at IS NULL
-		                      ORDER BY scored_at DESC LIMIT ?
-		                  )`
-		if _, err := tx.ExecContext(ctx, pruneQ, store.DeletedReasonMaxHistory, mediaRowID, mediaRowID, keepCount); err != nil {
-			return fmt.Errorf("applying max_history: %w", err)
-		}
+// pruneScoreHistory soft-deletes scores beyond the retention window.
+// 0 keeps only the latest, N keeps the N most recent, -1 keeps all.
+func pruneScoreHistory(ctx context.Context, tx *sqlx.Tx, mediaRowID, maxHistory int) error {
+	if maxHistory < 0 {
+		return nil
 	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("committing score: %w", err)
+	keepCount := maxHistory
+	if keepCount == 0 {
+		keepCount = 1
 	}
-	log.Info("sqlite: score saved", "media_id", result.Meta.MediaID)
+	const pruneQ = `UPDATE scores
+	                SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), deleted_reason = ?
+	                WHERE media_id = ? AND deleted_at IS NULL
+	                  AND id NOT IN (
+	                      SELECT id FROM scores
+	                      WHERE media_id = ? AND deleted_at IS NULL
+	                      ORDER BY scored_at DESC LIMIT ?
+	                  )`
+	if _, err := tx.ExecContext(
+		ctx,
+		pruneQ,
+		store.DeletedReasonMaxHistory,
+		mediaRowID,
+		mediaRowID,
+		keepCount,
+	); err != nil {
+		return fmt.Errorf("applying max_history: %w", err)
+	}
 	return nil
 }
 
@@ -480,7 +567,11 @@ func (s *SQLiteStore) LatestScore(ctx context.Context, anilistID int) (*Score, e
 
 // assembleScore loads sub-tables and builds a complete store.Score from a scoreRow.
 // Used by LatestScore and ScoreHistory.
-func (s *SQLiteStore) assembleScore(ctx context.Context, anilistID int, row *scoreRow) (*Score, error) {
+func (s *SQLiteStore) assembleScore(
+	ctx context.Context,
+	anilistID int,
+	row *scoreRow,
+) (*Score, error) {
 	scoredAt, err := time.Parse(time.RFC3339, row.ScoredAt)
 	if err != nil {
 		return nil, fmt.Errorf("parsing scored_at %q: %w", row.ScoredAt, err)
@@ -542,7 +633,10 @@ func (s *SQLiteStore) fetchMediaGenres(ctx context.Context, mediaID int) ([]stri
 }
 
 // fetchDimensionScores returns the breakdown rows for a score.
-func (s *SQLiteStore) fetchDimensionScores(ctx context.Context, scoreID int) ([]store.DimensionScoreRow, error) {
+func (s *SQLiteStore) fetchDimensionScores(
+	ctx context.Context,
+	scoreID int,
+) ([]store.DimensionScoreRow, error) {
 	const q = `SELECT dimension_key, label, score, base_weight, final_weight, applied_multiplier,
 	                  contribution, skipped, bias_resistant, weight_override, genre_deselected,
 	                  primary_genre_multiplier, secondary_genres_multiplier
@@ -554,19 +648,29 @@ func (s *SQLiteStore) fetchDimensionScores(ctx context.Context, scoreID int) ([]
 	result := make([]store.DimensionScoreRow, len(rows))
 	for i, r := range rows {
 		result[i] = store.DimensionScoreRow{
-			DimensionKey: r.DimensionKey, Label: r.Label, Score: r.Score,
-			BaseWeight: r.BaseWeight, FinalWeight: r.FinalWeight,
-			AppliedMultiplier: r.AppliedMultiplier, Contribution: r.Contribution,
-			Skipped: r.Skipped, BiasResistant: r.BiasResistant,
-			WeightOverride: r.WeightOverride, GenreDeselected: r.GenreDeselected,
-			PrimaryGenreMultiplier: r.PrimaryGenreMultiplier, SecondaryGenresMultiplier: r.SecondaryGenresMultiplier,
+			DimensionKey:              r.DimensionKey,
+			Label:                     r.Label,
+			Score:                     r.Score,
+			BaseWeight:                r.BaseWeight,
+			FinalWeight:               r.FinalWeight,
+			AppliedMultiplier:         r.AppliedMultiplier,
+			Contribution:              r.Contribution,
+			Skipped:                   r.Skipped,
+			BiasResistant:             r.BiasResistant,
+			WeightOverride:            r.WeightOverride,
+			GenreDeselected:           r.GenreDeselected,
+			PrimaryGenreMultiplier:    r.PrimaryGenreMultiplier,
+			SecondaryGenresMultiplier: r.SecondaryGenresMultiplier,
 		}
 	}
 	return result, nil
 }
 
 // fetchMatchedGenres returns the active genre rows for a score.
-func (s *SQLiteStore) fetchMatchedGenres(ctx context.Context, scoreID int) ([]store.MatchedGenreRow, error) {
+func (s *SQLiteStore) fetchMatchedGenres(
+	ctx context.Context,
+	scoreID int,
+) ([]store.MatchedGenreRow, error) {
 	const q = `SELECT genre, is_primary FROM score_matched_genres WHERE score_id = ?`
 	var rows []matchRow
 	if err := s.db.SelectContext(ctx, &rows, q, scoreID); err != nil {
@@ -649,9 +753,17 @@ func (s *SQLiteStore) ListLatest(ctx context.Context) ([]Score, error) {
 			return nil, err
 		}
 		sc := Score{
-			ID: r.ID, AnilistID: r.AnilistID, TitleRomaji: r.TitleRomaji, TitleEnglish: r.TitleEnglish,
-			MediaType: r.MediaType, Format: r.Format, FinalScore: r.FinalScore,
-			ConfigHash: r.ConfigHash, IsLatest: r.IsLatest, EntryCount: r.EntryCount, ScoredAt: scoredAt,
+			ID:           r.ID,
+			AnilistID:    r.AnilistID,
+			TitleRomaji:  r.TitleRomaji,
+			TitleEnglish: r.TitleEnglish,
+			MediaType:    r.MediaType,
+			Format:       r.Format,
+			FinalScore:   r.FinalScore,
+			ConfigHash:   r.ConfigHash,
+			IsLatest:     r.IsLatest,
+			EntryCount:   r.EntryCount,
+			ScoredAt:     scoredAt,
 		}
 		if r.PrimaryGenre != nil {
 			sc.PrimaryGenre = *r.PrimaryGenre
@@ -669,7 +781,10 @@ func (s *SQLiteStore) ListLatest(ctx context.Context) ([]Score, error) {
 
 // SearchMediaByTitle returns media whose title_romaji matches query
 // case-insensitively, ordered by title_romaji.
-func (s *SQLiteStore) SearchMediaByTitle(ctx context.Context, query string) ([]store.MediaSearchResult, error) {
+func (s *SQLiteStore) SearchMediaByTitle(
+	ctx context.Context,
+	query string,
+) ([]store.MediaSearchResult, error) {
 	type row struct {
 		AnilistID    int    `db:"anilist_id"`
 		TitleRomaji  string `db:"title_romaji"`
@@ -794,7 +909,13 @@ func (s *SQLiteStore) PromoteScore(ctx context.Context, scoreID int) error {
 	const demoteQ = `UPDATE scores SET is_latest = 0,
 	                  deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), deleted_reason = ?
                           WHERE media_id = ? AND is_latest = 1 AND id != ?`
-	if _, err := tx.ExecContext(ctx, demoteQ, store.DeletedReasonPromote, mediaID, scoreID); err != nil {
+	if _, err := tx.ExecContext(
+		ctx,
+		demoteQ,
+		store.DeletedReasonPromote,
+		mediaID,
+		scoreID,
+	); err != nil {
 		return fmt.Errorf("demoting previous latest score for media %d: %w", mediaID, err)
 	}
 
@@ -944,7 +1065,9 @@ func (s *SQLiteStore) ScoreByGenre(ctx context.Context) ([]store.GenreScore, err
 // GenreDimensionAffinity returns average dimension scores grouped by genre,
 // restricted to genres that actively participated in multiplier calculation
 // (score_matched_genres) rather than the media's full genre list.
-func (s *SQLiteStore) GenreDimensionAffinity(ctx context.Context) ([]store.GenreDimensionAffinity, error) {
+func (s *SQLiteStore) GenreDimensionAffinity(
+	ctx context.Context,
+) ([]store.GenreDimensionAffinity, error) {
 	type row struct {
 		Genre        string  `db:"genre"`
 		DimensionKey string  `db:"dimension_key"`
@@ -984,7 +1107,9 @@ func (s *SQLiteStore) GenreDimensionAffinity(ctx context.Context) ([]store.Genre
 // aggregate, so the population standard deviation is computed manually from
 // AVG(x) and AVG(x^2); the MAX(0.0, ...) guard absorbs floating-point rounding
 // that can otherwise push a true-zero variance slightly negative before SQRT.
-func (s *SQLiteStore) DimensionVariance(ctx context.Context) ([]store.DimensionVarianceStat, error) {
+func (s *SQLiteStore) DimensionVariance(
+	ctx context.Context,
+) ([]store.DimensionVarianceStat, error) {
 	type row struct {
 		DimensionKey string  `db:"dimension_key"`
 		Label        string  `db:"label"`
@@ -1047,7 +1172,9 @@ func (s *SQLiteStore) ScoringConsistency(ctx context.Context) (*store.Consistenc
 // excluded via HAVING — enforced per pair, not as a global sample count,
 // since a user may have plenty of total entries but few where both
 // dimensions in a given pair were actually scored.
-func (s *SQLiteStore) DimensionCorrelation(ctx context.Context) ([]store.DimensionCorrelationStat, error) {
+func (s *SQLiteStore) DimensionCorrelation(
+	ctx context.Context,
+) ([]store.DimensionCorrelationStat, error) {
 	type row struct {
 		DimA        string  `db:"dim_a"`
 		DimB        string  `db:"dim_b"`
@@ -1071,7 +1198,11 @@ func (s *SQLiteStore) DimensionCorrelation(ctx context.Context) ([]store.Dimensi
 	}
 	result := make([]store.DimensionCorrelationStat, len(rows))
 	for i, r := range rows {
-		result[i] = store.DimensionCorrelationStat{DimensionA: r.DimA, DimensionB: r.DimB, Correlation: r.Correlation}
+		result[i] = store.DimensionCorrelationStat{
+			DimensionA:  r.DimA,
+			DimensionB:  r.DimB,
+			Correlation: r.Correlation,
+		}
 	}
 	return result, nil
 }
@@ -1128,7 +1259,11 @@ func (s *SQLiteStore) WeightOverrides(ctx context.Context) ([]store.WeightOverri
 	}
 	result := make([]store.WeightOverrideStat, len(rows))
 	for i, r := range rows {
-		result[i] = store.WeightOverrideStat{DimensionKey: r.DimensionKey, Label: r.Label, OverrideCount: r.OverrideCount}
+		result[i] = store.WeightOverrideStat{
+			DimensionKey:  r.DimensionKey,
+			Label:         r.Label,
+			OverrideCount: r.OverrideCount,
+		}
 	}
 	return result, nil
 }

@@ -22,13 +22,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/httprate"
-	httpSwagger "github.com/swaggo/http-swagger/v2"
-
 	"github.com/kondanta/kansou/internal/anilist"
 	"github.com/kondanta/kansou/internal/config"
 	"github.com/kondanta/kansou/internal/scoring"
 	"github.com/kondanta/kansou/internal/store"
 	kansouweb "github.com/kondanta/kansou/web"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 )
 
 //go:embed web/index.html
@@ -138,10 +137,14 @@ func (s *Server) buildRouter() *chi.Mux {
 		r.Get("/history/{anilist_id}", s.handleHistoryDetail)
 		r.Delete("/history/{score_id}", s.handleHistoryDelete)
 		r.Post("/history/{score_id}/promote", s.handleHistoryPromote)
-		r.With(httprate.LimitBy(rateLimitSearch, time.Minute, clientIPKey)).Get("/media/search", s.handleMediaSearch)
-		r.With(httprate.LimitBy(rateLimitFetch, time.Minute, clientIPKey)).Get("/media/{id}", s.handleMediaFetch)
-		r.With(httprate.LimitBy(rateLimitScore, time.Minute, clientIPKey)).Post("/score", s.handleScore)
-		r.With(httprate.LimitBy(rateLimitPublish, time.Minute, clientIPKey)).Post("/score/publish", s.handleScorePublish)
+		r.With(httprate.LimitBy(rateLimitSearch, time.Minute, clientIPKey)).
+			Get("/media/search", s.handleMediaSearch)
+		r.With(httprate.LimitBy(rateLimitFetch, time.Minute, clientIPKey)).
+			Get("/media/{id}", s.handleMediaFetch)
+		r.With(httprate.LimitBy(rateLimitScore, time.Minute, clientIPKey)).
+			Post("/score", s.handleScore)
+		r.With(httprate.LimitBy(rateLimitPublish, time.Minute, clientIPKey)).
+			Post("/score/publish", s.handleScorePublish)
 		r.Post("/weights", s.handleWeights)
 
 		if s.dbType != "" || s.liveConfig {

@@ -1,9 +1,9 @@
-// @title          kansou API
-// @version         1.0
-// @description     Personal anime/manga scoring tool with AniList integration.
-// @contact.name    kansou
-// @license.name    MIT
-// @BasePath        /
+//	@title			kansou API
+//	@version		1.0
+//	@description	Personal anime/manga scoring tool with AniList integration.
+//	@contact.name	kansou
+//	@license.name	MIT
+//	@BasePath		/
 
 // kansou is a personal anime/manga scoring CLI and REST server.
 // It fetches media metadata from AniList, guides an interactive scoring session,

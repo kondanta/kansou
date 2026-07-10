@@ -31,8 +31,22 @@ func seedExportFixture(t *testing.T, ctx context.Context, st *sqlite.SQLiteStore
 		characters float64
 		genres     []string
 	}{
-		{mediaID: 1, title: "Test Show A", finalScore: 8.2, story: 9.0, characters: 7.0, genres: []string{"Action", "Drama"}},
-		{mediaID: 2, title: "Test Show B", finalScore: 7.0, story: 6.0, characters: 9.0, genres: []string{"Action"}},
+		{
+			mediaID:    1,
+			title:      "Test Show A",
+			finalScore: 8.2,
+			story:      9.0,
+			characters: 7.0,
+			genres:     []string{"Action", "Drama"},
+		},
+		{
+			mediaID:    2,
+			title:      "Test Show B",
+			finalScore: 7.0,
+			story:      6.0,
+			characters: 9.0,
+			genres:     []string{"Action"},
+		},
 	}
 	for _, sess := range sessions {
 		result := scoring.Result{
@@ -78,7 +92,10 @@ func TestGenerate_EndToEnd(t *testing.T) {
 	out := string(html)
 
 	if len(html) < 200_000 {
-		t.Errorf("output suspiciously small (%d bytes) — the embedded Chart.js library alone is ~200KB", len(html))
+		t.Errorf(
+			"output suspiciously small (%d bytes) — the embedded Chart.js library alone is ~200KB",
+			len(html),
+		)
 	}
 	if !strings.Contains(out, "<!DOCTYPE html>") {
 		t.Error("output is not a valid HTML document")
@@ -90,7 +107,10 @@ func TestGenerate_EndToEnd(t *testing.T) {
 		t.Errorf("output missing seeded entries")
 	}
 	if !strings.Contains(out, `"labels":["Action","Drama"]`) {
-		t.Errorf("genre breakdown chart data missing or malformed, got: %s", excerptAround(out, "genreBreakdownChart"))
+		t.Errorf(
+			"genre breakdown chart data missing or malformed, got: %s",
+			excerptAround(out, "genreBreakdownChart"),
+		)
 	}
 	if strings.Contains(out, "<no value>") {
 		t.Error("output contains an unresolved template field (<no value>)")

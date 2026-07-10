@@ -97,8 +97,10 @@ func buildPageData(
 	}
 
 	return pageData{
-		GeneratedAt:           time.Now().Format("2006-01-02 15:04"),
-		ChartJS:               template.JS(chartJSLib), //nolint:gosec // embedded local asset, not user input
+		GeneratedAt: time.Now().Format("2006-01-02 15:04"),
+		ChartJS: template.JS(
+			chartJSLib,
+		), //nolint:gosec // embedded local asset, not user input
 		GenreBreakdownJSON:    genreBreakdownJSON,
 		ScoreByGenreJSON:      scoreByGenreJSON,
 		DimensionVarianceJSON: varianceJSON,
@@ -163,5 +165,7 @@ func chartJSON(v any) (template.JS, error) {
 	if err != nil {
 		return "", fmt.Errorf("marshalling chart data: %w", err)
 	}
-	return template.JS(b), nil //nolint:gosec // json.Marshal HTML-escapes by default, see comment above
+	return template.JS(
+		b,
+	), nil //nolint:gosec // json.Marshal HTML-escapes by default, see comment above
 }

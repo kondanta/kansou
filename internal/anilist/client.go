@@ -79,7 +79,10 @@ func (c *Client) SearchByNameMulti(ctx context.Context, search, mediaType string
 		return nil, err
 	}
 	if len(result.Data.Page.Media) == 0 {
-		return nil, fmt.Errorf("no results found for %q — try a different search term or use --url to provide a direct AniList link", search)
+		return nil, fmt.Errorf(
+			"no results found for %q — try a different search term or use --url to provide a direct AniList link",
+			search,
+		)
 	}
 
 	media := make([]Media, len(result.Data.Page.Media))
@@ -136,7 +139,10 @@ func ParseMediaURL(rawURL string) (int, error) {
 	// Path: /{type}/{id} or /{type}/{id}/{slug}
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 	if len(parts) < 2 {
-		return 0, fmt.Errorf("cannot extract media ID from URL %q — expected format: https://anilist.co/{type}/{id}", rawURL)
+		return 0, fmt.Errorf(
+			"cannot extract media ID from URL %q — expected format: https://anilist.co/{type}/{id}",
+			rawURL,
+		)
 	}
 	id, err := strconv.Atoi(parts[1])
 	if err != nil {
@@ -152,7 +158,12 @@ func ParseMediaURL(rawURL string) (int, error) {
 // If notes is non-empty, the existing list entry notes are fetched first and the
 // new scoring block is appended before saving, so prior notes are preserved.
 // Requires ANILIST_TOKEN to be set; returns an error if it is missing or empty.
-func (c *Client) PublishScore(ctx context.Context, mediaID int, score float64, notes string) (*PublishResult, error) {
+func (c *Client) PublishScore(
+	ctx context.Context,
+	mediaID int,
+	score float64,
+	notes string,
+) (*PublishResult, error) {
 	if c.token == "" {
 		return nil, fmt.Errorf(
 			"ANILIST_TOKEN environment variable is not set\n       set it with: export ANILIST_TOKEN=your_token_here\n       see docs/ANILIST_INTEGRATION.md for how to obtain a token",
@@ -176,7 +187,15 @@ func (c *Client) PublishScore(ctx context.Context, mediaID int, score float64, n
 	}
 
 	log := logger.FromContext(ctx)
-	log.Debug("anilist: publishing score", "media_id", mediaID, "score", score, "with_notes", notes != "")
+	log.Debug(
+		"anilist: publishing score",
+		"media_id",
+		mediaID,
+		"score",
+		score,
+		"with_notes",
+		notes != "",
+	)
 	resp, err := c.do(ctx, mutation, vars, true)
 	if err != nil {
 		log.Error("anilist: publish failed", "media_id", mediaID, "err", err)
@@ -197,7 +216,9 @@ func (c *Client) PublishScore(ctx context.Context, mediaID int, score float64, n
 		return nil, err
 	}
 	if result.Data.SaveMediaListEntry == nil {
-		return nil, fmt.Errorf("AniList returned no entry after publish — score may not have been saved")
+		return nil, fmt.Errorf(
+			"AniList returned no entry after publish — score may not have been saved",
+		)
 	}
 	e := result.Data.SaveMediaListEntry
 	return &PublishResult{
@@ -242,13 +263,20 @@ func (c *Client) fetchExistingNotes(ctx context.Context, mediaID int) string {
 
 // do executes a GraphQL request. If withAuth is true, the Authorization header
 // is included. The caller is responsible for closing resp.Body.
-func (c *Client) do(ctx context.Context, query string, variables map[string]any, withAuth bool) (*http.Response, error) {
+func (c *Client) do(
+	ctx context.Context,
+	query string,
+	variables map[string]any,
+	withAuth bool,
+) (*http.Response, error) {
 	log := logger.FromContext(ctx)
 
-	body, err := json.Marshal(map[string]any{ // interface{} required: GraphQL request body is heterogeneous
-		"query":     query,
-		"variables": variables,
-	})
+	body, err := json.Marshal(
+		map[string]any{ // interface{} required: GraphQL request body is heterogeneous
+			"query":     query,
+			"variables": variables,
+		},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("marshalling GraphQL request: %w", err)
 	}
@@ -266,17 +294,46 @@ func (c *Client) do(ctx context.Context, query string, variables map[string]any,
 	resp, err := c.http.Do(req)
 	if err != nil {
 		log.Error("anilist: request failed", "err", err)
-		return nil, &UpstreamError{StatusCode: 0, err: fmt.Errorf("AniList is currently unreachable: %w", err)}
+		return nil, &UpstreamError{
+			StatusCode: 0,
+			err:        fmt.Errorf("AniList is currently unreachable: %w", err),
+		}
 	}
 	if resp.StatusCode != http.StatusOK {
 		body, err := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
 		_ = resp.Body.Close()
 		if err != nil {
-			log.Error("anilist: non-200 response, failed to read body", "status", resp.StatusCode, "err", err)
-			return nil, &UpstreamError{StatusCode: resp.StatusCode, err: fmt.Errorf("AniList returned HTTP %d (could not read error body: %w)", resp.StatusCode, err)}
+			log.Error(
+				"anilist: non-200 response, failed to read body",
+				"status",
+				resp.StatusCode,
+				"err",
+				err,
+			)
+			return nil, &UpstreamError{
+				StatusCode: resp.StatusCode,
+				err: fmt.Errorf(
+					"AniList returned HTTP %d (could not read error body: %w)",
+					resp.StatusCode,
+					err,
+				),
+			}
 		}
-		log.Error("anilist: non-200 response", "status", resp.StatusCode, "body", strings.TrimSpace(string(body)))
-		return nil, &UpstreamError{StatusCode: resp.StatusCode, err: fmt.Errorf("AniList returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))}
+		log.Error(
+			"anilist: non-200 response",
+			"status",
+			resp.StatusCode,
+			"body",
+			strings.TrimSpace(string(body)),
+		)
+		return nil, &UpstreamError{
+			StatusCode: resp.StatusCode,
+			err: fmt.Errorf(
+				"AniList returned HTTP %d: %s",
+				resp.StatusCode,
+				strings.TrimSpace(string(body)),
+			),
+		}
 	}
 	return resp, nil
 }
@@ -284,7 +341,10 @@ func (c *Client) do(ctx context.Context, query string, variables map[string]any,
 // decodeResponse decodes a JSON response body into dst.
 // dst must be a pointer to a struct with an Errors []gqlError field at the top level.
 // The caller must call checkErrors on the decoded Errors slice separately.
-func decodeResponse(resp *http.Response, dst any) error { // interface{} required: generic JSON decode target
+func decodeResponse(
+	resp *http.Response,
+	dst any,
+) error { // interface{} required: generic JSON decode target
 	if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
 		return fmt.Errorf("decoding AniList response: %w", err)
 	}

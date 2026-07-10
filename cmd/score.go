@@ -9,12 +9,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/spf13/cobra"
-
 	"github.com/kondanta/kansou/internal/anilist"
 	"github.com/kondanta/kansou/internal/config"
 	"github.com/kondanta/kansou/internal/scoring"
 	"github.com/kondanta/kansou/internal/store"
+	"github.com/spf13/cobra"
 )
 
 // scoreCmd returns the `score` cobra command and its subcommands.
@@ -47,13 +46,23 @@ Enter 's' or 'skip' to mark a dimension as not applicable.
 After scoring, prompts whether to publish the result to AniList.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return a.runScoreAdd(cmd.Context(), args, urlFlag, typeFlag, breakdownFlag, weightFlag, primaryGenreFlag, notesFlag)
+			return a.runScoreAdd(
+				cmd.Context(),
+				args,
+				urlFlag,
+				typeFlag,
+				breakdownFlag,
+				weightFlag,
+				primaryGenreFlag,
+				notesFlag,
+			)
 		},
 	}
 
 	cmd.Flags().StringVar(&urlFlag, "url", "", "Fetch by direct AniList URL instead of searching")
 	cmd.Flags().StringVar(&typeFlag, "type", "", "Media type filter: anime or manga")
-	cmd.Flags().BoolVar(&breakdownFlag, "breakdown", false, "Show weighted contribution table after scoring")
+	cmd.Flags().
+		BoolVar(&breakdownFlag, "breakdown", false, "Show weighted contribution table after scoring")
 	cmd.Flags().StringVar(
 		&weightFlag, "weight", "",
 		"Override dimension weights for this session (e.g. pacing=0.05,world_building=0.20)",
@@ -62,7 +71,8 @@ After scoring, prompts whether to publish the result to AniList.`,
 		&primaryGenreFlag, "primary-genre", "",
 		"Designate one genre as primary for blended multiplier calculation (e.g. Mystery)",
 	)
-	cmd.Flags().BoolVar(&notesFlag, "notes", false, "Append scoring breakdown to AniList list entry notes when publishing")
+	cmd.Flags().
+		BoolVar(&notesFlag, "notes", false, "Append scoring breakdown to AniList list entry notes when publishing")
 	return cmd
 }
 
@@ -70,7 +80,11 @@ After scoring, prompts whether to publish the result to AniList.`,
 // calculates the score, and offers to publish it to AniList.
 func (a *App) runScoreAdd(
 	ctx context.Context,
-	args []string, urlFlag, typeFlag string, breakdown bool, weightFlag, primaryGenreFlag string, notesFlag bool,
+	args []string,
+	urlFlag, typeFlag string,
+	breakdown bool,
+	weightFlag, primaryGenreFlag string,
+	notesFlag bool,
 ) error {
 	mediaType, err := resolveMediaType(typeFlag)
 	if err != nil {
@@ -90,39 +104,69 @@ func (a *App) runScoreAdd(
 		return err
 	}
 
-	// Display media header.
-	episodes := ""
-	if media.Episodes > 0 {
-		episodes = fmt.Sprintf(" · %d episodes", media.Episodes)
-	} else if media.Chapters > 0 {
-		episodes = fmt.Sprintf(" · %d chapters", media.Chapters)
-	}
-	fmt.Printf("\nFound: %s (%s · %s%s)\n", media.TitleRomaji, string(media.MediaType), media.Format, episodes)
-	if len(media.Genres) > 0 {
-		fmt.Printf("Genres: %s\n\n", strings.Join(media.Genres, ", "))
-	}
+	printMediaHeader(media)
 
-	var prevScores map[string]float64
-	var prevSkipped map[string]bool
-	if a.Store != nil {
-		prev, prevErr := a.Store.LatestScore(ctx, media.ID)
-		if prevErr != nil {
-			return fmt.Errorf("fetching previous score: %w", prevErr)
-		}
-		if prev != nil {
-			prevScores, prevSkipped = extractPrevScores(prev)
-			fmt.Printf("Previous score: %.2f — pre-filling dimensions\n\n", prev.FinalScore)
-		}
+	prevScores, prevSkipped, err := a.loadPreviousScores(ctx, media.ID)
+	if err != nil {
+		return err
 	}
 
 	reader := bufio.NewReader(os.Stdin)
 
-	primaryGenre, err := resolvePrimaryGenre(primaryGenreFlag, media.Genres, reader)
+	session, err := a.collectScores(
+		reader, media.Genres, primaryGenreFlag, overrides, prevScores, prevSkipped,
+	)
 	if errors.Is(err, errUserCancelled) {
 		return nil
 	}
 	if err != nil {
 		return err
+	}
+
+	entry := buildScoringEntry(media, session, overrides, a.Config)
+
+	result, err := a.Engine.Score(entry)
+	if err != nil {
+		return err
+	}
+
+	a.saveScoreToStore(ctx, result)
+
+	fmt.Println("──────────────────────────────")
+	fmt.Printf("  Final Score   %.2f / 10\n", result.FinalScore)
+	fmt.Println("──────────────────────────────")
+	fmt.Println()
+
+	if breakdown {
+		printBreakdown(result)
+	}
+
+	return a.promptAndPublish(ctx, reader, media.ID, result, notesFlag)
+}
+
+// scoringSession holds the outcome of an interactive scoring prompt: the
+// collected per-dimension scores, the skipped dimensions, and the resolved
+// primary genre (if any).
+type scoringSession struct {
+	Scores       map[string]float64
+	Skipped      map[string]bool
+	PrimaryGenre string
+}
+
+// collectScores resolves the primary genre, runs the interactive per-dimension
+// scoring prompt, and validates that at least one dimension was scored.
+// Returns errUserCancelled if the user aborts the primary genre picker or the
+// scoring loop.
+func (a *App) collectScores(
+	reader *bufio.Reader,
+	genres []string,
+	primaryGenreFlag string,
+	overrides, prevScores map[string]float64,
+	prevSkipped map[string]bool,
+) (scoringSession, error) {
+	primaryGenre, err := resolvePrimaryGenre(primaryGenreFlag, genres, reader)
+	if err != nil {
+		return scoringSession{}, err
 	}
 	if primaryGenre != "" && primaryGenreFlag == "" {
 		blendPct := int(a.Config.PrimaryGenreWeight * 100)
@@ -139,58 +183,110 @@ func (a *App) runScoreAdd(
 	scores, skipped, err := runScoringLoop(
 		reader, a.Config.DimensionOrder, a.Config.Dimensions, overrides, prevScores, prevSkipped,
 	)
-	if errors.Is(err, errUserCancelled) {
-		return nil
-	}
 	if err != nil {
-		return err
+		return scoringSession{}, err
 	}
 
 	if len(skipped) == len(a.Config.DimensionOrder) {
-		return fmt.Errorf("all dimensions were skipped — at least one dimension must be scored")
+		return scoringSession{}, fmt.Errorf(
+			"all dimensions were skipped — at least one dimension must be scored",
+		)
 	}
 
-	entry := scoring.Entry{
-		Scores:            scores,
-		SkippedDimensions: skipped,
+	return scoringSession{Scores: scores, Skipped: skipped, PrimaryGenre: primaryGenre}, nil
+}
+
+// printMediaHeader prints the resolved media's title, format, and genres.
+func printMediaHeader(media *anilist.Media) {
+	episodes := ""
+	if media.Episodes > 0 {
+		episodes = fmt.Sprintf(" · %d episodes", media.Episodes)
+	} else if media.Chapters > 0 {
+		episodes = fmt.Sprintf(" · %d chapters", media.Chapters)
+	}
+	fmt.Printf(
+		"\nFound: %s (%s · %s%s)\n",
+		media.TitleRomaji,
+		string(media.MediaType),
+		media.Format,
+		episodes,
+	)
+	if len(media.Genres) > 0 {
+		fmt.Printf("Genres: %s\n\n", strings.Join(media.Genres, ", "))
+	}
+}
+
+// loadPreviousScores fetches the media's latest saved score (if a Store is
+// configured) and returns its per-dimension scores and skipped dimensions
+// for pre-filling the scoring prompt.
+func (a *App) loadPreviousScores(
+	ctx context.Context, mediaID int,
+) (map[string]float64, map[string]bool, error) {
+	if a.Store == nil {
+		return nil, nil, nil
+	}
+	prev, err := a.Store.LatestScore(ctx, mediaID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("fetching previous score: %w", err)
+	}
+	if prev == nil {
+		return nil, nil, nil
+	}
+	prevScores, prevSkipped := extractPrevScores(prev)
+	fmt.Printf("Previous score: %.2f — pre-filling dimensions\n\n", prev.FinalScore)
+	return prevScores, prevSkipped, nil
+}
+
+// buildScoringEntry assembles a scoring.Entry from the resolved media,
+// collected scoring session, and session-level weight overrides.
+func buildScoringEntry(
+	media *anilist.Media,
+	session scoringSession,
+	overrides map[string]float64,
+	cfg *config.Config,
+) scoring.Entry {
+	return scoring.Entry{
+		Scores:            session.Scores,
+		SkippedDimensions: session.Skipped,
 		WeightOverrides:   overrides,
 		Genres:            media.Genres,
-		PrimaryGenre:      primaryGenre,
+		PrimaryGenre:      session.PrimaryGenre,
 		Meta: scoring.SessionMeta{
-			MediaID:            media.ID,
-			TitleRomaji:        media.TitleRomaji,
-			TitleEnglish:       media.TitleEnglish,
-			MediaType:          media.MediaType,
-			Format:             media.Format,
-			AniListURL:         fmt.Sprintf("https://anilist.co/%s/%d", strings.ToLower(string(media.MediaType)), media.ID),
+			MediaID:      media.ID,
+			TitleRomaji:  media.TitleRomaji,
+			TitleEnglish: media.TitleEnglish,
+			MediaType:    media.MediaType,
+			Format:       media.Format,
+			AniListURL: fmt.Sprintf(
+				"https://anilist.co/%s/%d",
+				strings.ToLower(string(media.MediaType)),
+				media.ID,
+			),
 			AllGenres:          media.Genres,
-			ConfigHash:         a.Config.DimensionsHash,
-			PrimaryGenre:       primaryGenre,
-			PrimaryGenreWeight: a.Config.PrimaryGenreWeight,
+			ConfigHash:         cfg.DimensionsHash,
+			PrimaryGenre:       session.PrimaryGenre,
+			PrimaryGenreWeight: cfg.PrimaryGenreWeight,
 			CoverImage:         media.CoverImage,
 		},
 	}
+}
 
-	result, err := a.Engine.Score(entry)
-	if err != nil {
-		return err
+// saveScoreToStore persists the result to the configured Store, if any,
+// warning to stderr on failure rather than aborting the session.
+func (a *App) saveScoreToStore(ctx context.Context, result scoring.Result) {
+	if a.Store == nil {
+		return
 	}
-
-	if a.Store != nil {
-		if saveErr := a.Store.SaveScore(ctx, result, a.Config, a.Config.MaxHistory); saveErr != nil {
-			fmt.Fprintf(os.Stderr, "warning: saving score to database: %v\n", saveErr)
-		}
+	if err := a.Store.SaveScore(ctx, result, a.Config, a.Config.MaxHistory); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: saving score to database: %v\n", err)
 	}
+}
 
-	fmt.Println("──────────────────────────────")
-	fmt.Printf("  Final Score   %.2f / 10\n", result.FinalScore)
-	fmt.Println("──────────────────────────────")
-	fmt.Println()
-
-	if breakdown {
-		printBreakdown(result)
-	}
-
+// promptAndPublish prompts the user to publish the result to AniList and, if
+// confirmed, submits the score (with optional breakdown notes).
+func (a *App) promptAndPublish(
+	ctx context.Context, reader *bufio.Reader, mediaID int, result scoring.Result, notesFlag bool,
+) error {
 	fmt.Print("Publish to AniList? [y/N]: ")
 	line, err := reader.ReadString('\n')
 	if err != nil || strings.ToLower(strings.TrimSpace(line)) != "y" {
@@ -202,11 +298,11 @@ func (a *App) runScoreAdd(
 		notes = formatNote(result)
 	}
 
-	pub, pubErr := a.AniList.PublishScore(ctx, media.ID, result.FinalScore, notes)
-	if pubErr != nil {
+	pub, err := a.AniList.PublishScore(ctx, mediaID, result.FinalScore, notes)
+	if err != nil {
 		return fmt.Errorf(
 			"publishing score to AniList (your calculated score was %.2f): %w",
-			result.FinalScore, pubErr,
+			result.FinalScore, err,
 		)
 	}
 	fmt.Printf("✓ Score published to AniList\n")
@@ -256,73 +352,107 @@ func runScoringLoop(
 
 	for _, key := range order {
 		def := dims[key]
-		hint := ""
-		if prevSkipped[key] {
-			hint = " [prev: skipped]"
-		} else if prev, ok := prevScores[key]; ok {
-			hint = fmt.Sprintf(" [prev: %.1f]", prev)
+		printDimensionPrompt(key, def, prevScores, prevSkipped)
+
+		score, isSkipped, err := promptDimensionScore(
+			reader,
+			key,
+			def,
+			overrides,
+			prevScores,
+			prevSkipped,
+		)
+		if err != nil {
+			return nil, nil, err
 		}
-		fmt.Printf("  %-15s— %s%s\n", def.Label, def.Description, hint)
-
-		for {
-			fmt.Print("  > ")
-			line, readErr := reader.ReadString('\n')
-			if readErr != nil {
-				fmt.Fprintln(os.Stderr, "\nsession cancelled — no score was published")
-				return nil, nil, errUserCancelled
-			}
-			input := strings.TrimSpace(line)
-
-			if input == "" {
-				if prevSkipped[key] {
-					if _, overridden := overrides[key]; overridden {
-						return nil, nil, fmt.Errorf(
-							"dimension %q was both weight-overridden and skipped — these are mutually exclusive",
-							key,
-						)
-					}
-					skipped[key] = true
-					fmt.Printf("  ✓ %s marked as not applicable — excluded from score\n\n", def.Label)
-					break
-				}
-				if prev, ok := prevScores[key]; ok {
-					scores[key] = prev
-					fmt.Println()
-					break
-				}
-				fmt.Println("  invalid: enter a number between 1 and 10, or 's' to skip")
-				continue
-			}
-
-			if input == "s" || input == "skip" {
-				if _, overridden := overrides[key]; overridden {
-					return nil, nil, fmt.Errorf(
-						"dimension %q was both weight-overridden and skipped — these are mutually exclusive",
-						key,
-					)
-				}
-				skipped[key] = true
-				fmt.Printf("  ✓ %s marked as not applicable — excluded from score\n\n", def.Label)
-				break
-			}
-
-			score, parseErr := strconv.ParseFloat(input, 64)
-			if parseErr != nil {
-				fmt.Println("  invalid: enter a number between 1 and 10, or 's' to skip")
-				continue
-			}
-			if score < 1 || score > 10 {
-				fmt.Println("  invalid: score must be between 1 and 10")
-				continue
-			}
-
+		if isSkipped {
+			skipped[key] = true
+		} else {
 			scores[key] = score
-			fmt.Println()
-			break
 		}
 	}
 
 	return scores, skipped, nil
+}
+
+// printDimensionPrompt prints a dimension's label, description, and — if a
+// previous session scored or skipped it — a hint of that previous value.
+func printDimensionPrompt(
+	key string, def config.DimensionDef, prevScores map[string]float64, prevSkipped map[string]bool,
+) {
+	hint := ""
+	if prevSkipped[key] {
+		hint = " [prev: skipped]"
+	} else if prev, ok := prevScores[key]; ok {
+		hint = fmt.Sprintf(" [prev: %.1f]", prev)
+	}
+	fmt.Printf("  %-15s— %s%s\n", def.Label, def.Description, hint)
+}
+
+// promptDimensionScore reads input for a single dimension until it gets a
+// valid score, a skip, or Enter (which reuses the previous value/skip state).
+// Returns errUserCancelled on EOF, or an error if an overridden dimension is
+// also skipped.
+func promptDimensionScore(
+	reader *bufio.Reader,
+	key string,
+	def config.DimensionDef,
+	overrides map[string]float64,
+	prevScores map[string]float64,
+	prevSkipped map[string]bool,
+) (float64, bool, error) {
+	for {
+		fmt.Print("  > ")
+		line, readErr := reader.ReadString('\n')
+		if readErr != nil {
+			fmt.Fprintln(os.Stderr, "\nsession cancelled — no score was published")
+			return 0, false, errUserCancelled
+		}
+		input := strings.TrimSpace(line)
+
+		if input == "" {
+			if prevSkipped[key] {
+				if _, overridden := overrides[key]; overridden {
+					return 0, false, fmt.Errorf(
+						"dimension %q was both weight-overridden and skipped — these are mutually exclusive",
+						key,
+					)
+				}
+				fmt.Printf("  ✓ %s marked as not applicable — excluded from score\n\n", def.Label)
+				return 0, true, nil
+			}
+			if prev, ok := prevScores[key]; ok {
+				fmt.Println()
+				return prev, false, nil
+			}
+			fmt.Println("  invalid: enter a number between 1 and 10, or 's' to skip")
+			continue
+		}
+
+		if input == "s" || input == "skip" {
+			if _, overridden := overrides[key]; overridden {
+				return 0, false, fmt.Errorf(
+					"dimension %q was both weight-overridden and skipped — these are mutually exclusive",
+					key,
+				)
+			}
+			fmt.Printf("  ✓ %s marked as not applicable — excluded from score\n\n", def.Label)
+			return 0, true, nil
+		}
+
+		score, parseErr := strconv.ParseFloat(input, 64)
+		if parseErr != nil {
+			fmt.Println("  invalid: enter a number between 1 and 10, or 's' to skip")
+			continue
+		}
+		if score < 1 || score > 10 {
+			fmt.Println("  invalid: score must be between 1 and 10")
+			continue
+		}
+
+		fmt.Println()
+		return score, false, nil
+	}
 }
 
 // extractPrevScores converts a store.Score into the two maps consumed by
@@ -353,7 +483,10 @@ func parseWeightFlag(flag string, dims map[string]config.DimensionDef) (map[stri
 		pair = strings.TrimSpace(pair)
 		parts := strings.SplitN(pair, "=", 2)
 		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid --weight format %q — expected key=value pairs separated by commas", pair)
+			return nil, fmt.Errorf(
+				"invalid --weight format %q — expected key=value pairs separated by commas",
+				pair,
+			)
 		}
 		key := strings.TrimSpace(parts[0])
 		valStr := strings.TrimSpace(parts[1])
@@ -363,7 +496,11 @@ func parseWeightFlag(flag string, dims map[string]config.DimensionDef) (map[stri
 		}
 		val, err := strconv.ParseFloat(valStr, 64)
 		if err != nil || val <= 0 || val > 1.0 {
-			return nil, fmt.Errorf("invalid weight %q for dimension %q — must be > 0.0 and ≤ 1.0", valStr, key)
+			return nil, fmt.Errorf(
+				"invalid weight %q for dimension %q — must be > 0.0 and ≤ 1.0",
+				valStr,
+				key,
+			)
 		}
 		result[key] = val
 		sum += val
@@ -399,17 +536,18 @@ func printBreakdown(result scoring.Result) {
 		contrib := fmt.Sprintf("%.2f", row.Contribution)
 
 		annotations := ""
-		if row.Skipped {
+		switch {
+		case row.Skipped:
 			scoreStr = "—"
 			mult = "—"
 			finalW = "—"
 			contrib = "—"
 			annotations = " [skipped]"
-		} else if row.WeightOverride {
+		case row.WeightOverride:
 			annotations = " [overridden]"
-		} else if row.PrimaryGenre != "" && !row.BiasResistant {
+		case row.PrimaryGenre != "" && !row.BiasResistant:
 			annotations = " [primary blended]"
-		} else if row.AppliedMultiplier != 1.0 {
+		case row.AppliedMultiplier != 1.0:
 			annotations = " [genre adjusted]"
 		}
 		if row.BiasResistant && !row.Skipped {
@@ -479,7 +617,11 @@ func unmatchedGenres(all, matched []string) []string {
 // the interactive prompt is bypassed entirely.
 // If flagVal is empty and mediaGenres is non-empty, the user is prompted interactively.
 // Empty input (Enter) skips designation. Returns errUserCancelled on EOF.
-func resolvePrimaryGenre(flagVal string, mediaGenres []string, reader *bufio.Reader) (string, error) {
+func resolvePrimaryGenre(
+	flagVal string,
+	mediaGenres []string,
+	reader *bufio.Reader,
+) (string, error) {
 	if flagVal != "" {
 		// --primary-genre flag: validate and return without prompting.
 		lower := strings.ToLower(flagVal)
@@ -572,7 +714,13 @@ func formatNote(result scoring.Result) string {
 	if result.Meta.PrimaryGenre != "" {
 		if blendWasApplied(result.Meta) {
 			blendPct := int(result.Meta.PrimaryGenreWeight * 100)
-			fmt.Fprintf(&b, "Primary: %s (blend %d/%d)\n", result.Meta.PrimaryGenre, blendPct, 100-blendPct)
+			fmt.Fprintf(
+				&b,
+				"Primary: %s (blend %d/%d)\n",
+				result.Meta.PrimaryGenre,
+				blendPct,
+				100-blendPct,
+			)
 		} else {
 			fmt.Fprintf(&b, "Primary: %s (sole active genre)\n", result.Meta.PrimaryGenre)
 		}
@@ -581,7 +729,11 @@ func formatNote(result scoring.Result) string {
 		fmt.Fprintf(&b, "Genres:  %s\n", strings.Join(result.Meta.AllGenres, ", "))
 	}
 	if len(result.Meta.MatchedGenres) > 0 {
-		fmt.Fprintf(&b, "Matched: %s\n", annotateMatchedGenres(result.Meta.MatchedGenres, result.Meta.PrimaryGenre))
+		fmt.Fprintf(
+			&b,
+			"Matched: %s\n",
+			annotateMatchedGenres(result.Meta.MatchedGenres, result.Meta.PrimaryGenre),
+		)
 	}
 	fmt.Fprintf(&b, "Config:  %s", result.Meta.ConfigHash)
 

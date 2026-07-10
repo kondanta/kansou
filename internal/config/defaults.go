@@ -6,7 +6,13 @@ package config
 // users may define any dimensions they like in their config file.
 func defaults() *Config {
 	order := []string{
-		"story", "enjoyment", "characters", "production", "pacing", "world_building", "value", //nolint:goconst
+		"story",          //nolint:goconst
+		"enjoyment",      //nolint:goconst
+		"characters",     //nolint:goconst
+		"production",     //nolint:goconst
+		"pacing",         //nolint:goconst
+		"world_building", //nolint:goconst
+		"value",          //nolint:goconst
 	}
 	dims := map[string]DimensionDef{
 		"story": {
@@ -147,8 +153,12 @@ func defaults() *Config {
 		PrimaryGenreWeight: DefaultPrimaryGenreWeight,
 		MaxHistory:         DefaultMaxHistory,
 		Server: ServerConfig{
-			Port:               DefaultPort,
-			CORSAllowedOrigins: []string{"http://localhost:3000", "http://localhost:5173", "http://localhost:8080"},
+			Port: DefaultPort,
+			CORSAllowedOrigins: []string{
+				"http://localhost:3000",
+				"http://localhost:5173",
+				"http://localhost:8080",
+			},
 		},
 	}
 }

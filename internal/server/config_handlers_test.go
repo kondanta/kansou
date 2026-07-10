@@ -101,10 +101,18 @@ func TestHandleGetConfig_ReturnsPayload(t *testing.T) {
 		t.Error("config_hash must not be empty")
 	}
 	if payload.PrimaryGenreWeight != config.DefaultPrimaryGenreWeight {
-		t.Errorf("primary_genre_weight: got %v, want %v", payload.PrimaryGenreWeight, config.DefaultPrimaryGenreWeight)
+		t.Errorf(
+			"primary_genre_weight: got %v, want %v",
+			payload.PrimaryGenreWeight,
+			config.DefaultPrimaryGenreWeight,
+		)
 	}
 	if payload.MaxMultiplier != config.DefaultMaxMultiplier {
-		t.Errorf("max_multiplier: got %v, want %v", payload.MaxMultiplier, config.DefaultMaxMultiplier)
+		t.Errorf(
+			"max_multiplier: got %v, want %v",
+			payload.MaxMultiplier,
+			config.DefaultMaxMultiplier,
+		)
 	}
 }
 
@@ -139,7 +147,9 @@ func TestHandleGetConfig_RouteAbsentWithoutFlag(t *testing.T) {
 	// Absence of JSON content-type confirms the config handler did not run.
 	ct := rec.Header().Get("Content-Type")
 	if ct == "application/json" {
-		t.Error("GET /api/v1/config returned JSON — config handler should not be registered without --live-config")
+		t.Error(
+			"GET /api/v1/config returned JSON — config handler should not be registered without --live-config",
+		)
 	}
 }
 
@@ -285,7 +295,9 @@ func TestHandlePostConfig_DBMode_PersistsToStore_NotDisk(t *testing.T) {
 		t.Fatalf("reading config file after request: %v", err)
 	}
 	if string(before) != string(after) {
-		t.Error("config file was modified in DB mode — handlePostConfig should persist to the store, not disk")
+		t.Error(
+			"config file was modified in DB mode — handlePostConfig should persist to the store, not disk",
+		)
 	}
 }
 
@@ -372,7 +384,11 @@ func TestHandlePostConfig_InvalidWeights_Returns400(t *testing.T) {
 func TestHandlePostConfig_MalformedBody_Returns400(t *testing.T) {
 	srv := newTestServer(minimalConfig(), true, "")
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/config", bytes.NewReader([]byte("not json")))
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/config",
+		bytes.NewReader([]byte("not json")),
+	)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.router.ServeHTTP(rec, req)
@@ -441,6 +457,8 @@ func TestHandlePostConfig_RouteAbsentWithoutFlag(t *testing.T) {
 	// the config handler did not run.
 	ct := rec.Header().Get("Content-Type")
 	if ct == "application/json" {
-		t.Error("POST /api/v1/config returned JSON — config handler should not be registered without --live-config")
+		t.Error(
+			"POST /api/v1/config returned JSON — config handler should not be registered without --live-config",
+		)
 	}
 }

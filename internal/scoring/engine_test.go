@@ -131,7 +131,11 @@ func TestScore_BiasResistantIgnoresGenreMultiplier(t *testing.T) {
 	}
 	for _, row := range result.Breakdown {
 		if row.BiasResistant && row.AppliedMultiplier != 1.0 {
-			t.Errorf("bias-resistant dimension %q got multiplier %v, want 1.0", row.Key, row.AppliedMultiplier)
+			t.Errorf(
+				"bias-resistant dimension %q got multiplier %v, want 1.0",
+				row.Key,
+				row.AppliedMultiplier,
+			)
 		}
 	}
 }
@@ -162,7 +166,11 @@ func TestScore_NoMatchedGenres_Multiplier1(t *testing.T) {
 	}
 	for _, row := range result.Breakdown {
 		if !approxEqual(row.AppliedMultiplier, 1.0, 0.001) && !row.Skipped && !row.BiasResistant {
-			t.Errorf("no matched genres: expected multiplier 1.0 for %q, got %v", row.Key, row.AppliedMultiplier)
+			t.Errorf(
+				"no matched genres: expected multiplier 1.0 for %q, got %v",
+				row.Key,
+				row.AppliedMultiplier,
+			)
 		}
 	}
 }
@@ -180,7 +188,10 @@ func TestScore_ContributingOnly_DimensionlessGenreExcluded(t *testing.T) {
 	for _, row := range result.Breakdown {
 		if row.Key == "characters" {
 			if !approxEqual(row.AppliedMultiplier, 1.3, 0.001) {
-				t.Errorf("contributing-only averaging: characters multiplier expected 1.3, got %v (action should be excluded as it has no opinion)", row.AppliedMultiplier)
+				t.Errorf(
+					"contributing-only averaging: characters multiplier expected 1.3, got %v (action should be excluded as it has no opinion)",
+					row.AppliedMultiplier,
+				)
 			}
 		}
 	}
@@ -199,7 +210,10 @@ func TestScore_PartialGenreMatch(t *testing.T) {
 	for _, row := range result.Breakdown {
 		if row.Key == "story" {
 			if !approxEqual(row.AppliedMultiplier, 1.5, 0.001) {
-				t.Errorf("partial genre match: story multiplier expected 1.5, got %v", row.AppliedMultiplier)
+				t.Errorf(
+					"partial genre match: story multiplier expected 1.5, got %v",
+					row.AppliedMultiplier,
+				)
 			}
 		}
 	}
@@ -400,7 +414,12 @@ func TestScore_GenreCaseInsensitive(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if r1.FinalScore != r2.FinalScore || r2.FinalScore != r3.FinalScore {
-		t.Errorf("genre case sensitivity: scores differ: %v %v %v", r1.FinalScore, r2.FinalScore, r3.FinalScore)
+		t.Errorf(
+			"genre case sensitivity: scores differ: %v %v %v",
+			r1.FinalScore,
+			r2.FinalScore,
+			r3.FinalScore,
+		)
 	}
 }
 
@@ -510,7 +529,10 @@ func TestCombinedMultiplier_ContributingOnly_NoDimensionEntry(t *testing.T) {
 	}
 	m, contrib := combinedMultiplier("characters", []string{"action"}, genres)
 	if m != 1.0 {
-		t.Errorf("contributing-only averaging: expected 1.0 when no genre has opinion on dimension, got %v", m)
+		t.Errorf(
+			"contributing-only averaging: expected 1.0 when no genre has opinion on dimension, got %v",
+			m,
+		)
 	}
 	if len(contrib) != 0 {
 		t.Errorf("expected empty contributions, got %v", contrib)
@@ -531,10 +553,17 @@ func TestScore_PrimaryGenre_BlendApplied(t *testing.T) {
 		if row.Key == "story" {
 			expected := (1.5 * 0.6) + (0.8 * 0.4)
 			if !approxEqual(row.AppliedMultiplier, expected, 0.001) {
-				t.Errorf("primary blend: story multiplier expected %.4f, got %v", expected, row.AppliedMultiplier)
+				t.Errorf(
+					"primary blend: story multiplier expected %.4f, got %v",
+					expected,
+					row.AppliedMultiplier,
+				)
 			}
 			if !approxEqual(row.PrimaryGenreMultiplier, 1.5, 0.001) {
-				t.Errorf("primary blend: PrimaryGenreMultiplier expected 1.5, got %v", row.PrimaryGenreMultiplier)
+				t.Errorf(
+					"primary blend: PrimaryGenreMultiplier expected 1.5, got %v",
+					row.PrimaryGenreMultiplier,
+				)
 			}
 		}
 	}
@@ -552,7 +581,11 @@ func TestScore_PrimaryGenre_NoPrimary_FallsBackToOptionB(t *testing.T) {
 		if row.Key == "story" {
 			expected := (1.5 + 0.8) / 2
 			if !approxEqual(row.AppliedMultiplier, expected, 0.001) {
-				t.Errorf("fallback to contributing-only averaging: story multiplier expected %.4f, got %v", expected, row.AppliedMultiplier)
+				t.Errorf(
+					"fallback to contributing-only averaging: story multiplier expected %.4f, got %v",
+					expected,
+					row.AppliedMultiplier,
+				)
 			}
 		}
 	}
@@ -573,7 +606,10 @@ func TestScore_PrimaryGenre_NoSecondary_DirectMultiplier(t *testing.T) {
 	for _, row := range result.Breakdown {
 		if row.Key == "story" {
 			if !approxEqual(row.AppliedMultiplier, 1.5, 0.001) {
-				t.Errorf("sole primary: story multiplier expected 1.5 (direct), got %v", row.AppliedMultiplier)
+				t.Errorf(
+					"sole primary: story multiplier expected 1.5 (direct), got %v",
+					row.AppliedMultiplier,
+				)
 			}
 		}
 	}
@@ -595,7 +631,10 @@ func TestScore_PrimaryGenre_SoleActiveViaDeselect_DirectMultiplier(t *testing.T)
 	for _, row := range result.Breakdown {
 		if row.Key == "story" {
 			if !approxEqual(row.AppliedMultiplier, 1.5, 0.001) {
-				t.Errorf("sole active primary via deselect: story expected 1.5, got %v", row.AppliedMultiplier)
+				t.Errorf(
+					"sole active primary via deselect: story expected 1.5, got %v",
+					row.AppliedMultiplier,
+				)
 			}
 		}
 	}
@@ -641,11 +680,18 @@ func TestScore_PrimaryGenre_NoDimensionEntry_PrimaryMult1(t *testing.T) {
 		if row.Key == "characters" {
 			expected := (1.0 * 0.6) + (1.3 * 0.4)
 			if !approxEqual(row.AppliedMultiplier, expected, 0.001) {
-				t.Errorf("primary no-opinion: characters multiplier expected %.4f, got %v", expected, row.AppliedMultiplier)
+				t.Errorf(
+					"primary no-opinion: characters multiplier expected %.4f, got %v",
+					expected,
+					row.AppliedMultiplier,
+				)
 			}
 			// PrimaryGenreMultiplier should be 0 because mystery has no characters entry.
 			if row.PrimaryGenreMultiplier != 0 {
-				t.Errorf("expected PrimaryGenreMultiplier=0 when primary has no dimension entry, got %v", row.PrimaryGenreMultiplier)
+				t.Errorf(
+					"expected PrimaryGenreMultiplier=0 when primary has no dimension entry, got %v",
+					row.PrimaryGenreMultiplier,
+				)
 			}
 		}
 	}
@@ -702,7 +748,12 @@ func TestWeights_MatchesScoreBreakdown_FinalWeights(t *testing.T) {
 	}
 	for _, row := range result.Breakdown {
 		if !approxEqual(row.FinalWeight, weightByKey[row.Key], 0.0001) {
-			t.Errorf("dimension %q: Score FinalWeight=%v, Weights FinalWeight=%v", row.Key, row.FinalWeight, weightByKey[row.Key])
+			t.Errorf(
+				"dimension %q: Score FinalWeight=%v, Weights FinalWeight=%v",
+				row.Key,
+				row.FinalWeight,
+				weightByKey[row.Key],
+			)
 		}
 	}
 }
@@ -774,7 +825,10 @@ func TestScore_UserSelectedGenres_RestrictsActiveSet(t *testing.T) {
 		if row.Key == "story" {
 			// With only mystery active, story mult = 1.5 (not (1.5+0.8)/2=1.15).
 			if !approxEqual(row.AppliedMultiplier, 1.5, 0.001) {
-				t.Errorf("UserSelectedGenres: story multiplier expected 1.5, got %v", row.AppliedMultiplier)
+				t.Errorf(
+					"UserSelectedGenres: story multiplier expected 1.5, got %v",
+					row.AppliedMultiplier,
+				)
 			}
 		}
 	}
@@ -803,7 +857,12 @@ func TestScore_UserSelectedGenres_GenreDeselected_FlagSet(t *testing.T) {
 	for _, row := range result.Breakdown {
 		want := deselectedExpected[row.Key]
 		if row.GenreDeselected != want {
-			t.Errorf("dimension %q: GenreDeselected expected %v, got %v", row.Key, want, row.GenreDeselected)
+			t.Errorf(
+				"dimension %q: GenreDeselected expected %v, got %v",
+				row.Key,
+				want,
+				row.GenreDeselected,
+			)
 		}
 	}
 }
@@ -817,7 +876,10 @@ func TestScore_UserSelectedGenres_None_NoDeselectedFlag(t *testing.T) {
 	}
 	for _, row := range result.Breakdown {
 		if row.GenreDeselected {
-			t.Errorf("dimension %q: GenreDeselected should be false when no UserSelectedGenres, got true", row.Key)
+			t.Errorf(
+				"dimension %q: GenreDeselected should be false when no UserSelectedGenres, got true",
+				row.Key,
+			)
 		}
 	}
 }
@@ -834,7 +896,10 @@ func TestScore_UserSelectedGenres_AllSelected_NoDeselectedFlag(t *testing.T) {
 	}
 	for _, row := range result.Breakdown {
 		if row.GenreDeselected {
-			t.Errorf("dimension %q: GenreDeselected should be false when all genres selected, got true", row.Key)
+			t.Errorf(
+				"dimension %q: GenreDeselected should be false when all genres selected, got true",
+				row.Key,
+			)
 		}
 	}
 }

@@ -50,12 +50,12 @@ type configPayload struct {
 
 // handleGetConfig returns the current mutable config surface.
 //
-//	@Summary                Get config
-//	@Description    Returns the current scoring config (dimensions, genres, weights). Only available when --live-config is set.
-//	@Tags                   config
-//	@Produce                json
-//	@Success                200     {object}        configPayload
-//	@Router                 /api/v1/config [get]
+//	@Summary		Get config
+//	@Description	Returns the current scoring config (dimensions, genres, weights). Only available when --live-config is set.
+//	@Tags			config
+//	@Produce		json
+//	@Success		200	{object}	configPayload
+//	@Router			/api/v1/config [get]
 func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	snap := s.getSnapshot()
 	writeJSON(w, http.StatusOK, toConfigPayload(snap.cfg))
@@ -86,16 +86,16 @@ func toConfigPayload(cfg *config.Config) configPayload {
 
 // handlePostConfig replaces the mutable config surface and reloads the engine.
 //
-//	@Summary                Update config
-//	@Description    Replaces the scoring config (dimensions, genres, weights) and reloads the engine atomically. Persists to the database in DB mode, or to disk otherwise. Only available when --live-config is set.
-//	@Tags                   config
-//	@Accept                 json
-//	@Produce                json
-//	@Param                  request body            configPayload   true    "New config (config_hash is ignored)"
-//	@Success                200             {object}        configPayload
-//	@Failure                400             {object}        errorResponse
-//	@Failure                500             {object}        errorResponse
-//	@Router                 /api/v1/config [post]
+//	@Summary		Update config
+//	@Description	Replaces the scoring config (dimensions, genres, weights) and reloads the engine atomically. Persists to the database in DB mode, or to disk otherwise. Only available when --live-config is set.
+//	@Tags			config
+//	@Accept			json
+//	@Produce		json
+//	@Param			request	body		configPayload	true	"New config (config_hash is ignored)"
+//	@Success		200		{object}	configPayload
+//	@Failure		400		{object}	errorResponse
+//	@Failure		500		{object}	errorResponse
+//	@Router			/api/v1/config [post]
 func (s *Server) handlePostConfig(w http.ResponseWriter, r *http.Request) {
 	var payload configPayload
 	if !decodeBody(w, r, &payload) {
@@ -113,7 +113,14 @@ func (s *Server) handlePostConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	snap := s.getSnapshot()
-	newCfg, err := config.Rebuild(snap.cfg, dims, payload.Genres, payload.PrimaryGenreWeight, payload.MaxMultiplier, payload.MaxHistory)
+	newCfg, err := config.Rebuild(
+		snap.cfg,
+		dims,
+		payload.Genres,
+		payload.PrimaryGenreWeight,
+		payload.MaxMultiplier,
+		payload.MaxHistory,
+	)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -123,12 +130,20 @@ func (s *Server) handlePostConfig(w http.ResponseWriter, r *http.Request) {
 	// silently diverge from what LoadScoringConfig returns on next restart.
 	if s.store != nil {
 		if err := s.store.SaveScoringConfig(r.Context(), newCfg); err != nil {
-			writeError(w, http.StatusInternalServerError, "persisting config to database: "+err.Error())
+			writeError(
+				w,
+				http.StatusInternalServerError,
+				"persisting config to database: "+err.Error(),
+			)
 			return
 		}
 	} else {
 		if err := config.Write(s.configPath, newCfg); err != nil {
-			writeError(w, http.StatusInternalServerError, "config file is not writable: "+err.Error())
+			writeError(
+				w,
+				http.StatusInternalServerError,
+				"config file is not writable: "+err.Error(),
+			)
 			return
 		}
 	}

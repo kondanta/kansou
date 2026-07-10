@@ -9,9 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/spf13/cobra"
-
 	"github.com/kondanta/kansou/internal/config"
+	"github.com/spf13/cobra"
 )
 
 // requireStoreForConfig returns an error if no database is configured.
@@ -22,7 +21,9 @@ import (
 // overriding it here would silently skip that initialisation entirely.
 func requireStoreForConfig(a *App) error {
 	if a.Store == nil {
-		return fmt.Errorf("config dimension/genre commands require a database — set KANSOU_DB_TYPE to enable")
+		return fmt.Errorf(
+			"config dimension/genre commands require a database — set KANSOU_DB_TYPE to enable",
+		)
 	}
 	return nil
 }
@@ -208,7 +209,10 @@ func rebalanceWeightsAfterRemoval(
 // removeGenreReferencesToDimension strips any per-genre multiplier entries
 // for key, so a subsequent config.Rebuild doesn't fail its genre-key
 // validation after the dimension itself is removed.
-func removeGenreReferencesToDimension(genres map[string]map[string]float64, key string) map[string]map[string]float64 {
+func removeGenreReferencesToDimension(
+	genres map[string]map[string]float64,
+	key string,
+) map[string]map[string]float64 {
 	out := cloneGenres(genres)
 	for genre, mults := range out {
 		delete(mults, key)
@@ -275,13 +279,22 @@ set' if needed, since this command refuses to save an invalid state.`,
 			if err := requireStoreForConfig(a); err != nil {
 				return err
 			}
-			return runConfigDimensionAdd(cmd.Context(), a, args[0], label, description, weight, biasResistant)
+			return runConfigDimensionAdd(
+				cmd.Context(),
+				a,
+				args[0],
+				label,
+				description,
+				weight,
+				biasResistant,
+			)
 		},
 	}
 	cmd.Flags().StringVar(&label, "label", "", "Display label (required)")
 	cmd.Flags().StringVar(&description, "description", "", "Scoring hint shown during 'score add'")
 	cmd.Flags().Float64Var(&weight, "weight", 0, "Base weight, must be > 0 (required)")
-	cmd.Flags().BoolVar(&biasResistant, "bias-resistant", false, "Ignore genre multipliers for this dimension")
+	cmd.Flags().
+		BoolVar(&biasResistant, "bias-resistant", false, "Ignore genre multipliers for this dimension")
 	return cmd
 }
 
@@ -290,7 +303,10 @@ func runConfigDimensionAdd(
 	ctx context.Context, a *App, key, label, description string, weight float64, biasResistant bool,
 ) error {
 	if _, exists := a.Config.Dimensions[key]; exists {
-		return fmt.Errorf("dimension %q already exists — use 'kansou config dimension set' to modify it", key)
+		return fmt.Errorf(
+			"dimension %q already exists — use 'kansou config dimension set' to modify it",
+			key,
+		)
 	}
 	if weight <= 0 {
 		return fmt.Errorf("weight must be > 0")
@@ -300,10 +316,20 @@ func runConfigDimensionAdd(
 	}
 
 	dims := cloneDimensions(a.Config.Dimensions)
-	dims[key] = config.DimensionDef{Label: label, Description: description, Weight: weight, BiasResistant: biasResistant}
+	dims[key] = config.DimensionDef{
+		Label:         label,
+		Description:   description,
+		Weight:        weight,
+		BiasResistant: biasResistant,
+	}
 
 	newCfg, err := config.Rebuild(
-		a.Config, dims, a.Config.Genres, a.Config.PrimaryGenreWeight, a.Config.MaxMultiplier, a.Config.MaxHistory,
+		a.Config,
+		dims,
+		a.Config.Genres,
+		a.Config.PrimaryGenreWeight,
+		a.Config.MaxMultiplier,
+		a.Config.MaxHistory,
 	)
 	if err != nil {
 		return fmt.Errorf("adding dimension %q: %w", key, err)
@@ -346,13 +372,22 @@ Only flags explicitly passed are changed; omitted flags keep their current value
 			if cmd.Flags().Changed("bias-resistant") {
 				biasResistantPtr = &biasResistant
 			}
-			return runConfigDimensionSet(cmd.Context(), a, args[0], labelPtr, descriptionPtr, weightPtr, biasResistantPtr)
+			return runConfigDimensionSet(
+				cmd.Context(),
+				a,
+				args[0],
+				labelPtr,
+				descriptionPtr,
+				weightPtr,
+				biasResistantPtr,
+			)
 		},
 	}
 	cmd.Flags().StringVar(&label, "label", "", "New display label")
 	cmd.Flags().StringVar(&description, "description", "", "New scoring hint")
 	cmd.Flags().Float64Var(&weight, "weight", 0, "New base weight, must be > 0")
-	cmd.Flags().BoolVar(&biasResistant, "bias-resistant", false, "Whether genre multipliers are ignored")
+	cmd.Flags().
+		BoolVar(&biasResistant, "bias-resistant", false, "Whether genre multipliers are ignored")
 	return cmd
 }
 
@@ -385,7 +420,12 @@ func runConfigDimensionSet(
 	dims[key] = existing
 
 	newCfg, err := config.Rebuild(
-		a.Config, dims, a.Config.Genres, a.Config.PrimaryGenreWeight, a.Config.MaxMultiplier, a.Config.MaxHistory,
+		a.Config,
+		dims,
+		a.Config.Genres,
+		a.Config.PrimaryGenreWeight,
+		a.Config.MaxMultiplier,
+		a.Config.MaxHistory,
 	)
 	if err != nil {
 		return fmt.Errorf("updating dimension %q: %w", key, err)
@@ -470,7 +510,12 @@ func runConfigDimensionRemove(ctx context.Context, a *App, key string) error {
 	genres := removeGenreReferencesToDimension(a.Config.Genres, key)
 
 	newCfg, err := config.Rebuild(
-		a.Config, dims, genres, a.Config.PrimaryGenreWeight, a.Config.MaxMultiplier, a.Config.MaxHistory,
+		a.Config,
+		dims,
+		genres,
+		a.Config.PrimaryGenreWeight,
+		a.Config.MaxMultiplier,
+		a.Config.MaxHistory,
 	)
 	if err != nil {
 		return fmt.Errorf("removing dimension %q: %w", key, err)
@@ -514,12 +559,21 @@ func (a *App) configGenreSetCmd() *cobra.Command {
 }
 
 // runConfigGenreSet validates and persists a genre/dimension multiplier.
-func runConfigGenreSet(ctx context.Context, a *App, genre, dimension string, multiplier float64) error {
+func runConfigGenreSet(
+	ctx context.Context,
+	a *App,
+	genre, dimension string,
+	multiplier float64,
+) error {
 	if _, ok := a.Config.Dimensions[dimension]; !ok {
 		return fmt.Errorf("dimension %q does not exist", dimension)
 	}
 	if multiplier <= 0 || multiplier > a.Config.MaxMultiplier {
-		return fmt.Errorf("multiplier %.4f must be > 0 and ≤ %.4f", multiplier, a.Config.MaxMultiplier)
+		return fmt.Errorf(
+			"multiplier %.4f must be > 0 and ≤ %.4f",
+			multiplier,
+			a.Config.MaxMultiplier,
+		)
 	}
 
 	genreLower := strings.ToLower(genre)
@@ -530,7 +584,12 @@ func runConfigGenreSet(ctx context.Context, a *App, genre, dimension string, mul
 	genres[genreLower][dimension] = multiplier
 
 	newCfg, err := config.Rebuild(
-		a.Config, a.Config.Dimensions, genres, a.Config.PrimaryGenreWeight, a.Config.MaxMultiplier, a.Config.MaxHistory,
+		a.Config,
+		a.Config.Dimensions,
+		genres,
+		a.Config.PrimaryGenreWeight,
+		a.Config.MaxMultiplier,
+		a.Config.MaxHistory,
 	)
 	if err != nil {
 		return fmt.Errorf("setting genre multiplier: %w", err)
@@ -538,7 +597,12 @@ func runConfigGenreSet(ctx context.Context, a *App, genre, dimension string, mul
 	if err := a.Store.SaveScoringConfig(ctx, newCfg); err != nil {
 		return fmt.Errorf("saving config: %w", err)
 	}
-	fmt.Printf("✓ Genre %q dimension %q multiplier set to %.4f\n", genreLower, dimension, multiplier)
+	fmt.Printf(
+		"✓ Genre %q dimension %q multiplier set to %.4f\n",
+		genreLower,
+		dimension,
+		multiplier,
+	)
 	return nil
 }
 
@@ -575,7 +639,11 @@ func runConfigGenreRemove(ctx context.Context, a *App, genre, dimension string) 
 		delete(genres, genreLower)
 	} else {
 		if _, ok := genres[genreLower][dimension]; !ok {
-			return fmt.Errorf("genre %q has no multiplier configured for dimension %q", genreLower, dimension)
+			return fmt.Errorf(
+				"genre %q has no multiplier configured for dimension %q",
+				genreLower,
+				dimension,
+			)
 		}
 		delete(genres[genreLower], dimension)
 		if len(genres[genreLower]) == 0 {
@@ -584,7 +652,12 @@ func runConfigGenreRemove(ctx context.Context, a *App, genre, dimension string) 
 	}
 
 	newCfg, err := config.Rebuild(
-		a.Config, a.Config.Dimensions, genres, a.Config.PrimaryGenreWeight, a.Config.MaxMultiplier, a.Config.MaxHistory,
+		a.Config,
+		a.Config.Dimensions,
+		genres,
+		a.Config.PrimaryGenreWeight,
+		a.Config.MaxMultiplier,
+		a.Config.MaxHistory,
 	)
 	if err != nil {
 		return fmt.Errorf("removing genre multiplier: %w", err)

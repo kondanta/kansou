@@ -9,9 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/spf13/cobra"
-
 	"github.com/kondanta/kansou/internal/store"
+	"github.com/spf13/cobra"
 )
 
 // historyCmd returns the `history` cobra command and its subcommands.
@@ -164,7 +163,10 @@ func runHistoryDelete(ctx context.Context, st store.Store, query string) error {
 	if err := st.SoftDeleteScore(ctx, latest.ID); err != nil {
 		return fmt.Errorf("deleting score: %w", err)
 	}
-	fmt.Printf("✓ Score for %s marked for deletion. Run 'kansou db prune' to permanently remove.\n", title)
+	fmt.Printf(
+		"✓ Score for %s marked for deletion. Run 'kansou db prune' to permanently remove.\n",
+		title,
+	)
 	return nil
 }
 
@@ -183,7 +185,11 @@ func queryLabel(title string, anilistID int) string {
 // Non-numeric queries search local history by title, prompting a picker if
 // more than one entry matches. Returns errUserCancelled if the user aborts
 // the picker with EOF.
-func resolveHistoryQuery(ctx context.Context, st store.Store, query string) (anilistID int, title string, err error) {
+func resolveHistoryQuery(
+	ctx context.Context,
+	st store.Store,
+	query string,
+) (anilistID int, title string, err error) {
 	if id, convErr := strconv.Atoi(query); convErr == nil {
 		return id, "", nil
 	}

@@ -26,7 +26,10 @@ func NewConfiguredGenreSet(cfg *config.Config) ConfiguredGenreSet {
 
 // AnnotateGenreConfigStatus checks whether each genre in anilistGenres has a
 // matching entry in cfgGenres.
-func AnnotateGenreConfigStatus(anilistGenres []string, cfgGenres ConfiguredGenreSet) []GenreConfigStatus {
+func AnnotateGenreConfigStatus(
+	anilistGenres []string,
+	cfgGenres ConfiguredGenreSet,
+) []GenreConfigStatus {
 	checkedGenres := make([]GenreConfigStatus, 0, len(anilistGenres))
 
 	for _, genre := range anilistGenres {
