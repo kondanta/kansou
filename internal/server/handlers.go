@@ -38,21 +38,21 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 // mediaResponse is the JSON representation of an AniList media entry.
 // swagger:model mediaResponse
 type mediaResponse struct {
-	ID           int      `json:"id"`
-	TitleRomaji  string   `json:"title_romaji"`
-	TitleEnglish string   `json:"title_english,omitempty"`
-	TitleNative  string   `json:"title_native,omitempty"`
-	Format       string   `json:"format"`
-	Status       string   `json:"status"`
-	Episodes     int      `json:"episodes,omitempty"`
-	Chapters     int      `json:"chapters,omitempty"`
-	Genres       []string `json:"genres"`
-	CoverImage   string   `json:"cover_image,omitempty"`
-	BannerImage  string   `json:"banner_image,omitempty"`
-	AverageScore int      `json:"average_score"`
-	MeanScore    int      `json:"mean_score"`
-	MediaType    string   `json:"media_type"`
-	AniListURL   string   `json:"anilist_url"`
+	ID           int                         `json:"id"`
+	TitleRomaji  string                      `json:"title_romaji"`
+	TitleEnglish string                      `json:"title_english,omitempty"`
+	TitleNative  string                      `json:"title_native,omitempty"`
+	Format       string                      `json:"format"`
+	Status       string                      `json:"status"`
+	Episodes     int                         `json:"episodes,omitempty"`
+	Chapters     int                         `json:"chapters,omitempty"`
+	Genres       []anilist.GenreConfigStatus `json:"genres"`
+	CoverImage   string                      `json:"cover_image,omitempty"`
+	BannerImage  string                      `json:"banner_image,omitempty"`
+	AverageScore int                         `json:"average_score"`
+	MeanScore    int                         `json:"mean_score"`
+	MediaType    string                      `json:"media_type"`
+	AniListURL   string                      `json:"anilist_url"`
 }
 
 // handleMediaSearch searches AniList for media by name.
@@ -82,9 +82,12 @@ func (s *Server) handleMediaSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	cfgGenres := anilist.NewConfiguredGenreSet(s.getSnapshot().cfg)
+
 	responses := make([]mediaResponse, len(results))
 	for i := range results {
-		responses[i] = toMediaResponse(&results[i])
+		checkedGenres := anilist.AnnotateGenreConfigStatus(results[i].Genres, cfgGenres)
+		responses[i] = toMediaResponse(&results[i], checkedGenres)
 	}
 	writeJSON(w, http.StatusOK, responses)
 }
@@ -114,7 +117,11 @@ func (s *Server) handleMediaFetch(w http.ResponseWriter, r *http.Request) {
 		handleAnilistErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toMediaResponse(media))
+
+	cfgGenres := anilist.NewConfiguredGenreSet(s.getSnapshot().cfg)
+	checkedGenres := anilist.AnnotateGenreConfigStatus(media.Genres, cfgGenres)
+
+	writeJSON(w, http.StatusOK, toMediaResponse(media, checkedGenres))
 }
 
 // dimensionItem is the JSON representation of a single scoring dimension.
@@ -595,9 +602,8 @@ const maxRequestBodyBytes = 1 << 20 // 1 MB
 func decodeBody(w http.ResponseWriter, r *http.Request, v any) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
 	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
-		var maxErr *http.MaxBytesError
-		if errors.As(err, &maxErr) {
-			writeError(w, http.StatusRequestEntityTooLarge, "request body too large (limit 1 MB)")
+		if maxBytesError, ok := errors.AsType[*http.MaxBytesError](err); ok {
+			writeError(w, http.StatusRequestEntityTooLarge, maxBytesError.Error())
 		} else {
 			writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
 		}
@@ -622,9 +628,8 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 // returns a generic 502 to the client. User-facing errors (not found, token
 // missing, GraphQL validation) are passed through as-is.
 func handleAnilistErr(w http.ResponseWriter, err error) {
-	var upstreamErr *anilist.UpstreamError
-	if errors.As(err, &upstreamErr) {
-		slog.Error("anilist upstream error", "err", err)
+	if anilistUpstreamError, ok := errors.AsType[*anilist.UpstreamError](err); ok {
+		slog.Error("anilist upstream error", "err", anilistUpstreamError)
 		writeError(w, http.StatusBadGateway, "AniList is currently unavailable")
 		return
 	}
@@ -632,7 +637,7 @@ func handleAnilistErr(w http.ResponseWriter, err error) {
 }
 
 // toMediaResponse converts an anilist.Media to a mediaResponse.
-func toMediaResponse(m *anilist.Media) mediaResponse {
+func toMediaResponse(m *anilist.Media, genreConfigStatus []anilist.GenreConfigStatus) mediaResponse {
 	return mediaResponse{
 		ID:           m.ID,
 		TitleRomaji:  m.TitleRomaji,
@@ -642,7 +647,7 @@ func toMediaResponse(m *anilist.Media) mediaResponse {
 		Status:       m.Status,
 		Episodes:     m.Episodes,
 		Chapters:     m.Chapters,
-		Genres:       m.Genres,
+		Genres:       genreConfigStatus,
 		CoverImage:   m.CoverImage,
 		BannerImage:  m.BannerImage,
 		AverageScore: m.AverageScore,
