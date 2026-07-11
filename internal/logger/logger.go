@@ -53,7 +53,7 @@ func Setup(isServer bool) {
 
 	if isServer {
 		if env == "dev" || env == "development" || env == "local" {
-			handler = tint.NewHandler(os.Stderr, &tint.Options{
+			handler = tint.NewTextHandler(os.Stderr, &tint.Options{
 				Level:      level,
 				TimeFormat: time.TimeOnly,
 				AddSource:  level == slog.LevelDebug,
