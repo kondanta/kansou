@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+project_name: kansou
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: kansou
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X github.com/kondanta/kansou/cmd.version={{.Version}}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - "7"
+    ignore:
+      - goos: darwin
+        goarch: arm
+      - goos: windows
+        goarch: arm64
+      - goos: windows
+        goarch: arm
+    main: .
+    binary: kansou
+
+archives:
+  - id: kansou
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+
+checksum:
+  algorithm: sha256
+  split: true
+
+release:
+  # keep-existing: goreleaser uploads artifacts to the release-please-created release
+  # and never touches the release body, title, or changelog.
+  mode: keep-existing
+
+changelog:
+  # release-please owns the changelog; goreleaser only uploads artifacts.
+  disable: true

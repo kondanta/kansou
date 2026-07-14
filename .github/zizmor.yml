@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/zizmorcore/zizmor/main/docs/schemas/zizmor.schema.json
+rules:
+  cache-poisoning:
+    ignore:
+      - release.yml    # goreleaser Go cache: tag runs restore from main; PR writes are PR-scoped
+      - ci.yml         # goreleaser-snapshot job uses mise cache; snapshot runs are read-only (contents: read)

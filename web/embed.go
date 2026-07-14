@@ -1,7 +1,8 @@
 // Package web embeds the compiled Vue UI and exposes it as an fs.FS.
-// The dist directory is populated by `just build-ui` (Docker + Vite).
-// When the dist has not been built, DistDirFS contains only the placeholder
-// .gitkeep and the server will fall back to the legacy UI automatically.
+// The dist directory is populated by the tribbie release zip (downloaded during CI
+// or via `gh release download` locally). When the dist has not been built,
+// DistDirFS contains only the placeholder .gitkeep and the server will fall back
+// to the legacy UI automatically.
 package web
 
 import (

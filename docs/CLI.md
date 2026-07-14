@@ -1,5 +1,20 @@
 # CLI.md — kansou Command Reference
 
+## Distribution
+
+Pre-built binaries are published to GitHub Releases on every tagged release:
+
+| Platform | Architectures |
+|----------|---------------|
+| Linux | amd64, arm64, armv7 |
+| macOS | amd64, arm64 |
+| Windows | amd64 |
+
+Archives are `.tar.gz` (Linux/macOS) or `.zip` (Windows). Per-artifact SHA256 checksums
+are included. Download from the [Releases page](https://github.com/kondanta/kansou/releases).
+
+---
+
 ## Global Flags
 
 These flags are available on every command.

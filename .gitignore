@@ -2,7 +2,7 @@
 /kansou
 
 # Config (never commit personal config)
-config.toml
+/config.toml
 
 # Environment
 .env
@@ -28,3 +28,4 @@ apm_modules/
 .github/*
 !.github/workflows
 !.github/workflows/**
+!.github/zizmor.yml

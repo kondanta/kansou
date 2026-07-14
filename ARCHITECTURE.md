@@ -210,8 +210,8 @@ GET    /api/v1/stats/history             # most rescored, outliers, config impac
 
 **Embedded UI:** `package web` (`web/embed.go`) embeds `web/dist/` via
 `//go:embed all:dist` and exports `DistDirFS fs.FS`. The Vue source lives in the
-`web/tribbie/` submodule; `just build-ui` (Docker, no local Node required) builds it
-and writes the output to `web/dist/`. `internal/server` imports
+`web/tribbie/` directory; the compiled dist is downloaded from the tribbie GitHub
+release during CI (version pinned in `TRIBBIE_VERSION`). `internal/server` imports
 `kansouweb "github.com/kondanta/kansou/web"` and passes `kansouweb.DistDirFS`
 to `spaHandler`. When `dist/` has not been built yet (only `.gitkeep` present),
 `spaHandler` falls back to the legacy `internal/server/web/index.html`.
@@ -293,6 +293,20 @@ See `docs/CONFIG.md` for the full schema and environment variable reference.
 ## Authentication
 
 AniList write operations require a user token. The token is read exclusively from the `ANILIST_TOKEN` environment variable. It is never stored in config, never logged, and never included in error output.
+
+---
+
+## Local Tooling
+
+`mise` manages all development and CI toolchains via `.mise/config.toml`. Running
+`mise install` (or the `jdx/mise-action` in CI) pins Go, golangci-lint,
+goreleaser, and zizmor to the exact versions declared in that file.
+
+Common tasks:
+- `mise run ci` — full local CI suite (build + test + vet + lint)
+- `mise run zizmor` — scan GitHub Actions workflows for security issues
+
+CI uses the same versions via `jdx/mise-action` with `--locked`.
 
 ---
 
