@@ -1,5 +1,42 @@
 # Changelog
 
+## [1.9.0](https://github.com/kondanta/kansou/compare/v1.8.0...v1.9.0) (2026-07-15)
+
+
+### Features
+
+* **chart:** enable InitContainers via extraInitContainers ([#111](https://github.com/kondanta/kansou/issues/111)) ([492d013](https://github.com/kondanta/kansou/commit/492d013101de16a88f2a0c22de692dadccf3724d))
+* **deps:** update module github.com/lmittmann/tint ( v1.1.3 → v1.2.0 ) ([#113](https://github.com/kondanta/kansou/issues/113)) ([0e63239](https://github.com/kondanta/kansou/commit/0e63239128b2a2a2aa7c3811e966797d8032468e))
+* **github-release:** update release sasalx/tribbie ( v0.3.1 → v0.4.1 ) ([#125](https://github.com/kondanta/kansou/issues/125)) ([b98b0e0](https://github.com/kondanta/kansou/commit/b98b0e04f17490165f3f2ff5093c06647d8ac418))
+* **gorelease:** adopt gorelease ([#118](https://github.com/kondanta/kansou/issues/118)) ([55cd46d](https://github.com/kondanta/kansou/commit/55cd46d263c521de9dd5a85b359dbd076560534a))
+* **server:** compare if remote genres configured locally ([#109](https://github.com/kondanta/kansou/issues/109)) ([ab3a417](https://github.com/kondanta/kansou/commit/ab3a417ef9736ad03666308ce2820dd65bb8615a))
+
+
+### Bug Fixes
+
+* **ci:** allow SirMergington to edit issues ([#123](https://github.com/kondanta/kansou/issues/123)) ([28c4842](https://github.com/kondanta/kansou/commit/28c4842707a95cae4d6e1e6d5cb24bd4a0e9024c))
+* **ci:** give read vulnerability access to SirMergington ([#124](https://github.com/kondanta/kansou/issues/124)) ([e89d71b](https://github.com/kondanta/kansou/commit/e89d71bc554e0578b0d3677d2efe419d53163c57))
+* **ci:** inline tint newhandler error ([#114](https://github.com/kondanta/kansou/issues/114)) ([4d69e67](https://github.com/kondanta/kansou/commit/4d69e6770452e6e78bd727a70e6c4fcea07cdd32))
+* **github-release:** update release sasalx/tribbie ( v0.3.0 → v0.3.1 ) ([#105](https://github.com/kondanta/kansou/issues/105)) ([eccceb9](https://github.com/kondanta/kansou/commit/eccceb9c9253a6c5da18bb2f3db87e5731245018))
+* **server:** return 400 for api requests that fallback to spaHandler ([#107](https://github.com/kondanta/kansou/issues/107)) ([76fd94b](https://github.com/kondanta/kansou/commit/76fd94b3824ffbec93e8bb438b964c1826fa6fe1))
+* **server:** use snake case for response type ([#122](https://github.com/kondanta/kansou/issues/122)) ([f120bfa](https://github.com/kondanta/kansou/commit/f120bfa65f0f0ca4bd6302c5b206110ca75db9b9))
+
+
+### Documentation
+
+* add nice to have templates ([#119](https://github.com/kondanta/kansou/issues/119)) ([1933d4f](https://github.com/kondanta/kansou/commit/1933d4facc5719faaf7f8608c90e4ac393126789))
+
+
+### Miscellaneous Chores
+
+* go mod tidy ([#117](https://github.com/kondanta/kansou/issues/117)) ([7d67996](https://github.com/kondanta/kansou/commit/7d67996ff5801175bddddc518716029d4abac174))
+* update deps ([#112](https://github.com/kondanta/kansou/issues/112)) ([a2e5f6e](https://github.com/kondanta/kansou/commit/a2e5f6e60afa1cc06c751334ee79d2df248294bf))
+
+
+### Code Refactoring
+
+* **linter:** fix newly added linter issues ([#110](https://github.com/kondanta/kansou/issues/110)) ([2265769](https://github.com/kondanta/kansou/commit/22657698f807cedc64022398f952c81627876147))
+
 ## [1.8.0](https://github.com/kondanta/kansou/compare/v1.7.0...v1.8.0) (2026-07-09)
 
 
