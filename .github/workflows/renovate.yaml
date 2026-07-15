@@ -38,11 +38,14 @@ jobs:
         with:
           app-id: '${{ secrets.BOT_APP_ID }}'
           private-key: '${{ secrets.BOT_APP_PRIVATE_KEY }}'
+          permission-contents: write
+          permission-pull-requests: write
 
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           token: '${{ steps.app-token.outputs.token }}'
+          persist-credentials: false
 
       - name: Renovate
         uses: renovatebot/github-action@22e0a16091fc706b04affe6ae53d5e3358ac4023 # v46.1.19
