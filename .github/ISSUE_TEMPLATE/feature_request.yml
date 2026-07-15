@@ -1,0 +1,66 @@
+name: Feature / Idea
+description: Propose a new feature or improvement to track in GitHub Projects
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this to capture a feature idea or planned improvement. It will land in the backlog on the project board.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of kansou does this touch?
+      options:
+        - CLI UX
+        - Scoring engine
+        - AniList integration
+        - REST server / API
+        - Web UI (tribbie)
+        - Config system
+        - Database / persistence
+        - Export / reporting
+        - CI / tooling
+        - Docs
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority (your gut feel)
+      options:
+        - "Nice to have"
+        - "Should have"
+        - "Must have"
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: What do you want?
+      description: One or two sentences. What should kansou do that it doesn't do today?
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Why? (motivation / use case)
+      description: What problem does this solve for you? The more concrete the better.
+    validations:
+      required: false
+  - type: textarea
+    id: sketch
+    attributes:
+      label: Rough sketch (optional)
+      description: CLI flag names, API shapes, config keys, UI wireframes — whatever you have.
+    validations:
+      required: false
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints to keep in mind
+      options:
+        - label: Must not change the scoring formula without an ADR
+        - label: Must work without a database (stateless mode)
+        - label: Affects config schema (docs/CONFIG.md update needed)

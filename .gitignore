@@ -27,5 +27,7 @@ apm_modules/
 # Ignore some stuff
 .github/*
 !.github/workflows
+!.github/ISSUE_TEMPLATE
+!.github/PULL_REQUEST_TEMPLATE.md
 !.github/workflows/**
 !.github/zizmor.yml

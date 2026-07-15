@@ -1,0 +1,68 @@
+name: Bug Report
+description: Something isn't working as expected
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. Fill in as much as you can.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of kansou is affected?
+      options:
+        - CLI (score/media/history/stats/export commands)
+        - REST server
+        - Scoring engine
+        - AniList integration
+        - Config loading
+        - Database (SQLite)
+        - Database (Postgres)
+        - Web UI (tribbie)
+        - Other / unsure
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug. Include the exact command you ran if applicable.
+      placeholder: |
+        I ran `kansou score add ...` and got ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Set KANSOU_DB_TYPE=sqlite
+        2. Run `kansou ...`
+        3. See error
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: OS, Go version, kansou version (`kansou --version`), and relevant env vars (never paste your ANILIST_TOKEN).
+      placeholder: |
+        OS: macOS 14 / Linux (distro)
+        kansou: v2025.06.1
+        Go: 1.22.x
+        KANSOU_DB_TYPE: sqlite
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or output
+      description: Paste any error output here. Use `--log-level debug` for more detail.
+      render: text
