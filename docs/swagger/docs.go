@@ -690,7 +690,7 @@ const docTemplate = `{
         "anilist.GenreConfigStatus": {
             "type": "object",
             "properties": {
-                "isConfigured": {
+                "is_configured": {
                     "type": "boolean"
                 },
                 "name": {
