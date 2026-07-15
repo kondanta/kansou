@@ -22,7 +22,7 @@ on:
 jobs:
   check:
     name: Build, Test & Vet
-    runs-on: ubuntu-latest
+    runs-on: i7
     permissions:
       contents: read
     steps:
@@ -56,7 +56,7 @@ jobs:
 
   goreleaser-snapshot:
     name: GoReleaser (snapshot)
-    runs-on: ubuntu-latest
+    runs-on: i7
     permissions:
       contents: read
     steps:

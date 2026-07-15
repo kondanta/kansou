@@ -14,7 +14,7 @@ jobs:
   # Output is uploaded as an artifact and consumed by each binary build job.
   build-ui:
     name: Download tribbie UI
-    runs-on: ubuntu-latest
+    runs-on: i7
     permissions:
       contents: read
     steps:
@@ -41,7 +41,7 @@ jobs:
   goreleaser:
     name: GoReleaser
     needs: build-ui
-    runs-on: ubuntu-latest
+    runs-on: i7
     permissions:
       contents: write
     steps:
@@ -70,7 +70,7 @@ jobs:
   build-docker:
     name: Docker image
     needs: build-ui
-    runs-on: ubuntu-latest
+    runs-on: i7
     permissions:
       contents: read
       packages: write
@@ -141,7 +141,7 @@ jobs:
   # Install with: helm install kansou oci://ghcr.io/kondanta/charts/kansou --version <version>
   release-chart:
     name: Helm chart
-    runs-on: ubuntu-latest
+    runs-on: i7
     permissions:
       contents: read
       packages: write
