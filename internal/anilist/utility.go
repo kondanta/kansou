@@ -9,8 +9,8 @@ import (
 // GenreConfigStatus reports whether a single AniList genre has a matching
 // entry in the user's configured genre multipliers.
 type GenreConfigStatus struct {
-	Name         string
-	IsConfigured bool
+	Name         string `json:"name"`
+	IsConfigured bool   `json:"is_configured"`
 }
 
 // ConfiguredGenreSet is a case-insensitive lookup of the user's configured
