@@ -1,0 +1,34 @@
+[tools]
+go = "1.26.5"
+golangci-lint = "2.12.2"
+goreleaser = "2.17.0"
+zizmor = "1.27.0"
+
+[tasks.build]
+description = "Build the kansou binary"
+run = "go build ./..."
+
+[tasks.test]
+description = "Run tests with race detection"
+run = "go test -race ./..."
+
+[tasks.vet]
+description = "Run go vet"
+run = "go vet ./..."
+
+[tasks.lint]
+description = "Run golangci-lint"
+run = "golangci-lint run"
+
+[tasks.ci]
+description = "Full local CI suite"
+run = """
+go build ./...
+go test -race ./...
+go vet ./...
+golangci-lint run
+"""
+
+[tasks.zizmor]
+description = "Scan GitHub Actions workflows for security issues"
+run = "zizmor .github/workflows/"

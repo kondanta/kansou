@@ -16,6 +16,11 @@
           "type": "yaml",
           "path": "charts/kansou/Chart.yaml",
           "jsonpath": "$.appVersion"
+        },
+        {
+          "type": "yaml",
+          "path": "charts/kansou/Chart.yaml",
+          "jsonpath": "$.version"
         }
       ]
     }
