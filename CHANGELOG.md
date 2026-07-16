@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.1](https://github.com/kondanta/kansou/compare/v1.9.0...v1.9.1) (2026-07-16)
+
+
+### Bug Fixes
+
+* **github-release:** update release sasalx/tribbie ( v0.4.1 → v0.4.2 ) ([#128](https://github.com/kondanta/kansou/issues/128)) ([7602553](https://github.com/kondanta/kansou/commit/7602553a1e11781203e89617897165bdabe9ef2d))
+
 ## [1.9.0](https://github.com/kondanta/kansou/compare/v1.8.0...v1.9.0) (2026-07-15)
 
 
