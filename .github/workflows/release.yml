@@ -5,9 +5,6 @@ on:
     types:
       - published
 permissions: {}
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 jobs:
   # ── Vue UI download ───────────────────────────────────────────────────────────
   # Downloads the pre-built tribbie dist zip from its GitHub release.
@@ -44,6 +41,7 @@ jobs:
     runs-on: i7
     permissions:
       contents: write
+      packages: write
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
@@ -57,6 +55,13 @@ jobs:
         with:
           experimental: true
           install_args: --locked
+      - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           distribution: goreleaser
@@ -64,76 +69,6 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  # ── Docker image ─────────────────────────────────────────────────────────────
-  # Builds linux binaries from source (one per target arch), then injects them
-  # into the image — Dockerfile.release selects the right binary via TARGETPLATFORM.
-  build-docker:
-    name: Docker image
-    needs: build-ui
-    runs-on: i7
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-        with:
-          persist-credentials: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: web-dist
-          path: web/dist/
-      - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
-        with:
-          experimental: true
-          install_args: --locked
-      - name: Build linux/amd64
-        env:
-          GOOS: linux
-          GOARCH: amd64
-          CGO_ENABLED: "0"
-        run: go build -ldflags "-s -w -X github.com/kondanta/kansou/cmd.version=${GITHUB_REF_NAME#v}" -o kansou-linux-amd64 .
-      - name: Build linux/arm64
-        env:
-          GOOS: linux
-          GOARCH: arm64
-          CGO_ENABLED: "0"
-        run: go build -ldflags "-s -w -X github.com/kondanta/kansou/cmd.version=${GITHUB_REF_NAME#v}" -o kansou-linux-arm64 .
-      - name: Build linux/arm/v7
-        env:
-          GOOS: linux
-          GOARCH: arm
-          GOARM: "7"
-          CGO_ENABLED: "0"
-        run: go build -ldflags "-s -w -X github.com/kondanta/kansou/cmd.version=${GITHUB_REF_NAME#v}" -o kansou-linux-armv7 .
-      - name: Mark binaries executable
-        run: chmod +x kansou-linux-amd64 kansou-linux-arm64 kansou-linux-armv7
-      - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4
-      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
-      - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Extract image metadata
-        id: meta
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-      - name: Build and push
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
-        with:
-          context: .
-          file: Dockerfile.release
-          push: true
-          platforms: linux/amd64,linux/arm64,linux/arm/v7
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
   # ── Helm chart ───────────────────────────────────────────────────────────────
   # Packages the chart and pushes it to ghcr.io as an OCI artifact.
   # Both chart version and appVersion are set to the release tag so they stay
