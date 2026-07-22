@@ -12,6 +12,11 @@
     ':timezone(Europe/Oslo)',
     'github>kondanta/kansou//.renovate/semanticCommits.json5',
   ],
+  postUpgradeTasks: {
+    commands: ['mise install'],
+    fileFilters: ['.mise/mise.lock'],
+    executionMode: 'branch',
+  },
   rebaseWhen: 'behind-base-branch',
   dependencyDashboardTitle: "SirMergington's Estate 🤖",
   reviewers: [
