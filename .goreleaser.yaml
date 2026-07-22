@@ -45,6 +45,59 @@ checksum:
   algorithm: sha256
   split: true
 
+dockers:
+  - id: kansou-amd64
+    goos: linux
+    goarch: amd64
+    image_templates:
+      - "ghcr.io/kondanta/kansou:{{ .Tag }}-amd64"
+    dockerfile: Dockerfile.goreleaser
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+
+  - id: kansou-arm64
+    goos: linux
+    goarch: arm64
+    image_templates:
+      - "ghcr.io/kondanta/kansou:{{ .Tag }}-arm64"
+    dockerfile: Dockerfile.goreleaser
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+
+  - id: kansou-armv7
+    goos: linux
+    goarch: arm
+    goarm: "7"
+    image_templates:
+      - "ghcr.io/kondanta/kansou:{{ .Tag }}-armv7"
+    dockerfile: Dockerfile.goreleaser
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/arm/v7"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+
+docker_manifests:
+  - name_template: "ghcr.io/kondanta/kansou:{{ .Tag }}"
+    image_templates:
+      - "ghcr.io/kondanta/kansou:{{ .Tag }}-amd64"
+      - "ghcr.io/kondanta/kansou:{{ .Tag }}-arm64"
+      - "ghcr.io/kondanta/kansou:{{ .Tag }}-armv7"
+  - name_template: "ghcr.io/kondanta/kansou:latest"
+    image_templates:
+      - "ghcr.io/kondanta/kansou:{{ .Tag }}-amd64"
+      - "ghcr.io/kondanta/kansou:{{ .Tag }}-arm64"
+      - "ghcr.io/kondanta/kansou:{{ .Tag }}-armv7"
+
 release:
   # keep-existing: goreleaser uploads artifacts to the release-please-created release
   # and never touches the release body, title, or changelog.
