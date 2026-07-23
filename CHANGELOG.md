@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.10.0](https://github.com/kondanta/kansou/compare/v1.9.1...v1.10.0) (2026-07-23)
+
+
+### Features
+
+* **deps:** update dependency zizmor ( 1.27.0 → 1.28.0 ) ([#132](https://github.com/kondanta/kansou/issues/132)) ([783c7cb](https://github.com/kondanta/kansou/commit/783c7cbf98c274c6abe061e3cb0d7a2e637f69d6))
+
+
+### Bug Fixes
+
+* **ci:** make mise tool available on mise lock update ([#135](https://github.com/kondanta/kansou/issues/135)) ([a39d08f](https://github.com/kondanta/kansou/commit/a39d08fe37d71e3ba2149f8095193d50bf6cb60c))
+* **ci:** make rennovate update mise lock file ([#134](https://github.com/kondanta/kansou/issues/134)) ([23ac898](https://github.com/kondanta/kansou/commit/23ac89899c2d5172f3e6d81108d278bc727a59db))
+
+
+### Miscellaneous Chores
+
+* **deps:** update deps ([#130](https://github.com/kondanta/kansou/issues/130)) ([828594d](https://github.com/kondanta/kansou/commit/828594deadf8a0f2176c98b3682b05730571c8d1))
+
+
+### Code Refactoring
+
+* **ci:** deduplicate gobuild process in release ([#133](https://github.com/kondanta/kansou/issues/133)) ([a305900](https://github.com/kondanta/kansou/commit/a305900f1a1498206affd5cf505e86b2afc01f91))
+
 ## [1.9.1](https://github.com/kondanta/kansou/compare/v1.9.0...v1.9.1) (2026-07-16)
 
 
