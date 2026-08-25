@@ -66,7 +66,6 @@ definitions:
       genres:
         additionalProperties:
           additionalProperties:
-            format: float64
             type: number
           type: object
         type: object
@@ -131,7 +130,6 @@ definitions:
         type: string
       multipliers:
         additionalProperties:
-          format: float64
           type: number
         description: Multipliers maps dimension keys to their configured multiplier
           values.
@@ -281,7 +279,6 @@ definitions:
         type: string
       scores:
         additionalProperties:
-          format: float64
           type: number
         description: |-
           Scores maps dimension keys to user scores (1.0–10.0).
@@ -298,7 +295,6 @@ definitions:
         type: array
       weight_overrides:
         additionalProperties:
-          format: float64
           type: number
         description: |-
           WeightOverrides maps dimension keys to per-session weight overrides.
@@ -429,7 +425,6 @@ definitions:
         type: object
       weight_overrides:
         additionalProperties:
-          format: float64
           type: number
         description: |-
           WeightOverrides maps dimension keys to per-session weight overrides.
@@ -480,7 +475,6 @@ definitions:
   store.ConfigImpactStat:
     properties:
       avgScore:
-        format: float64
         type: number
       configHash:
         type: string
@@ -494,7 +488,6 @@ definitions:
   store.ConsistencyStat:
     properties:
       avgStdDev:
-        format: float64
         type: number
       count:
         type: integer
@@ -502,7 +495,6 @@ definitions:
   store.DimensionAvg:
     properties:
       avgScore:
-        format: float64
         type: number
       dimensionKey:
         type: string
@@ -513,7 +505,6 @@ definitions:
     properties:
       correlation:
         description: Pearson -1.0 to 1.0
-        format: float64
         type: number
       dimensionA:
         type: string
@@ -590,7 +581,6 @@ definitions:
   store.DimensionVarianceStat:
     properties:
       avgScore:
-        format: float64
         type: number
       count:
         type: integer
@@ -599,7 +589,6 @@ definitions:
       label:
         type: string
       stdDev:
-        format: float64
         type: number
     type: object
   store.GenreDimensionAffinity:
@@ -614,7 +603,6 @@ definitions:
   store.GenreScore:
     properties:
       avgScore:
-        format: float64
         type: number
       count:
         type: integer
@@ -628,7 +616,6 @@ definitions:
       genre:
         type: string
       percentage:
-        format: float64
         type: number
     type: object
   store.MatchedGenreRow:
@@ -644,17 +631,14 @@ definitions:
         type: integer
       deviation:
         description: how many std devs from personal avg
-        format: float64
         type: number
       dimensionKey:
         type: string
       label:
         type: string
       personalAvg:
-        format: float64
         type: number
       score:
-        format: float64
         type: number
       scoreID:
         type: integer
@@ -677,7 +661,6 @@ definitions:
           is_latest unset (e.g. the latest score was removed via SoftDeleteScore
           without a replacement being scored yet). ScoreCount is still counted
           from non-deleted rows regardless.
-        format: float64
         type: number
       scoreCount:
         type: integer

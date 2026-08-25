@@ -781,8 +781,7 @@
                     "additionalProperties": {
                         "type": "object",
                         "additionalProperties": {
-                            "type": "number",
-                            "format": "float64"
+                            "type": "number"
                         }
                     }
                 },
@@ -867,8 +866,7 @@
                     "description": "Multipliers maps dimension keys to their configured multiplier values.",
                     "type": "object",
                     "additionalProperties": {
-                        "type": "number",
-                        "format": "float64"
+                        "type": "number"
                     }
                 }
             }
@@ -1071,8 +1069,7 @@
                     "description": "Scores maps dimension keys to user scores (1.0–10.0).\nAny configured dimension absent from this map is treated as skipped (N/A).",
                     "type": "object",
                     "additionalProperties": {
-                        "type": "number",
-                        "format": "float64"
+                        "type": "number"
                     }
                 },
                 "selected_genres": {
@@ -1086,8 +1083,7 @@
                     "description": "WeightOverrides maps dimension keys to per-session weight overrides.\nOptional — omit to use the weights defined in server config.",
                     "type": "object",
                     "additionalProperties": {
-                        "type": "number",
-                        "format": "float64"
+                        "type": "number"
                     }
                 }
             }
@@ -1245,8 +1241,7 @@
                     "description": "WeightOverrides maps dimension keys to per-session weight overrides.\nOptional — omit to use config weights.",
                     "type": "object",
                     "additionalProperties": {
-                        "type": "number",
-                        "format": "float64"
+                        "type": "number"
                     }
                 }
             }
@@ -1310,8 +1305,7 @@
             "type": "object",
             "properties": {
                 "avgScore": {
-                    "type": "number",
-                    "format": "float64"
+                    "type": "number"
                 },
                 "configHash": {
                     "type": "string"
@@ -1331,8 +1325,7 @@
             "type": "object",
             "properties": {
                 "avgStdDev": {
-                    "type": "number",
-                    "format": "float64"
+                    "type": "number"
                 },
                 "count": {
                     "type": "integer"
@@ -1343,8 +1336,7 @@
             "type": "object",
             "properties": {
                 "avgScore": {
-                    "type": "number",
-                    "format": "float64"
+                    "type": "number"
                 },
                 "dimensionKey": {
                     "type": "string"
@@ -1359,8 +1351,7 @@
             "properties": {
                 "correlation": {
                     "description": "Pearson -1.0 to 1.0",
-                    "type": "number",
-                    "format": "float64"
+                    "type": "number"
                 },
                 "dimensionA": {
                     "type": "string"
@@ -1459,8 +1450,7 @@
             "type": "object",
             "properties": {
                 "avgScore": {
-                    "type": "number",
-                    "format": "float64"
+                    "type": "number"
                 },
                 "count": {
                     "type": "integer"
@@ -1472,8 +1462,7 @@
                     "type": "string"
                 },
                 "stdDev": {
-                    "type": "number",
-                    "format": "float64"
+                    "type": "number"
                 }
             }
         },
@@ -1495,8 +1484,7 @@
             "type": "object",
             "properties": {
                 "avgScore": {
-                    "type": "number",
-                    "format": "float64"
+                    "type": "number"
                 },
                 "count": {
                     "type": "integer"
@@ -1516,8 +1504,7 @@
                     "type": "string"
                 },
                 "percentage": {
-                    "type": "number",
-                    "format": "float64"
+                    "type": "number"
                 }
             }
         },
@@ -1540,8 +1527,7 @@
                 },
                 "deviation": {
                     "description": "how many std devs from personal avg",
-                    "type": "number",
-                    "format": "float64"
+                    "type": "number"
                 },
                 "dimensionKey": {
                     "type": "string"
@@ -1550,12 +1536,10 @@
                     "type": "string"
                 },
                 "personalAvg": {
-                    "type": "number",
-                    "format": "float64"
+                    "type": "number"
                 },
                 "score": {
-                    "type": "number",
-                    "format": "float64"
+                    "type": "number"
                 },
                 "scoreID": {
                     "type": "integer"
@@ -1582,8 +1566,7 @@
                 },
                 "latestScore": {
                     "description": "LatestScore is nil if every non-deleted score for this media has had\nis_latest unset (e.g. the latest score was removed via SoftDeleteScore\nwithout a replacement being scored yet). ScoreCount is still counted\nfrom non-deleted rows regardless.",
-                    "type": "number",
-                    "format": "float64"
+                    "type": "number"
                 },
                 "scoreCount": {
                     "type": "integer"
