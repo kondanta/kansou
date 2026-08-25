@@ -65,17 +65,17 @@ Each dimension's score is multiplied by its final renormalized weight. The resul
 
 ### Example
 
-Config has six dimensions with equal base weights of $0.20$. The media matches one genre that defines a $1.5\times$ multiplier on *Story* and a $0.8\times$ multiplier on *Pacing* — it has **no entry** for *Characters* or *World Building*. The user skips *Production*.
+Config has six dimensions with equal base weights of $0.20$. The media matches one genre that defines a $1.5\times$ multiplier on _Story_ and a $0.8\times$ multiplier on _Pacing_ — it has **no entry** for _Characters_ or _World Building_. The user skips _Production_.
 
 | Dimension   | Base W | $G_i$ | Multiplier | Effective W | Renormalized W |
-|-------------|--------|--------|-----------|-------------|----------------|
-| Story       | 0.20   | 1      | ×1.50     | 0.300       | **0.294**      |
-| Characters  | 0.20   | 0      | ×1.00 †   | 0.200       | **0.196**      |
-| Pacing      | 0.20   | 1      | ×0.80     | 0.160       | **0.157**      |
-| Enjoyment   | 0.20   | —  *   | ×1.00     | 0.200       | **0.196**      |
-| Production  | —      | —      | skipped   | —           | —              |
-| World Build | 0.20   | 0      | ×1.00 †   | 0.200       | **0.196**      |
-| **Total**   |        |        |           | **1.020** ✗ | **1.000** ✓    |
+| ----------- | ------ | ----- | ---------- | ----------- | -------------- |
+| Story       | 0.20   | 1     | ×1.50      | 0.300       | **0.294**      |
+| Characters  | 0.20   | 0     | ×1.00 †    | 0.200       | **0.196**      |
+| Pacing      | 0.20   | 1     | ×0.80      | 0.160       | **0.157**      |
+| Enjoyment   | 0.20   | — *   | ×1.00      | 0.200       | **0.196**      |
+| Production  | —      | —     | skipped    | —           | —              |
+| World Build | 0.20   | 0     | ×1.00 †    | 0.200       | **0.196**      |
+| **Total**   |        |       |            | **1.020** ✗ | **1.000** ✓    |
 
 \* Enjoyment is `bias_resistant` — genre rules never apply.  
 † No matched genre defined a multiplier for this dimension — contributing-only averaging returns $1.0$ (neutral), not an average diluted by a phantom $1.0$ contribution.
@@ -98,7 +98,7 @@ Or with version stamping:
 just build-release
 ```
 
-Requires Go 1.26+.
+Requires Go 1.27+.
 
 ---
 
@@ -123,6 +123,7 @@ export ANILIST_TOKEN=your_token_here
 ```
 
 To obtain a token:
+
 1. Go to https://anilist.co/settings/developer
 2. Create a client (redirect URI not needed for personal use)
 3. Authorise via: `https://anilist.co/api/v1/v2/oauth/authorize?client_id={id}&response_type=token`
@@ -222,25 +223,25 @@ kansou serve --port 3000
 kansou serve --live-config          # enables GET /api/v1/config and POST /api/v1/config
 ```
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/health` | Liveness check |
-| `GET` | `/api/v1/dimensions` | List configured scoring dimensions |
-| `GET` | `/api/v1/genres` | List configured genre multiplier blocks |
-| `GET` | `/api/v1/media/search?q={query}` | Search AniList by name |
-| `GET` | `/api/v1/media/{id}` | Fetch media by AniList ID |
-| `POST` | `/api/v1/score` | Calculate a weighted score |
-| `POST` | `/api/v1/score/publish` | Publish a score to AniList |
-| `GET` | `/api/v1/config` † | Return current mutable config as JSON (with `config_hash`) |
-| `POST` | `/api/v1/config` † | Replace mutable config, reload engine, persist to DB or disk |
-| `GET` | `/api/v1/db-info` | Always available — reports active DB backend or DBless status |
-| `GET` | `/api/v1/history` ‡ | Latest score per entry, newest first |
-| `GET` | `/api/v1/history/{anilist_id}` ‡ | All non-deleted scores for one entry, full breakdown |
-| `DELETE` | `/api/v1/history/{score_id}` ‡ | Soft-delete one score by its row ID |
-| `GET` | `/api/v1/stats` ‡ | One-line summary per category |
-| `GET` | `/api/v1/stats/genres` ‡ | Genre breakdown, score by genre, genre×dimension affinity |
-| `GET` | `/api/v1/stats/dimensions` ‡ | Variance, consistency, correlation, skip rate, weight overrides |
-| `GET` | `/api/v1/stats/history` ‡ | Most rescored, outliers, config impact |
+| Method   | Path                             | Description                                                     |
+| -------- | -------------------------------- | --------------------------------------------------------------- |
+| `GET`    | `/health`                        | Liveness check                                                  |
+| `GET`    | `/api/v1/dimensions`             | List configured scoring dimensions                              |
+| `GET`    | `/api/v1/genres`                 | List configured genre multiplier blocks                         |
+| `GET`    | `/api/v1/media/search?q={query}` | Search AniList by name                                          |
+| `GET`    | `/api/v1/media/{id}`             | Fetch media by AniList ID                                       |
+| `POST`   | `/api/v1/score`                  | Calculate a weighted score                                      |
+| `POST`   | `/api/v1/score/publish`          | Publish a score to AniList                                      |
+| `GET`    | `/api/v1/config` †               | Return current mutable config as JSON (with `config_hash`)      |
+| `POST`   | `/api/v1/config` †               | Replace mutable config, reload engine, persist to DB or disk    |
+| `GET`    | `/api/v1/db-info`                | Always available — reports active DB backend or DBless status   |
+| `GET`    | `/api/v1/history` ‡              | Latest score per entry, newest first                            |
+| `GET`    | `/api/v1/history/{anilist_id}` ‡ | All non-deleted scores for one entry, full breakdown            |
+| `DELETE` | `/api/v1/history/{score_id}` ‡   | Soft-delete one score by its row ID                             |
+| `GET`    | `/api/v1/stats` ‡                | One-line summary per category                                   |
+| `GET`    | `/api/v1/stats/genres` ‡         | Genre breakdown, score by genre, genre×dimension affinity       |
+| `GET`    | `/api/v1/stats/dimensions` ‡     | Variance, consistency, correlation, skip rate, weight overrides |
+| `GET`    | `/api/v1/stats/history` ‡        | Most rescored, outliers, config impact                          |
 
 † Only available when `--live-config` is set. Requires a writable config file path. See [`docs/CONFIG.md`](docs/CONFIG.md#runtime-config-editing---live-config).
 ‡ Requires `KANSOU_DB_TYPE` to be set — returns HTTP 503 otherwise. See [Scoring History (optional)](#scoring-history-optional).
@@ -253,16 +254,16 @@ All errors return `{ "error": "description" }`.
 
 ## Environment Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `ANILIST_TOKEN` | For write ops | AniList user token |
-| `LOG_LEVEL` | No | `debug`, `info`, `warn`, `error` (default: `info`) |
-| `NO_COLOR` | No | Set to disable coloured CLI log output |
-| `KANSOU_DB_TYPE` | No | `sqlite` or `postgres` — enables persistent history. Unset = fully stateless (DBless). |
-| `KANSOU_DB_PATH` | No | SQLite file path (default: `~/.local/share/kansou/kansou.db`). Only used when `KANSOU_DB_TYPE=sqlite`. |
-| `POSTGRES_HOST`/`PORT`/`USER`/`PASSWORD`/`DB` | If postgres | Postgres connection parameters. Password is never logged. |
-| `KANSOU_PORT` | No | REST server port (default: `8080`). Overridden by `--port`. Replaces the deprecated `[server]` config section. |
-| `KANSOU_CORS_ORIGINS` | No | Comma-separated CORS allowed origins. Replaces the deprecated `[server]` config section. |
+| Variable                                      | Required      | Description                                                                                                    |
+| --------------------------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------- |
+| `ANILIST_TOKEN`                               | For write ops | AniList user token                                                                                             |
+| `LOG_LEVEL`                                   | No            | `debug`, `info`, `warn`, `error` (default: `info`)                                                             |
+| `NO_COLOR`                                    | No            | Set to disable coloured CLI log output                                                                         |
+| `KANSOU_DB_TYPE`                              | No            | `sqlite` or `postgres` — enables persistent history. Unset = fully stateless (DBless).                         |
+| `KANSOU_DB_PATH`                              | No            | SQLite file path (default: `~/.local/share/kansou/kansou.db`). Only used when `KANSOU_DB_TYPE=sqlite`.         |
+| `POSTGRES_HOST`/`PORT`/`USER`/`PASSWORD`/`DB` | If postgres   | Postgres connection parameters. Password is never logged.                                                      |
+| `KANSOU_PORT`                                 | No            | REST server port (default: `8080`). Overridden by `--port`. Replaces the deprecated `[server]` config section. |
+| `KANSOU_CORS_ORIGINS`                         | No            | Comma-separated CORS allowed origins. Replaces the deprecated `[server]` config section.                       |
 
 Full reference, including `max_history` retention semantics: [`docs/CONFIG.md`](docs/CONFIG.md).
 
@@ -323,14 +324,14 @@ just clean          # remove built binary
 
 ## Docs
 
-| Document | Contents |
-|----------|----------|
-| [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md) | Functional and non-functional requirements |
-| [`docs/ADR.md`](docs/ADR.md) | Architecture decision records |
-| [`docs/CONFIG.md`](docs/CONFIG.md) | Full config schema reference |
-| [`docs/CLI.md`](docs/CLI.md) | CLI command reference |
-| [`docs/ANILIST_INTEGRATION.md`](docs/ANILIST_INTEGRATION.md) | AniList GraphQL integration details |
-| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Package structure and data flow |
+| Document                                                     | Contents                                   |
+| ------------------------------------------------------------ | ------------------------------------------ |
+| [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md)               | Functional and non-functional requirements |
+| [`docs/ADR.md`](docs/ADR.md)                                 | Architecture decision records              |
+| [`docs/CONFIG.md`](docs/CONFIG.md)                           | Full config schema reference               |
+| [`docs/CLI.md`](docs/CLI.md)                                 | CLI command reference                      |
+| [`docs/ANILIST_INTEGRATION.md`](docs/ANILIST_INTEGRATION.md) | AniList GraphQL integration details        |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md)                         | Package structure and data flow            |
 
 ---
 

@@ -9,7 +9,7 @@ default:
 
 # Build the Go binary only (no UI rebuild)
 build:
-    go build -o {{binary}} {{main}}
+    mise x -- go build -o {{binary}} {{main}}
 
 # Download the pre-built tribbie UI from its GitHub release
 build-ui:
@@ -39,40 +39,40 @@ build-all: build-ui build
 
 # Build with version stamped from the nearest git tag (clean semver, no commit hash)
 build-release:
-    go build -ldflags "-X github.com/kondanta/kansou/cmd.version=$(git describe --tags --abbrev=0 2>/dev/null || echo dev)" -o {{binary}} {{main}}
+    mise x -- go build -ldflags "-X github.com/kondanta/kansou/cmd.version=$(git describe --tags --abbrev=0 2>/dev/null || echo dev)" -o {{binary}} {{main}}
 
 # Run all tests
 test:
-    go test ./...
+    mise x -- go test ./...
 
 # Run all tests bypassing the result cache (always re-executes, e.g. after
 # toggling external state like the Docker daemon that Go's cache can't see)
 test-local:
-    go test -count=1 ./...
+    mise x -- go test -count=1 ./...
 
 # Run tests with verbose output
 test-v:
-    go test -v ./...
+    mise x -- go test -v ./...
 
 # Run tests with race detector
 test-race:
-    go test -race ./...
+    mise x -- go test -race ./...
 
 # Run tests with race detector, bypassing the result cache
 test-race-local:
-    go test -race -count=1 ./...
+    mise x -- go test -race -count=1 ./...
 
 # Run go vet
 vet:
-    go vet ./...
+    mise x -- go vet ./...
 
 # Regenerate Swagger docs (run after any handler change)
 swagger:
-    swag init -g main.go --parseDependency --output {{swag_out}}
+    mise x -- swag init -g main.go --output {{swag_out}}
 
 # Run the linter
 lint:
-    golangci-lint run ./...
+    mise x -- golangci-lint run ./...
 
 # Run the full definition-of-done check: build + test (race) + vet + lint
 ci: build test-race vet lint
@@ -88,9 +88,8 @@ clean:
 
 # Run the CLI (pass args after --)
 run *args:
-    go run {{main}} {{args}}
+    mise x -- go run {{main}} {{args}}
 
 # Start the REST server in development mode
 serve:
-    go run {{main}} serve
-
+    mise x -- go run {{main}} serve
