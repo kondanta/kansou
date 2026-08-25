@@ -39,7 +39,7 @@ jobs:
           build-mode: manual
 
       - name: Build
-        run: mise run build
+        run: go build ./...
 
       - name: Analyze
         uses: github/codeql-action/analyze@e4d2851c4593439ac10bdcd57c5b06cac73b4775 # v3.37.8
