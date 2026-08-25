@@ -429,7 +429,7 @@ func TestHandleDeleteConfigGenre_RemovesExistingKey(t *testing.T) {
 	}
 	srv := newTestServer(cfg, true, path)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/config/genres/action", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/config/genre/action", nil)
 	rec := httptest.NewRecorder()
 	srv.router.ServeHTTP(rec, req)
 
@@ -439,7 +439,7 @@ func TestHandleDeleteConfigGenre_RemovesExistingKey(t *testing.T) {
 
 	snap := srv.getSnapshot()
 	if _, ok := snap.cfg.Genres["action"]; ok {
-		t.Error("'action' still present after DELETE /config/genres/action")
+		t.Error("'action' still present after DELETE /config/genre/action")
 	}
 	if _, ok := snap.cfg.Genres["comedy"]; !ok {
 		t.Error("'comedy' was removed — DELETE must only remove the targeted key")
@@ -449,7 +449,7 @@ func TestHandleDeleteConfigGenre_RemovesExistingKey(t *testing.T) {
 func TestHandleDeleteConfigGenre_NonexistentKey_Returns404(t *testing.T) {
 	srv := newTestServer(minimalConfig(), true, "")
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/config/genres/DoesNotExist", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/config/genre/DoesNotExist", nil)
 	rec := httptest.NewRecorder()
 	srv.router.ServeHTTP(rec, req)
 
