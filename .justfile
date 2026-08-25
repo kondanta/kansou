@@ -74,6 +74,12 @@ swagger:
 lint:
     mise x -- golangci-lint run ./...
 
+fmt:
+    mise x -- golangci-lint fmt ./...
+
+go-fix:
+    mise x -- go fix ./...
+
 # Run the full definition-of-done check: build + test (race) + vet + lint
 ci: build test-race vet lint
     @echo "✓ all checks passed"
@@ -93,3 +99,9 @@ run *args:
 # Start the REST server in development mode
 serve:
     mise x -- go run {{main}} serve
+
+serve-sqlite:
+    mise x -- env APP_ENV=local LOG_LEVEL=debug KANSOU_DB_TYPE=sqlite KANSOU_DB_PATH=/tmp/kansou-demo.db go run {{main}} serve
+
+serve-postgres:
+    mise x -- env APP_ENV=dev LOG_LEVEL=debug KANSOU_DB_TYPE=postgres POSTGRES_HOST=localhost POSTGRES_USER=postgres POSTGRES_DB=postgres POSTGRES_PASSWORD=password go run {{main}} serve

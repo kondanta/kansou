@@ -31,9 +31,11 @@
                         }
                     }
                 }
-            },
-            "post": {
-                "description": "Replaces the scoring config (dimensions, genres, weights) and reloads the engine atomically. Persists to the database in DB mode, or to disk otherwise. Only available when --live-config is set.",
+            }
+        },
+        "/api/v1/config/dimensions": {
+            "put": {
+                "description": "Full replacement of the dimensions map. All existing dimensions are replaced by the provided map. Weights must sum to 1.0. Note: if any genre entries reference dimensions removed by this call, next PATCH /config/genres will fail validation — remove or update those genre entries first. Only available when --live-config is set or a database is configured.",
                 "consumes": [
                     "application/json"
                 ],
@@ -43,15 +45,148 @@
                 "tags": [
                     "config"
                 ],
-                "summary": "Update config",
+                "summary": "Replace dimensions config",
                 "parameters": [
                     {
-                        "description": "New config (config_hash is ignored)",
+                        "description": "Full dimensions map",
                         "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
+                            "$ref": "#/definitions/server.dimensionsUpdatePayload"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
                             "$ref": "#/definitions/server.configPayload"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/config/general": {
+            "patch": {
+                "description": "Updates general operational parameters. Absent fields are left unchanged. Only available when --live-config is set or a database is configured.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "config"
+                ],
+                "summary": "Update general config",
+                "parameters": [
+                    {
+                        "description": "Fields to update",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.generalPayload"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.configPayload"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/config/genre/{key}": {
+            "delete": {
+                "description": "Removes a single genre entry by key. Returns 404 if the key does not exist. primary_genre_weight and max_multiplier cannot be targeted — they are struct fields, not genre map entries. Only avaialble when --live-config is set or a database is configured.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "config"
+                ],
+                "summary": "Delete a genre entry",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Genre key to remove",
+                        "name": "key",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.configPayload"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/config/genres": {
+            "patch": {
+                "description": "Merges genre map entries into the current config. Absent map keys are left untouched. Absent scalar fields (primary_genre_weight, max_multiplier) are left unchanged. Genre keys must reference dimensions that already exist — call PUT /config/dimensions first if adding a new dimension. Only available when --live-config is set or a database is configured.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "config"
+                ],
+                "summary": "Update genres config",
+                "parameters": [
+                    {
+                        "description": "Genre entries and/or governing scalars to update",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.genresUpdatePayload"
                         }
                     }
                 ],
@@ -847,12 +982,31 @@
                 }
             }
         },
+        "server.dimensionsUpdatePayload": {
+            "type": "object",
+            "properties": {
+                "dimensions": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/server.configDimensionEntry"
+                    }
+                }
+            }
+        },
         "server.errorResponse": {
             "type": "object",
             "properties": {
                 "error": {
                     "description": "Error is a human-readable description of what went wrong.",
                     "type": "string"
+                }
+            }
+        },
+        "server.generalPayload": {
+            "type": "object",
+            "properties": {
+                "max_history": {
+                    "type": "integer"
                 }
             }
         },
@@ -908,6 +1062,27 @@
                 },
                 "primary_genre_weight": {
                     "description": "PrimaryGenreWeight is the configured blend ratio for primary genre support.",
+                    "type": "number"
+                }
+            }
+        },
+        "server.genresUpdatePayload": {
+            "type": "object",
+            "properties": {
+                "genres": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "number",
+                            "format": "float64"
+                        }
+                    }
+                },
+                "max_multiplier": {
+                    "type": "number"
+                },
+                "primary_genre_weight": {
                     "type": "number"
                 }
             }

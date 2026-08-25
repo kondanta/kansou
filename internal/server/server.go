@@ -149,7 +149,10 @@ func (s *Server) buildRouter() *chi.Mux {
 
 		if s.dbType != "" || s.liveConfig {
 			r.Get("/config", s.handleGetConfig)
-			r.Post("/config", s.handlePostConfig)
+			r.Put("/config/dimensions", s.handlePutConfigDimensions)
+			r.Patch("/config/general", s.handlePatchConfigGeneral)
+			r.Patch("/config/genres", s.handlePatchConfigGenres)
+			r.Delete("/config/genre/{key}", s.handleDeleteConfigGenre)
 		}
 	})
 

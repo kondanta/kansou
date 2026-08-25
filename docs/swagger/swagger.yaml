@@ -118,11 +118,23 @@ definitions:
           $ref: '#/definitions/server.dimensionItem'
         type: array
     type: object
+  server.dimensionsUpdatePayload:
+    properties:
+      dimensions:
+        additionalProperties:
+          $ref: '#/definitions/server.configDimensionEntry'
+        type: object
+    type: object
   server.errorResponse:
     properties:
       error:
         description: Error is a human-readable description of what went wrong.
         type: string
+    type: object
+  server.generalPayload:
+    properties:
+      max_history:
+        type: integer
     type: object
   server.genreMultiplierItem:
     properties:
@@ -163,6 +175,20 @@ definitions:
       primary_genre_weight:
         description: PrimaryGenreWeight is the configured blend ratio for primary
           genre support.
+        type: number
+    type: object
+  server.genresUpdatePayload:
+    properties:
+      genres:
+        additionalProperties:
+          additionalProperties:
+            format: float64
+            type: number
+          type: object
+        type: object
+      max_multiplier:
+        type: number
+      primary_genre_weight:
         type: number
     type: object
   server.historyListItem:
@@ -784,19 +810,22 @@ paths:
       summary: Get config
       tags:
       - config
-    post:
+  /api/v1/config/dimensions:
+    put:
       consumes:
       - application/json
-      description: Replaces the scoring config (dimensions, genres, weights) and reloads
-        the engine atomically. Persists to the database in DB mode, or to disk otherwise.
-        Only available when --live-config is set.
+      description: 'Full replacement of the dimensions map. All existing dimensions
+        are replaced by the provided map. Weights must sum to 1.0. Note: if any genre
+        entries reference dimensions removed by this call, next PATCH /config/genres
+        will fail validation — remove or update those genre entries first. Only available
+        when --live-config is set or a database is configured.'
       parameters:
-      - description: New config (config_hash is ignored)
+      - description: Full dimensions map
         in: body
         name: request
         required: true
         schema:
-          $ref: '#/definitions/server.configPayload'
+          $ref: '#/definitions/server.dimensionsUpdatePayload'
       produces:
       - application/json
       responses:
@@ -812,7 +841,102 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/server.errorResponse'
-      summary: Update config
+      summary: Replace dimensions config
+      tags:
+      - config
+  /api/v1/config/general:
+    patch:
+      consumes:
+      - application/json
+      description: Updates general operational parameters. Absent fields are left
+        unchanged. Only available when --live-config is set or a database is configured.
+      parameters:
+      - description: Fields to update
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/server.generalPayload'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.configPayload'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Update general config
+      tags:
+      - config
+  /api/v1/config/genre/{key}:
+    delete:
+      description: Removes a single genre entry by key. Returns 404 if the key does
+        not exist. primary_genre_weight and max_multiplier cannot be targeted — they
+        are struct fields, not genre map entries. Only avaialble when --live-config
+        is set or a database is configured.
+      parameters:
+      - description: Genre key to remove
+        in: path
+        name: key
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.configPayload'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Delete a genre entry
+      tags:
+      - config
+  /api/v1/config/genres:
+    patch:
+      consumes:
+      - application/json
+      description: Merges genre map entries into the current config. Absent map keys
+        are left untouched. Absent scalar fields (primary_genre_weight, max_multiplier)
+        are left unchanged. Genre keys must reference dimensions that already exist
+        — call PUT /config/dimensions first if adding a new dimension. Only available
+        when --live-config is set or a database is configured.
+      parameters:
+      - description: Genre entries and/or governing scalars to update
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/server.genresUpdatePayload'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.configPayload'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.errorResponse'
+      summary: Update genres config
       tags:
       - config
   /api/v1/db-info:
