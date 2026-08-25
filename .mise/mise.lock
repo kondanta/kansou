@@ -79,38 +79,38 @@ url_api = "https://api.github.com/repos/golangci/golangci-lint/releases/assets/5
 provenance = "github-attestations"
 
 [[tools.swag]]
-version = "2.0.0-rc5"
+version = "1.16.6"
 backend = "aqua:swaggo/swag"
 
 [tools.swag."platforms.linux-arm64"]
-checksum = "sha256:f21c7f6114711fc651370c88f7937f77cc273a6c93810048abf6623be26eef93"
-url = "https://github.com/swaggo/swag/releases/download/v2.0.0-rc5/swag_2.0.0-rc5_Linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/swaggo/swag/releases/assets/365880972"
+checksum = "sha256:0a2890b2ab31f37da92a45d27b4cc78501bb74720b1df0932d59377527c366e9"
+url = "https://github.com/swaggo/swag/releases/download/v1.16.6/swag_1.16.6_Linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/swaggo/swag/releases/assets/277315823"
 
 [tools.swag."platforms.linux-arm64-musl"]
-checksum = "sha256:f21c7f6114711fc651370c88f7937f77cc273a6c93810048abf6623be26eef93"
-url = "https://github.com/swaggo/swag/releases/download/v2.0.0-rc5/swag_2.0.0-rc5_Linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/swaggo/swag/releases/assets/365880972"
+checksum = "sha256:0a2890b2ab31f37da92a45d27b4cc78501bb74720b1df0932d59377527c366e9"
+url = "https://github.com/swaggo/swag/releases/download/v1.16.6/swag_1.16.6_Linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/swaggo/swag/releases/assets/277315823"
 
 [tools.swag."platforms.linux-x64"]
-checksum = "sha256:7211a07fb8cb413aab5e14031074656dd879ff6a86e93a92f4e826ffbabffa10"
-url = "https://github.com/swaggo/swag/releases/download/v2.0.0-rc5/swag_2.0.0-rc5_Linux_x86_64.tar.gz"
-url_api = "https://api.github.com/repos/swaggo/swag/releases/assets/365881018"
+checksum = "sha256:90bdf19e817001b17f5f91a1eefb2d2dd9631b88a85712f195f44b220848c8bb"
+url = "https://github.com/swaggo/swag/releases/download/v1.16.6/swag_1.16.6_Linux_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/swaggo/swag/releases/assets/277315962"
 
 [tools.swag."platforms.linux-x64-musl"]
-checksum = "sha256:7211a07fb8cb413aab5e14031074656dd879ff6a86e93a92f4e826ffbabffa10"
-url = "https://github.com/swaggo/swag/releases/download/v2.0.0-rc5/swag_2.0.0-rc5_Linux_x86_64.tar.gz"
-url_api = "https://api.github.com/repos/swaggo/swag/releases/assets/365881018"
+checksum = "sha256:90bdf19e817001b17f5f91a1eefb2d2dd9631b88a85712f195f44b220848c8bb"
+url = "https://github.com/swaggo/swag/releases/download/v1.16.6/swag_1.16.6_Linux_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/swaggo/swag/releases/assets/277315962"
 
 [tools.swag."platforms.macos-arm64"]
-checksum = "sha256:048ab25c7c953196bab7cfa46bafb44d254ecfb901aa0271958b023ac2d1eaf3"
-url = "https://github.com/swaggo/swag/releases/download/v2.0.0-rc5/swag_2.0.0-rc5_Darwin_arm64.tar.gz"
-url_api = "https://api.github.com/repos/swaggo/swag/releases/assets/365880938"
+checksum = "sha256:b8a96c65827da71be18bf47ea212b14df17f6cd6726651834a08749e78cad2ad"
+url = "https://github.com/swaggo/swag/releases/download/v1.16.6/swag_1.16.6_Darwin_arm64.tar.gz"
+url_api = "https://api.github.com/repos/swaggo/swag/releases/assets/277315776"
 
 [tools.swag."platforms.macos-x64"]
-checksum = "sha256:2f1bc6f43bd6211e1debca3ed1e486de0d3aabb2c7dcfdaab92e688717062ba2"
-url = "https://github.com/swaggo/swag/releases/download/v2.0.0-rc5/swag_2.0.0-rc5_Darwin_x86_64.tar.gz"
-url_api = "https://api.github.com/repos/swaggo/swag/releases/assets/365880963"
+checksum = "sha256:dbc9b62561ba922c1a7703d985b5ddf3fc8387807c895ea37091393931559135"
+url = "https://github.com/swaggo/swag/releases/download/v1.16.6/swag_1.16.6_Darwin_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/swaggo/swag/releases/assets/277315783"
 
 [[tools.zizmor]]
 version = "1.29.0"

@@ -1,7 +1,7 @@
 [tools]
 go = "1.27.0"
 golangci-lint = "2.13.1"
-swag = "2.0.0-rc5"
+swag = "1.16.6"
 zizmor = "1.29.0"
 
 [tasks.build]
