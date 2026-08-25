@@ -187,7 +187,7 @@ func (s *Server) handlePatchConfigGenres(w http.ResponseWriter, r *http.Request)
 // handleDeleteConfigGenre removes a single genre entry from the config.
 //
 //	@Summary		Delete a genre entry
-//	@Description	Removes a single genre entry by key. Returns 404 if the key does not exist. primary_genre_weight and max_multiplier cannot be targeted — they are struct fields, not genre map entries. Only avaialble when --live-config is set or a database is configured.
+//	@Description	Removes a single genre entry by key. Returns 404 if the key does not exist. primary_genre_weight and max_multiplier cannot be targeted — they are struct fields, not genre map entries. Only available when --live-config is set or a database is configured.
 //	@Tags			config
 //	@Produce		json
 //	@Param			key	path		string	true	"Genre key to remove"
