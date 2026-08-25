@@ -35,7 +35,7 @@
         },
         "/api/v1/config/dimensions": {
             "put": {
-                "description": "Full replacement of the dimensions map. All existing dimensions are replaced by the provided map. Weights must sum to 1.0. Note: if any genre entries reference dimensions removed by this call,next PATCH /config/genres will fail validation — remove or update those genre entries first. Only available when --live-config is set or a database is configured.",
+                "description": "Full replacement of the dimensions map. All existing dimensions are replaced by the provided map. Weights must sum to 1.0. Note: if any genre entries reference dimensions removed by this call, next PATCH /config/genres will fail validation — remove or update those genre entries first. Only available when --live-config is set or a database is configured.",
                 "consumes": [
                     "application/json"
                 ],
@@ -127,7 +127,7 @@
         },
         "/api/v1/config/genre/{key}": {
             "delete": {
-                "description": "Removes a single genre entry by key. Returns 404 if the key does not exist. primary_genre_weight and max_multiplier cannot be targeted — they are struct fields, not genre map entries. Only avawhen --live-config is set or a database is configured.",
+                "description": "Removes a single genre entry by key. Returns 404 if the key does not exist. primary_genre_weight and max_multiplier cannot be targeted — they are struct fields, not genre map entries. Only avaialble when --live-config is set or a database is configured.",
                 "produces": [
                     "application/json"
                 ],
