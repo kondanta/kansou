@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kondanta/kansou/internal/config"
@@ -186,7 +187,7 @@ func (s *Server) handlePatchConfigGenres(w http.ResponseWriter, r *http.Request)
 // handleDeleteConfigGenre removes a single genre entry from the config.
 //
 //	@Summary		Delete a genre entry
-//	@Description	Removes a single genre entry by key. Returns 404 if the key does not exist. primary_genre_weight and max_multiplier cannot be targeted — they are struct fields, not genre map entries. Only avawhen --live-config is set or a database is configured.
+//	@Description	Removes a single genre entry by key. Returns 404 if the key does not exist. primary_genre_weight and max_multiplier cannot be targeted — they are struct fields, not genre map entries. Only avaialble when --live-config is set or a database is configured.
 //	@Tags			config
 //	@Produce		json
 //	@Param			key	path		string	true	"Genre key to remove"
@@ -195,7 +196,8 @@ func (s *Server) handlePatchConfigGenres(w http.ResponseWriter, r *http.Request)
 //	@Failure		500	{object}	errorResponse
 //	@Router			/api/v1/config/genre/{key} [delete]
 func (s *Server) handleDeleteConfigGenre(w http.ResponseWriter, r *http.Request) {
-	key := chi.URLParam(r, "key")
+	// normalize genre lookup
+	key := strings.ToLower(chi.URLParam(r, "key"))
 
 	snap := s.getSnapshot()
 	if _, ok := snap.cfg.Genres[key]; !ok {
@@ -234,7 +236,7 @@ func (s *Server) handleDeleteConfigGenre(w http.ResponseWriter, r *http.Request)
 // handlePutConfigDimensions fully replaces the dimensions map and reloads the engine.
 //
 //	@Summary		Replace dimensions config
-//	@Description	Full replacement of the dimensions map. All existing dimensions are replaced by the provided map. Weights must sum to 1.0. Note: if any genre entries reference dimensions removed by this call,next PATCH /config/genres will fail validation — remove or update those genre entries first. Only available when --live-config is set or a database is configured.
+//	@Description	Full replacement of the dimensions map. All existing dimensions are replaced by the provided map. Weights must sum to 1.0. Note: if any genre entries reference dimensions removed by this call, next PATCH /config/genres will fail validation — remove or update those genre entries first. Only available when --live-config is set or a database is configured.
 //	@Tags			config
 //	@Accept			json
 //	@Produce		json
