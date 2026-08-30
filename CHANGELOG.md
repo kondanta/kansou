@@ -1,5 +1,46 @@
 # Changelog
 
+## [1.10.0](https://github.com/kondanta/kansou/compare/v1.9.1...v1.10.0) (2026-08-30)
+
+
+### Features
+
+* **container:** update image golang ( 1.26.6 → 1.27.0 ) ([#144](https://github.com/kondanta/kansou/issues/144)) ([8372893](https://github.com/kondanta/kansou/commit/8372893b40aec8aafb0f701e7af13e04b105093c))
+* **deps:** update dependency go ( 1.26.6 → 1.27.0 ) ([#143](https://github.com/kondanta/kansou/issues/143)) ([6430fb4](https://github.com/kondanta/kansou/commit/6430fb4b3eadefb0d0464a8792b916a295f499f3))
+* **deps:** update dependency golangci-lint ( 2.12.2 → 2.13.1 ) ([#145](https://github.com/kondanta/kansou/issues/145)) ([c918160](https://github.com/kondanta/kansou/commit/c918160915a559b2e65afb5bc805b699c1253ad8))
+* **deps:** update dependency goreleaser ( 2.17.1 → 2.18.0 ) ([#147](https://github.com/kondanta/kansou/issues/147)) ([e24c017](https://github.com/kondanta/kansou/commit/e24c0175b6fc5328c313eb5505609da599a64e3c))
+* **deps:** update dependency zizmor ( 1.27.0 → 1.28.0 ) ([#132](https://github.com/kondanta/kansou/issues/132)) ([783c7cb](https://github.com/kondanta/kansou/commit/783c7cbf98c274c6abe061e3cb0d7a2e637f69d6))
+* **deps:** update dependency zizmor ( 1.28.0 → 1.29.0 ) ([#137](https://github.com/kondanta/kansou/issues/137)) ([52ae013](https://github.com/kondanta/kansou/commit/52ae013f9e73162f445ce6436c42a432e75fc1bf))
+* **deps:** update dependency zizmor ( 1.29.0 → 1.30.0 ) ([26ac830](https://github.com/kondanta/kansou/commit/26ac830dfa07656f18239a578a3a8cbffd5c6649))
+* **deps:** update module github.com/testcontainers/testcontainers-go/modules/postgres ( v0.43.0 → v0.44.0 ) ([#139](https://github.com/kondanta/kansou/issues/139)) ([3782aca](https://github.com/kondanta/kansou/commit/3782aca5f54a82d716ec6af0f2af0cd166edd79a))
+* **github-release:** update release sasalx/tribbie ( v0.4.2 → v0.5.0 ) ([#151](https://github.com/kondanta/kansou/issues/151)) ([238579c](https://github.com/kondanta/kansou/commit/238579cae60f728b4313153e774802cefd8313b5))
+
+
+### Bug Fixes
+
+* add PUT and PATCH to CORS ([1224224](https://github.com/kondanta/kansou/commit/1224224c62c7c4d1e4654cbd2d243559164a217e))
+* **ci:** make mise tool available on mise lock update ([#135](https://github.com/kondanta/kansou/issues/135)) ([a39d08f](https://github.com/kondanta/kansou/commit/a39d08fe37d71e3ba2149f8095193d50bf6cb60c))
+* **ci:** make rennovate update mise lock file ([#134](https://github.com/kondanta/kansou/issues/134)) ([23ac898](https://github.com/kondanta/kansou/commit/23ac89899c2d5172f3e6d81108d278bc727a59db))
+* **container:** update image golang ( 1.26.5 → 1.26.6 ) ([#141](https://github.com/kondanta/kansou/issues/141)) ([1ed253d](https://github.com/kondanta/kansou/commit/1ed253d4c55d430b28a0ddbb1aaa4c83b8aa8bb5))
+* **deps:** update dependency go ( 1.26.5 → 1.26.6 ) ([#140](https://github.com/kondanta/kansou/issues/140)) ([a8449c0](https://github.com/kondanta/kansou/commit/a8449c0f194b5f1d0346e63ccfe4aebf4b5d748b))
+* **deps:** update dependency golangci-lint ( 2.13.1 → 2.13.2 ) ([#150](https://github.com/kondanta/kansou/issues/150)) ([7797c08](https://github.com/kondanta/kansou/commit/7797c08705079a39c1d69504dbbb21a6737cfcd9))
+* **deps:** update dependency goreleaser ( 2.17.0 → 2.17.1 ) ([#136](https://github.com/kondanta/kansou/issues/136)) ([98a7d17](https://github.com/kondanta/kansou/commit/98a7d179dd7c8e436b0970fde083a87aa93a1120))
+* **deps:** update module github.com/go-chi/chi/v5 ( v5.3.1 → v5.3.2 ) ([#146](https://github.com/kondanta/kansou/issues/146)) ([bc4b721](https://github.com/kondanta/kansou/commit/bc4b721cfccfc42558696dbb64604954f4998705))
+
+
+### Miscellaneous Chores
+
+* **deps:** update dependencies ([#138](https://github.com/kondanta/kansou/issues/138)) ([65583ea](https://github.com/kondanta/kansou/commit/65583ea835aa1ce2c7de30c06cdccffc4a85d2b1))
+* **deps:** update deps ([#130](https://github.com/kondanta/kansou/issues/130)) ([828594d](https://github.com/kondanta/kansou/commit/828594deadf8a0f2176c98b3682b05730571c8d1))
+* dynamically chose docker or podman for justfile ([#152](https://github.com/kondanta/kansou/issues/152)) ([2cd32ea](https://github.com/kondanta/kansou/commit/2cd32ea1968c2850181ae887a01e785618674dec))
+* update dependencies ([#142](https://github.com/kondanta/kansou/issues/142)) ([303d79f](https://github.com/kondanta/kansou/commit/303d79f2980a02629129ee41128fb7bed834715a))
+* update dependencies ([#148](https://github.com/kondanta/kansou/issues/148)) ([c8a04e5](https://github.com/kondanta/kansou/commit/c8a04e562cf949be71ff9a2fa41d036548b12f85))
+
+
+### Code Refactoring
+
+* **ci:** deduplicate gobuild process in release ([#133](https://github.com/kondanta/kansou/issues/133)) ([a305900](https://github.com/kondanta/kansou/commit/a305900f1a1498206affd5cf505e86b2afc01f91))
+
 ## [1.9.1](https://github.com/kondanta/kansou/compare/v1.9.0...v1.9.1) (2026-07-16)
 
 
