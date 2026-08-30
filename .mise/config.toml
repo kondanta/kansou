@@ -2,7 +2,7 @@
 go = "1.27.0"
 golangci-lint = "2.13.2"
 swag = "1.16.6"
-zizmor = "1.29.0"
+zizmor = "1.30.0"
 
 [tasks.build]
 description = "Build the kansou binary"
