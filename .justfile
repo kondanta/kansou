@@ -2,6 +2,13 @@ binary          := "kansou"
 main            := "."
 swag_out        := "docs/swagger"
 tribbie_version := `cat TRIBBIE_VERSION`
+crun            := if `which podman 2>/dev/null` != "" {
+    "podman"
+} else if `which docker 2>/dev/null` != "" {
+    "docker"
+} else {
+    error("Neither docker nor podman is installed on this system.")
+}
 
 # List available recipes
 default:
@@ -26,7 +33,7 @@ build-ui-head:
     else \
         rm -rf web/tribbie && git clone --depth 1 https://github.com/sasalx/tribbie web/tribbie; \
     fi
-    docker run --rm \
+    {{crun}} run --rm \
       -v "$(pwd)/web/tribbie:/app" \
       -v "$(pwd)/web/dist:/app/dist" \
       -w /app \
