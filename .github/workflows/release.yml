@@ -71,8 +71,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   # ── Helm chart ───────────────────────────────────────────────────────────────
   # Packages the chart and pushes it to ghcr.io as an OCI artifact.
-  # Both chart version and appVersion are set to the release tag so they stay
-  # in sync automatically — no manual chart version bumps required.
+  # Chart version is the release tag without the leading "v" (Helm requires
+  # strict SemVer). appVersion keeps the "v" so it matches the container image
+  # tag published by goreleaser (ghcr.io/kondanta/kansou:v<x.y.z>), which the
+  # deployment template uses as the default image tag.
   # Install with: helm install kansou oci://ghcr.io/kondanta/charts/kansou --version <version>
   release-chart:
     name: Helm chart
@@ -96,6 +98,6 @@ jobs:
         run: |
           helm package charts/kansou \
             --version "${GITHUB_REF_NAME#v}" \
-            --app-version "${GITHUB_REF_NAME#v}"
+            --app-version "${GITHUB_REF_NAME}"
       - name: Push chart
         run: helm push kansou-*.tgz oci://ghcr.io/${{ github.repository_owner }}/charts

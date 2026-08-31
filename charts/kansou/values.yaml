@@ -1,7 +1,8 @@
 replicaCount: 1
 image:
   repository: ghcr.io/kondanta/kansou
-  # tag defaults to Chart.appVersion when left empty
+  # tag defaults to Chart.appVersion (e.g. "v1.9.1") when left empty;
+  # published image tags carry the leading "v"
   tag: ""
   pullPolicy: IfNotPresent
 service:
