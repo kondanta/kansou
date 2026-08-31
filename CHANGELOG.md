@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.1](https://github.com/kondanta/kansou/compare/v1.10.0...v1.10.1) (2026-08-31)
+
+
+### Bug Fixes
+
+* use v prefix for image tag ([#154](https://github.com/kondanta/kansou/issues/154)) ([4a9e331](https://github.com/kondanta/kansou/commit/4a9e331d0941bd7e1cb22a7f6f77f17d0e120264))
+
 ## [1.10.0](https://github.com/kondanta/kansou/compare/v1.9.1...v1.10.0) (2026-08-30)
 
 
