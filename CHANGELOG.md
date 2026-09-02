@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.10.2](https://github.com/kondanta/kansou/compare/v1.10.1...v1.10.2) (2026-09-02)
+
+
+### Bug Fixes
+
+* **container:** update image golang ( 1.27.0 → 1.27.1 ) ([#157](https://github.com/kondanta/kansou/issues/157)) ([8d80648](https://github.com/kondanta/kansou/commit/8d806482fa3b0f683d16536ef6aa9e72b4644a9a))
+* **deps:** update dependency go ( 1.27.0 → 1.27.1 ) ([033f5a0](https://github.com/kondanta/kansou/commit/033f5a08edd25cf76d24b11647887784b5bef009))
+
 ## [1.10.1](https://github.com/kondanta/kansou/compare/v1.10.0...v1.10.1) (2026-08-31)
 
 
