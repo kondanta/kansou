@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.10.2](https://github.com/kondanta/kansou/compare/v1.10.1...v1.10.2) (2026-09-27)
+
+
+### Features
+
+* **deps:** update dependency golangci-lint ( 2.13.2 → 2.14.0 ) ([#164](https://github.com/kondanta/kansou/issues/164)) ([fefc7ea](https://github.com/kondanta/kansou/commit/fefc7ea7a17524c86ae0f33f25dcd9e51779b210))
+* **deps:** update module github.com/golang-migrate/migrate/v4 ( v4.19.1 → v4.20.0 ) ([#160](https://github.com/kondanta/kansou/issues/160)) ([ee15db4](https://github.com/kondanta/kansou/commit/ee15db47221ab6ca0f64dddc96ebfa47cd5a6c67))
+* **deps:** update module github.com/jackc/pgx/v5 ( v5.10.0 → v5.11.0 ) ([#159](https://github.com/kondanta/kansou/issues/159)) ([80c40f3](https://github.com/kondanta/kansou/commit/80c40f337575ca9ea9099315c913aa99ac161c87))
+
+
+### Bug Fixes
+
+* **container:** update image golang ( 1.27.0 → 1.27.1 ) ([#157](https://github.com/kondanta/kansou/issues/157)) ([8d80648](https://github.com/kondanta/kansou/commit/8d806482fa3b0f683d16536ef6aa9e72b4644a9a))
+* **deps:** update dependency go ( 1.27.0 → 1.27.1 ) ([033f5a0](https://github.com/kondanta/kansou/commit/033f5a08edd25cf76d24b11647887784b5bef009))
+* **deps:** update dependency zizmor ( 1.30.0 → 1.30.1 ) ([#161](https://github.com/kondanta/kansou/issues/161)) ([133c548](https://github.com/kondanta/kansou/commit/133c5489ac10680954d6545c0c42a0686433a8b8))
+* **deps:** update module github.com/golang-migrate/migrate/v4 ( v4.20.0 → v4.20.1 ) ([#162](https://github.com/kondanta/kansou/issues/162)) ([a0ef0dd](https://github.com/kondanta/kansou/commit/a0ef0ddaf360c6e7aa24a4f553333c753cbb5ec9))
+
+
+### Documentation
+
+* update readme ([#166](https://github.com/kondanta/kansou/issues/166)) ([7b1e0b9](https://github.com/kondanta/kansou/commit/7b1e0b90183077c9732a574c7a7d463c06ee348d))
+
+
+### Miscellaneous Chores
+
+* add forgotten image ([cc30e2a](https://github.com/kondanta/kansou/commit/cc30e2a5e3f3406b9006c7fdc9c4b99bfdc4b68d))
+* force patch release ([72b32b3](https://github.com/kondanta/kansou/commit/72b32b372c18b46c8c521e9d69864804bfddcce7))
+* update deps ([#163](https://github.com/kondanta/kansou/issues/163)) ([9ced5d0](https://github.com/kondanta/kansou/commit/9ced5d0f5e67d9604bfdfdc91b49b3a52b7d60a4))
+* update deps ([#165](https://github.com/kondanta/kansou/issues/165)) ([70e386b](https://github.com/kondanta/kansou/commit/70e386b55109949e1900bf0feebdaa027089cf3f))
+
 ## [1.10.1](https://github.com/kondanta/kansou/compare/v1.10.0...v1.10.1) (2026-08-31)
 
 
