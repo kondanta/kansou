@@ -19,6 +19,18 @@ Fetches media metadata from [AniList](https://anilist.co), walks you through a s
 
 ---
 
+## Screenshots
+
+| | |
+|---|---|
+| ![Search](assets/screenshots/search.png) Search AniList by title | ![Score entry](assets/screenshots/score-entry.png) Per-dimension scoring session |
+| ![Score result](assets/screenshots/score-result.png) Weighted breakdown + final score | ![History](assets/screenshots/history.png) Session history (requires a database) |
+
+![Dashboard](assets/screenshots/dashboard.png)
+Aggregate stats across your scoring history (requires a database)
+
+---
+
 ## How It Works
 
 kansou scores media through a four-step pipeline. The renormalization step is what makes it robust: skipping a dimension or applying a genre multiplier never silently distorts the other weights — the formula always rebalances.
@@ -179,6 +191,12 @@ With per-session weight overrides:
 kansou score add "Mushishi" --weight pacing=0.05,world_building=0.20
 ```
 
+With a primary genre (blends its multiplier at `primary_genre_weight`, see [How It Works](#how-it-works)) and notes on publish:
+
+```bash
+kansou score add "Mushishi" --primary-genre Mystery --notes
+```
+
 ### Look up media without scoring
 
 ```bash
@@ -220,7 +238,7 @@ reference and `max_history` retention semantics.
 ```bash
 kansou serve
 kansou serve --port 3000
-kansou serve --live-config          # enables GET /api/v1/config and POST /api/v1/config
+kansou serve --live-config          # enables the /api/v1/config* endpoints (disk-backed, no DB needed)
 ```
 
 | Method   | Path                             | Description                                                     |
@@ -232,23 +250,30 @@ kansou serve --live-config          # enables GET /api/v1/config and POST /api/v
 | `GET`    | `/api/v1/media/{id}`             | Fetch media by AniList ID                                       |
 | `POST`   | `/api/v1/score`                  | Calculate a weighted score                                      |
 | `POST`   | `/api/v1/score/publish`          | Publish a score to AniList                                      |
+| `POST`   | `/api/v1/weights`                | Preview per-dimension final weights without scoring             |
 | `GET`    | `/api/v1/config` †               | Return current mutable config as JSON (with `config_hash`)      |
-| `POST`   | `/api/v1/config` †               | Replace mutable config, reload engine, persist to DB or disk    |
+| `PUT`    | `/api/v1/config/dimensions` †    | Replace dimension list, reload engine, persist to DB or disk    |
+| `PATCH`  | `/api/v1/config/general` †       | Update general config (e.g. `max_history`)                      |
+| `PATCH`  | `/api/v1/config/genres` †        | Add/update genre multiplier blocks                              |
+| `DELETE` | `/api/v1/config/genre/{key}` †   | Remove a genre multiplier block                                 |
 | `GET`    | `/api/v1/db-info`                | Always available — reports active DB backend or DBless status   |
 | `GET`    | `/api/v1/history` ‡              | Latest score per entry, newest first                            |
 | `GET`    | `/api/v1/history/{anilist_id}` ‡ | All non-deleted scores for one entry, full breakdown            |
-| `DELETE` | `/api/v1/history/{score_id}` ‡   | Soft-delete one score by its row ID                             |
+| `DELETE` | `/api/v1/history/{score_id}` ‡   | Soft-delete one score by its row ID                              |
+| `POST`   | `/api/v1/history/{score_id}/promote` ‡ | Restore a soft-deleted score as the active one for its media |
 | `GET`    | `/api/v1/stats` ‡                | One-line summary per category                                   |
 | `GET`    | `/api/v1/stats/genres` ‡         | Genre breakdown, score by genre, genre×dimension affinity       |
 | `GET`    | `/api/v1/stats/dimensions` ‡     | Variance, consistency, correlation, skip rate, weight overrides |
 | `GET`    | `/api/v1/stats/history` ‡        | Most rescored, outliers, config impact                          |
 
-† Only available when `--live-config` is set. Requires a writable config file path. See [`docs/CONFIG.md`](docs/CONFIG.md#runtime-config-editing---live-config).
+† Only available when `KANSOU_DB_TYPE` is set **or** `--live-config` is passed. The disk-backed path (no DB) requires a writable config file. See [`docs/CONFIG.md`](docs/CONFIG.md#runtime-config-editing---live-config).
 ‡ Requires `KANSOU_DB_TYPE` to be set — returns HTTP 503 otherwise. See [Scoring History (optional)](#scoring-history-optional).
 
 Swagger UI: `http://localhost:8080/swagger/index.html`
 
 All errors return `{ "error": "description" }`.
+
+Everything else at `/` serves the embedded Vue UI (built from the [`web/tribbie`](web/tribbie) submodule via `just build-ui`) — the screens in [Screenshots](#screenshots) above are this UI talking to the same REST API described here.
 
 ---
 
@@ -259,6 +284,8 @@ All errors return `{ "error": "description" }`.
 | `ANILIST_TOKEN`                               | For write ops | AniList user token                                                                                             |
 | `LOG_LEVEL`                                   | No            | `debug`, `info`, `warn`, `error` (default: `info`)                                                             |
 | `NO_COLOR`                                    | No            | Set to disable coloured CLI log output                                                                         |
+| `APP_ENV`                                     | No            | `dev`, `development`, or `local` switches `serve` to coloured text logs instead of JSON                        |
+| `TRUST_PROXY`                                 | No            | Set to trust one hop of `X-Forwarded-For` for rate-limit client-IP resolution (behind a reverse proxy)         |
 | `KANSOU_DB_TYPE`                              | No            | `sqlite` or `postgres` — enables persistent history. Unset = fully stateless (DBless).                         |
 | `KANSOU_DB_PATH`                              | No            | SQLite file path (default: `~/.local/share/kansou/kansou.db`). Only used when `KANSOU_DB_TYPE=sqlite`.         |
 | `POSTGRES_HOST`/`PORT`/`USER`/`PASSWORD`/`DB` | If postgres   | Postgres connection parameters. Password is never logged.                                                      |
@@ -303,6 +330,7 @@ map to the environment variables above.
 
 ```
 just build          # build binary
+just build-ui        # build the Vue UI (web/tribbie submodule) into web/dist, embedded at serve time
 just build-release  # build with git version stamp
 just test           # run tests
 just test-race      # run tests with race detector
