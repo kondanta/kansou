@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.3](https://github.com/kondanta/kansou/compare/v1.10.2...v1.10.3) (2026-10-02)
+
+
+### Bug Fixes
+
+* **deps:** update module github.com/lmittmann/tint ( v1.2.0 → v1.2.1 ) ([#167](https://github.com/kondanta/kansou/issues/167)) ([0ffe4da](https://github.com/kondanta/kansou/commit/0ffe4da60376db2fe2017a82dae49f71b622414d))
+
 ## [1.10.2](https://github.com/kondanta/kansou/compare/v1.10.1...v1.10.2) (2026-09-27)
 
 
