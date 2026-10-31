@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.11.0](https://github.com/kondanta/kansou/compare/v1.10.2...v1.11.0) (2026-10-31)
+
+
+### Features
+
+* **deps:** update dependency golangci-lint ( 2.14.0 → 2.15.0 ) ([#176](https://github.com/kondanta/kansou/issues/176)) ([8b2067f](https://github.com/kondanta/kansou/commit/8b2067ffdfe7307aa6a680823e51ea0c7e5ee747))
+* **deps:** update dependency zizmor ( 1.30.1 → 1.31.0 ) ([#174](https://github.com/kondanta/kansou/issues/174)) ([5390572](https://github.com/kondanta/kansou/commit/539057263cba21c85df97c75c6edffc1479a10c0))
+* **deps:** update module github.com/go-chi/chi/v5 ( v5.3.2 → v5.4.0 ) ([#172](https://github.com/kondanta/kansou/issues/172)) ([66d328d](https://github.com/kondanta/kansou/commit/66d328de9221cb277170c0e8dfec361d05171af8))
+* **deps:** update module github.com/go-chi/chi/v5 ( v5.4.0 → v5.5.0 ) ([#173](https://github.com/kondanta/kansou/issues/173)) ([620f49f](https://github.com/kondanta/kansou/commit/620f49fe00b9ef218f3c9508e381c2ac598aeafe))
+* **deps:** update module github.com/jackc/pgx/v5 ( v5.11.0 → v5.12.0 ) ([#182](https://github.com/kondanta/kansou/issues/182)) ([fb7ba15](https://github.com/kondanta/kansou/commit/fb7ba15db51ac58c8feed5d59d7f9dbd5b2dc1ec))
+
+
+### Bug Fixes
+
+* **ci:** add qemu step ([#183](https://github.com/kondanta/kansou/issues/183)) ([79921c6](https://github.com/kondanta/kansou/commit/79921c6029dde1626ec90b977da8a7362e7d1901))
+* **container:** update image golang ( 1.27.1 → 1.27.2 ) ([#170](https://github.com/kondanta/kansou/issues/170)) ([592f7e5](https://github.com/kondanta/kansou/commit/592f7e56ef95c23edc3140cfa93178d9bde8bb78))
+* **container:** update image golang ( 1.27.2 → 1.27.3 ) ([#177](https://github.com/kondanta/kansou/issues/177)) ([5dba846](https://github.com/kondanta/kansou/commit/5dba8463f67e5300a26aa067deb9e5ad434d13eb))
+* **deps:** update dependency go ( 1.27.1 → 1.27.2 ) ([#171](https://github.com/kondanta/kansou/issues/171)) ([d4cb0ba](https://github.com/kondanta/kansou/commit/d4cb0ba2b38abbab8e8e6cf9faca98fee42c302e))
+* **deps:** update dependency go ( 1.27.2 → 1.27.3 ) ([#178](https://github.com/kondanta/kansou/issues/178)) ([23a212b](https://github.com/kondanta/kansou/commit/23a212b7bc88add8d63bae1dc1bf6c82b145c1a6))
+* **deps:** update dependency zizmor ( 1.31.0 → 1.31.1 ) ([#175](https://github.com/kondanta/kansou/issues/175)) ([fe0e92f](https://github.com/kondanta/kansou/commit/fe0e92fd8d55db1b6b75ad711d17bcdb7dc9c04a))
+* **deps:** update module github.com/go-chi/httprate ( v0.16.0 → v0.16.1 ) ([#169](https://github.com/kondanta/kansou/issues/169)) ([95f882a](https://github.com/kondanta/kansou/commit/95f882ae170dfaa32ec45d92ca797ade384cd94b))
+* **deps:** update module github.com/lmittmann/tint ( v1.2.0 → v1.2.1 ) ([#167](https://github.com/kondanta/kansou/issues/167)) ([0ffe4da](https://github.com/kondanta/kansou/commit/0ffe4da60376db2fe2017a82dae49f71b622414d))
+
+
+### Miscellaneous Chores
+
+* go mod tidy ([#184](https://github.com/kondanta/kansou/issues/184)) ([3a7cab6](https://github.com/kondanta/kansou/commit/3a7cab6be9552f7c4ad920f3b9c6d1413d9d473c))
+* pin explicitly for zizmor ([#181](https://github.com/kondanta/kansou/issues/181)) ([f23fc25](https://github.com/kondanta/kansou/commit/f23fc2582ff5982fb7d6bbe83c2c27538e587f42))
+* retire self-hosted runners ([#180](https://github.com/kondanta/kansou/issues/180)) ([a3ba9d5](https://github.com/kondanta/kansou/commit/a3ba9d545e51051745cac6b551a0e960cce0585e))
+* update dependencies ([#179](https://github.com/kondanta/kansou/issues/179)) ([68a04d2](https://github.com/kondanta/kansou/commit/68a04d24ed3f2359342dcfbd45536d7dafe4e1b0))
+
 ## [1.10.2](https://github.com/kondanta/kansou/compare/v1.10.1...v1.10.2) (2026-09-27)
 
 
