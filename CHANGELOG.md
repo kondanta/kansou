@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.0](https://github.com/kondanta/kansou/compare/v1.11.0...v1.12.0) (2026-11-03)
+
+
+### Features
+
+* **deps:** update dependency zizmor ( 1.31.1 → 1.32.0 ) ([#185](https://github.com/kondanta/kansou/issues/185)) ([d388ea7](https://github.com/kondanta/kansou/commit/d388ea79b443270f67cf8dd44b021e0830bab565))
+
 ## [1.11.0](https://github.com/kondanta/kansou/compare/v1.10.2...v1.11.0) (2026-10-31)
 
 
