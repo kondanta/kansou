@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -327,8 +328,7 @@ func dimensionOrder(dims map[string]DimensionDef) []string {
 	for k := range dims {
 		keys = append(keys, k)
 	}
-	// Stable sort so tests and output are deterministic.
-	stableSort(keys)
+	slices.Sort(keys)
 	return keys
 }
 
@@ -343,20 +343,6 @@ func HashDimensions(dims map[string]DimensionDef, order []string) string {
 		_, _ = fmt.Fprintf(h, "%s:%.6f:%v\n", key, d.Weight, d.BiasResistant)
 	}
 	return fmt.Sprintf("%x", h.Sum(nil))
-}
-
-// stableSort sorts a string slice in place using insertion sort.
-// Only used on small slices (dimension count is typically <20).
-func stableSort(s []string) {
-	for i := 1; i < len(s); i++ {
-		key := s[i]
-		j := i - 1
-		for j >= 0 && s[j] > key {
-			s[j+1] = s[j]
-			j--
-		}
-		s[j+1] = key
-	}
 }
 
 // ProbeWritable verifies that the directory containing path is writable
@@ -433,14 +419,14 @@ func Hash(cfg *Config) string {
 		genreKeys = append(genreKeys, g)
 	}
 
-	stableSort(genreKeys)
+	slices.Sort(genreKeys)
 	for _, genre := range genreKeys {
 		mults := cfg.Genres[genre]
 		dimKeys := make([]string, 0, len(mults))
 		for d := range mults {
 			dimKeys = append(dimKeys, d)
 		}
-		stableSort(dimKeys)
+		slices.Sort(dimKeys)
 		for _, dim := range dimKeys {
 			_, _ = fmt.Fprintf(h, "genre=%s:dim=%s:mult=%.6f\n", genre, dim, mults[dim])
 		}

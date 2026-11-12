@@ -4,6 +4,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -646,4 +647,101 @@ func itoa(n int) string {
 		buf = append([]byte{'-'}, buf...)
 	}
 	return string(buf)
+}
+
+func TestResolvePath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir on Windows
+
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			"empty uses the default path, expanded",
+			"",
+			filepath.Join(home, ".config/kansou/config.toml"),
+		},
+		{"tilde slash alone is the home dir", "~/", home},
+		{"tilde path is expanded", "~/kansou/c.toml", filepath.Join(home, "kansou/c.toml")},
+		{"bare tilde is left alone", "~", "~"},
+		{"other user tilde is left alone", "~root/c.toml", "~root/c.toml"},
+		{"absolute path is left alone", "/etc/kansou/c.toml", "/etc/kansou/c.toml"},
+		{"relative path is left alone", "conf/c.toml", "conf/c.toml"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := resolvePath(tc.in)
+			if err != nil {
+				t.Fatalf("resolvePath(%q) unexpected error: %v", tc.in, err)
+			}
+			if got != tc.want {
+				t.Errorf("resolvePath(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestResolvePath_NoHomeDir(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
+	if _, err := resolvePath("~/c.toml"); err == nil {
+		t.Error("expected an error when the home directory cannot be determined")
+	}
+	// A path that needs no expansion must not depend on the home directory.
+	if got, err := resolvePath("/etc/c.toml"); err != nil || got != "/etc/c.toml" {
+		t.Errorf("resolvePath(absolute) = %q, %v; want unchanged and no error", got, err)
+	}
+}
+
+func TestLoad_PrimaryGenreWeightBounds(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		want    float64
+		wantErr bool
+	}{
+		{"lower bound 0.0 is valid and not replaced by the default", "0.0", 0, false},
+		{"upper bound 1.0 is valid", "1.0", 1, false},
+		{"midpoint", "0.5", 0.5, false},
+		{"just below 0", "-0.0001", 0, true},
+		{"just above 1", "1.0001", 0, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			path := writeTOML(
+				t,
+				"primary_genre_weight = "+tc.value+"\n[dimensions.story]\nlabel = \"Story\"\nweight = 1.0\n",
+			)
+			cfg, err := Load(path)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected an error for primary_genre_weight = %s", tc.value)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if cfg.PrimaryGenreWeight != tc.want {
+				t.Errorf("PrimaryGenreWeight = %v, want %v", cfg.PrimaryGenreWeight, tc.want)
+			}
+		})
+	}
+}
+
+func TestDimensionOrder_Alphabetical(t *testing.T) {
+	dims := map[string]DimensionDef{
+		"story": {}, "enjoyment": {}, "value": {}, "characters": {}, "pacing": {}, "art": {},
+	}
+	want := []string{"art", "characters", "enjoyment", "pacing", "story", "value"}
+	// Map iteration order is random, so repeat to make an unsorted result likely to show.
+	for range 20 {
+		got := dimensionOrder(dims)
+		if !slices.Equal(got, want) {
+			t.Fatalf("dimensionOrder = %v, want %v", got, want)
+		}
+	}
 }
