@@ -470,7 +470,7 @@ func pruneScoreHistory(ctx context.Context, tx *sqlx.Tx, mediaRowID, maxHistory 
 	                  AND id NOT IN (
 	                      SELECT id FROM scores
 	                      WHERE media_id = ? AND deleted_at IS NULL
-	                      ORDER BY scored_at DESC LIMIT ?
+	                      ORDER BY scored_at DESC, id DESC LIMIT ?
 	                  )`
 	if _, err := tx.ExecContext(
 		ctx,
@@ -692,7 +692,7 @@ func (s *SQLiteStore) ScoreHistory(ctx context.Context, anilistID int) ([]Score,
 	           FROM scores s
 	           JOIN media m ON m.id = s.media_id
 	           WHERE m.anilist_id = ? AND s.deleted_at IS NULL
-	           ORDER BY s.scored_at DESC`
+	           ORDER BY s.scored_at DESC, s.id DESC`
 	var rows []scoreRow
 	if err := s.db.SelectContext(ctx, &rows, q, anilistID); err != nil {
 		return nil, fmt.Errorf("fetching score history: %w", err)
