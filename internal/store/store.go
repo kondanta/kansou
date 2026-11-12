@@ -72,8 +72,11 @@ type Store interface {
 	// AniList media ID. Returns nil, nil if no score exists.
 	LatestScore(ctx context.Context, anilistID int) (*Score, error)
 
-	// ScoreHistory returns all non-deleted scores for a given AniList media ID,
-	// ordered by scored_at DESC.
+	// ScoreHistory returns all non-deleted scores for a given AniList media ID.
+	// The active score (is_latest) is always first — after PromoteScore that may
+	// be an older score — and the rest follow newest first (scored_at DESC, then
+	// id DESC for equal timestamps). Callers may treat element 0 as the current
+	// score. See ADR-041.
 	ScoreHistory(ctx context.Context, anilistID int) ([]Score, error)
 
 	// ListLatest returns the latest score for every media entry, ordered by

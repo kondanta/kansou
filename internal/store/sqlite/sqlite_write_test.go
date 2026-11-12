@@ -621,3 +621,26 @@ func TestScoreHistory_TieOrdersByIDDesc(t *testing.T) {
 		t.Fatalf("history: got (%+v, %v), want 6.5 first", hist, err)
 	}
 }
+
+// After PromoteScore restores an older score, that score is the current one and
+// must be history[0] even though a newer (non-active) score exists (ADR-041).
+func TestScoreHistory_ActiveScoreFirst(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	m := insertMedia(t, s, 1, "Show", "ANIME", nil)
+	a := insertScore(t, s, m, 5.5, "h", "2024-01-01T00:00:00Z", false)
+	insertScore(t, s, m, 6.5, "h", "2024-02-01T00:00:00Z", false)
+	insertScore(t, s, m, 9.5, "h", "2024-03-01T00:00:00Z", true) // C: current, newest
+
+	if err := s.PromoteScore(ctx, a); err != nil { // C is demoted and soft-deleted
+		t.Fatalf("PromoteScore: %v", err)
+	}
+	hist, err := s.ScoreHistory(ctx, 1)
+	if err != nil || len(hist) != 2 {
+		t.Fatalf("history: got (%+v, %v), want 2 rows", hist, err)
+	}
+	if !hist[0].IsLatest || hist[0].FinalScore != 5.5 || hist[1].FinalScore != 6.5 {
+		t.Errorf("order: got %.1f (latest=%v), %.1f; want promoted 5.5 first then 6.5",
+			hist[0].FinalScore, hist[0].IsLatest, hist[1].FinalScore)
+	}
+}

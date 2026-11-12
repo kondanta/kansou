@@ -683,8 +683,9 @@ func (s *SQLiteStore) fetchMatchedGenres(
 	return result, nil
 }
 
-// ScoreHistory returns all non-deleted scores for a given AniList media ID,
-// ordered by scored_at DESC.
+// ScoreHistory returns all non-deleted scores for a given AniList media ID.
+// The active score (is_latest) comes first, then the rest newest first
+// (scored_at DESC, id DESC). See ADR-041.
 func (s *SQLiteStore) ScoreHistory(ctx context.Context, anilistID int) ([]Score, error) {
 	const q = `SELECT s.id, s.media_id, m.title_romaji, m.title_english, m.media_type, m.format,
 	                  m.cover_image, s.final_score, s.primary_genre, s.primary_genre_weight, s.config_hash,
@@ -692,7 +693,7 @@ func (s *SQLiteStore) ScoreHistory(ctx context.Context, anilistID int) ([]Score,
 	           FROM scores s
 	           JOIN media m ON m.id = s.media_id
 	           WHERE m.anilist_id = ? AND s.deleted_at IS NULL
-	           ORDER BY s.scored_at DESC, s.id DESC`
+	           ORDER BY s.is_latest DESC, s.scored_at DESC, s.id DESC`
 	var rows []scoreRow
 	if err := s.db.SelectContext(ctx, &rows, q, anilistID); err != nil {
 		return nil, fmt.Errorf("fetching score history: %w", err)

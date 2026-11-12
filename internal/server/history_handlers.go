@@ -58,7 +58,7 @@ func (s *Server) handleHistoryList(w http.ResponseWriter, r *http.Request) {
 // handleHistoryDetail returns all non-deleted scores for one AniList media ID.
 //
 //	@Summary		Show history detail
-//	@Description	Returns all non-deleted scores for one AniList media ID, newest first, with full breakdown. Requires a database.
+//	@Description	Returns all non-deleted scores for one AniList media ID with full breakdown. The active score (is_latest) is first, the rest newest first. Requires a database.
 //	@Tags			history
 //	@Produce		json
 //	@Param			anilist_id	path		int	true	"AniList media ID"
