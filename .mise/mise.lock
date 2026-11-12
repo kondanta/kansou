@@ -32,6 +32,10 @@ url = "https://dl.google.com/go/go1.27.4.darwin-amd64.tar.gz"
 checksum = "sha256:178ab98950ac69ab25069307dc6ade79f3816e414cce95b4da166a115cde1e7e"
 url = "https://dl.google.com/go/go1.27.4.windows-amd64.zip"
 
+[[tools."go:github.com/go-gremlins/gremlins/cmd/gremlins"]]
+version = "0.6.0"
+backend = "go:github.com/go-gremlins/gremlins/cmd/gremlins"
+
 [[tools.golangci-lint]]
 version = "2.15.0"
 backend = "aqua:golangci/golangci-lint"
