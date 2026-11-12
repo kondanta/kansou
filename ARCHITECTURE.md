@@ -172,6 +172,7 @@ AniList: fetch by ID → same flow as above from this point
 
 ```
 GET  /health                       # liveness check — stays at root, unprefixed
+GET  /ready                        # readiness check (DB ping when KANSOU_DB_TYPE set) — root, unprefixed
 
 GET  /api/v1/dimensions          # list configured scoring dimensions + config_hash
   → returns ordered dimension list for frontend to build score form
@@ -264,7 +265,8 @@ The REST server is designed to be consumed by a web frontend without modificatio
 - All responses are JSON
 - All errors use a consistent envelope: `{ "error": "message" }`
 - CORS headers are configurable in `config.toml`
-- The `/health` endpoint returns `200 OK` with no body for liveness checks
+- The `/health` endpoint returns `200 OK` with no body for liveness checks and checks no dependency
+- The `/ready` endpoint returns `200`/`503` JSON; it pings the `Store` (`Store.Ping`) when one is configured and is always ready in stateless mode. See ADR-039
 - Swagger UI is served at `/swagger/index.html` in server mode
 
 No frontend-specific logic lives in the server layer. The server is a thin HTTP skin over core logic, identical to what the CLI calls.

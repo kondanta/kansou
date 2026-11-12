@@ -127,7 +127,7 @@
         },
         "/api/v1/config/genre/{key}": {
             "delete": {
-                "description": "Removes a single genre entry by key. Returns 404 if the key does not exist. primary_genre_weight and max_multiplier cannot be targeted — they are struct fields, not genre map entries. Only avaialble when --live-config is set or a database is configured.",
+                "description": "Removes a single genre entry by key. Returns 404 if the key does not exist. primary_genre_weight and max_multiplier cannot be targeted — they are struct fields, not genre map entries. Only available when --live-config is set or a database is configured.",
                 "produces": [
                     "application/json"
                 ],
@@ -798,17 +798,43 @@
         },
         "/health": {
             "get": {
-                "description": "Returns 200 OK if the server is running.",
+                "description": "Returns 200 OK if the process is up and serving HTTP. It checks no\ndependency (database, AniList), so a failure means \"restart me\" and\nnothing else. Use /ready for traffic-routing decisions.",
                 "produces": [
                     "text/plain"
                 ],
                 "tags": [
                     "system"
                 ],
-                "summary": "Health check",
+                "summary": "Liveness check",
                 "responses": {
                     "200": {
                         "description": "OK"
+                    }
+                }
+            }
+        },
+        "/ready": {
+            "get": {
+                "description": "Returns 200 when this instance should receive traffic, 503 otherwise.\nWhen KANSOU_DB_TYPE is set, pings the database; stateless mode is always\nready once serving. AniList is deliberately not checked. Failure detail\nis logged, not returned.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Readiness check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.readyResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/server.readyResponse"
+                        }
                     }
                 }
             }
@@ -1227,6 +1253,23 @@
                 "title": {
                     "description": "Title is the media title as confirmed by AniList.",
                     "type": "string"
+                }
+            }
+        },
+        "server.readyResponse": {
+            "type": "object",
+            "properties": {
+                "checks": {
+                    "description": "Checks maps each check name to \"ok\" or \"fail\". Empty when no\ndependency is configured (stateless mode).",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "status": {
+                    "description": "Status is \"ready\" or \"not ready\".",
+                    "type": "string",
+                    "example": "ready"
                 }
             }
         },

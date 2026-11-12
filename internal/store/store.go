@@ -170,6 +170,10 @@ type Store interface {
 
 	// --- Lifecycle ---
 
+	// Ping reports whether the database is reachable. Used by the readiness
+	// endpoint; callers bound it with a context deadline.
+	Ping(ctx context.Context) error
+
 	Close() error
 }
 

@@ -332,7 +332,8 @@ seven reference dimensions with their labels, descriptions, and weights.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | /health | Liveness check. Returns 200 with no body. |
+| GET | /health | Liveness check. Returns 200 with no body. Checks no dependency. |
+| GET | /ready | Readiness check. 200 `{"status":"ready","checks":{...}}`, or 503 with `"not ready"` when the configured database fails a ping. Stateless mode is always ready. AniList is never checked. Failure detail is logged, not returned. |
 | GET | /dimensions | List configured scoring dimensions in order |
 | GET | /media/search?q={query} | Search AniList by name |
 | GET | /media/{id} | Fetch media by AniList ID |
