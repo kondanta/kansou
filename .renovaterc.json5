@@ -13,7 +13,9 @@
     'github>kondanta/kansou//.renovate/semanticCommits.json5',
   ],
   rebaseWhen: 'behind-base-branch',
-  dependencyDashboardTitle: "SirMergington's Estate 🤖",
+  dependencyDashboard: {
+    title: "SirMergington's Estate 🤖",
+  },
   reviewers: [
     'kondanta',
   ],
@@ -60,10 +62,16 @@
       groupName: 'node',
     },
     {
-      matchManagers: ['mise'],
+      matchManagers: [
+        'mise',
+      ],
       postUpgradeTasks: {
-        commands: ['.renovate/update-mise-lock.sh'],
-        fileFilters: ['.mise/mise.lock'],
+        commands: [
+          '.renovate/update-mise-lock.sh',
+        ],
+        fileFilters: [
+          '.mise/mise.lock',
+        ],
         executionMode: 'branch',
       },
     },
