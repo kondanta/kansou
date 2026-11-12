@@ -41,8 +41,16 @@ start_postgres() {
     KANSOU_TEST_POSTGRES_ADDR="$("${pg_runtime}" port "${pg_cid}" 5432/tcp | head -n 1)"
     export KANSOU_TEST_POSTGRES_ADDR
 }
+# gremlins recurses into child packages, so ./internal/store, ./internal/... and
+# ./... also run the postgres tests. Start the server when the postgres package
+# is the selection itself or lies inside the selected tree.
+readonly pg_pkg=./internal/store/postgres
 for pkg in "${pkgs[@]}"; do
-    case "${pkg}" in *postgres*) start_postgres; break ;; esac
+    tree="${pkg%/...}"
+    tree="${tree%/}"
+    case "${pg_pkg}/" in
+        "${tree}"/*) start_postgres; break ;;
+    esac
 done
 # tar, not rsync: guaranteed on every runner and dev machine.
 tar -c --exclude=./web --exclude=./.git --exclude=./.jj --exclude=./kansou . | tar -x -C "${work}"

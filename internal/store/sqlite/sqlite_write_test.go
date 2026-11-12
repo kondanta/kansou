@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -543,8 +544,9 @@ func TestLastPruneAt_Corrupt(t *testing.T) {
 func TestExpandPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir on Windows
 	tests := []struct{ name, in, want string }{
-		{"tilde prefix", "~/kansou/db.sqlite", home + "/kansou/db.sqlite"},
+		{"tilde prefix", "~/kansou/db.sqlite", filepath.Join(home, "kansou", "db.sqlite")},
 		{"absolute untouched", "/var/lib/kansou.db", "/var/lib/kansou.db"},
 		{"relative untouched", "data/kansou.db", "data/kansou.db"},
 		{"bare tilde untouched", "~", "~"},
