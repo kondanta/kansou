@@ -2,7 +2,9 @@ package stats
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -145,6 +147,28 @@ func TestVariancExtremes(t *testing.T) {
 			wantMost:  "b",
 			wantLeast: "c",
 		},
+		{
+			name: "all tied: first in input order wins both",
+			variance: []store.DimensionVarianceStat{
+				{DimensionKey: "a", StdDev: 1.0},
+				{DimensionKey: "b", StdDev: 1.0},
+				{DimensionKey: "c", StdDev: 1.0},
+			},
+			wantMost:  "a",
+			wantLeast: "a",
+		},
+		{
+			name: "tied extremes away from index 0: first of each tie wins",
+			variance: []store.DimensionVarianceStat{
+				{DimensionKey: "a", StdDev: 3.0},
+				{DimensionKey: "b", StdDev: 1.0},
+				{DimensionKey: "c", StdDev: 1.0},
+				{DimensionKey: "d", StdDev: 5.0},
+				{DimensionKey: "e", StdDev: 5.0},
+			},
+			wantMost:  "b",
+			wantLeast: "d",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -201,9 +225,14 @@ func TestSummary_PassesThroughSimpleFields(t *testing.T) {
 	pruned := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	fs := &fakeStore{
 		genreBreakdown: []store.GenreStat{{Genre: "Action", Count: 4}},
-		consistency:    &store.ConsistencyStat{AvgStdDev: 1.5, Count: 3},
-		outliers:       []store.OutlierStat{{AnilistID: 1}, {AnilistID: 2}},
-		lastPruneAt:    &pruned,
+		// ScoreByGenre arrives ordered by avg score DESC, so the first row is the top.
+		scoreByGenre: []store.GenreScore{
+			{Genre: "Drama", AvgScore: 8.4},
+			{Genre: "Action", AvgScore: 7.1},
+		},
+		consistency: &store.ConsistencyStat{AvgStdDev: 1.5, Count: 3},
+		outliers:    []store.OutlierStat{{AnilistID: 1}, {AnilistID: 2}},
+		lastPruneAt: &pruned,
 	}
 	sum, err := New(fs).Summary(context.Background())
 	if err != nil {
@@ -211,6 +240,10 @@ func TestSummary_PassesThroughSimpleFields(t *testing.T) {
 	}
 	if sum.TopGenre == nil || sum.TopGenre.Genre != "Action" {
 		t.Errorf("TopGenre: got %+v, want Action", sum.TopGenre)
+	}
+	if sum.TopScoringGenre == nil || sum.TopScoringGenre.Genre != "Drama" ||
+		sum.TopScoringGenre.AvgScore != 8.4 {
+		t.Errorf("TopScoringGenre: got %+v, want Drama 8.4", sum.TopScoringGenre)
 	}
 	if sum.OverallConsistency == nil || sum.OverallConsistency.AvgStdDev != 1.5 {
 		t.Errorf("OverallConsistency: got %+v, want AvgStdDev=1.5", sum.OverallConsistency)
@@ -331,5 +364,26 @@ func TestErrorsPropagateFromStore(t *testing.T) {
 	}
 	if _, err := st.Summary(ctx); !errors.Is(err, errBoom) {
 		t.Errorf("Summary: got err=%v, want it to wrap errBoom", err)
+	}
+}
+
+// With no scored genres every optional Summary pointer must stay nil, and the
+// Summary must still serialise (the REST handler encodes it directly; a nil
+// pointer becomes JSON null, and the CLI guards each field before use).
+func TestSummary_EmptyStore_PointersNilAndSerialisable(t *testing.T) {
+	sum, err := New(&fakeStore{}).Summary(context.Background())
+	if err != nil {
+		t.Fatalf("Summary: %v", err)
+	}
+	if sum.TopScoringGenre != nil || sum.TopGenre != nil {
+		t.Errorf("want nil genre pointers, got TopGenre=%+v TopScoringGenre=%+v",
+			sum.TopGenre, sum.TopScoringGenre)
+	}
+	out, err := json.Marshal(sum)
+	if err != nil {
+		t.Fatalf("json.Marshal(Summary): %v", err)
+	}
+	if !strings.Contains(string(out), `"TopScoringGenre":null`) {
+		t.Errorf("TopScoringGenre should encode as null, got %s", out)
 	}
 }
