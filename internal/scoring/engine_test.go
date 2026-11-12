@@ -53,12 +53,15 @@ func testEngine() *Engine {
 	return NewEngine(dims, defs, genres, 0.6)
 }
 
-// allTen returns an Entry with every dimension scored 10, no skips, no overrides.
-func allTen(genres []string) Entry {
+// sampleEntry returns an Entry with a distinct fractional score per dimension,
+// no skips and no overrides. Scores must differ from each other: with uniform
+// scores (e.g. all 10) the final score is the same whatever the weights are, so
+// a weight bug cannot show up in FinalScore.
+func sampleEntry(genres []string) Entry {
 	return Entry{
 		Scores: map[DimensionKey]float64{
-			"story": 10, "enjoyment": 10, "characters": 10,
-			"production": 10, "pacing": 10, "world_building": 10, "value": 10,
+			"story": 9.25, "enjoyment": 7.5, "characters": 8.75,
+			"production": 6.25, "pacing": 9.0, "world_building": 5.5, "value": 8.0,
 		},
 		SkippedDimensions: map[DimensionKey]bool{},
 		WeightOverrides:   map[DimensionKey]float64{},
@@ -70,27 +73,18 @@ func approxEqual(a, b, tolerance float64) bool {
 	return math.Abs(a-b) <= tolerance
 }
 
-func TestScore_AllTen_NoGenre(t *testing.T) {
+func TestScore_NoGenre_IsBaseWeightedSum(t *testing.T) {
+	// No genres: final weights equal base weights, so the score is
+	// Σ(score × base weight), computed by hand from sampleEntry:
+	// 9.25×0.25 + 7.5×0.20 + 8.75×0.15 + 6.25×0.15 + 9.0×0.10 + 5.5×0.10 + 8.0×0.05
+	// = 2.3125 + 1.5 + 1.3125 + 0.9375 + 0.9 + 0.55 + 0.4 = 7.9125 → 7.91
 	eng := testEngine()
-	result, err := eng.Score(allTen(nil))
+	result, err := eng.Score(sampleEntry(nil))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.FinalScore != 10.0 {
-		t.Errorf("expected 10.0, got %v", result.FinalScore)
-	}
-}
-
-func TestScore_AllTen_GenreNoEffect(t *testing.T) {
-	// All-10 scores: genre multipliers shift weights but every dimension is 10,
-	// so the final score must still be 10.0 regardless of genre.
-	eng := testEngine()
-	result, err := eng.Score(allTen([]string{"Action", "Drama"}))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.FinalScore != 10.0 {
-		t.Errorf("expected 10.0 for uniform scores, got %v", result.FinalScore)
+	if result.FinalScore != 7.91 {
+		t.Errorf("expected 7.91, got %v", result.FinalScore)
 	}
 }
 
@@ -125,7 +119,7 @@ func TestScore_BiasResistantIgnoresGenreMultiplier(t *testing.T) {
 	eng := testEngine()
 	// Action genre defines no multiplier for enjoyment/value, but we test
 	// that the BiasResistant flag is respected in the breakdown.
-	result, err := eng.Score(allTen([]string{"Action"}))
+	result, err := eng.Score(sampleEntry([]string{"Action"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -143,7 +137,7 @@ func TestScore_BiasResistantIgnoresGenreMultiplier(t *testing.T) {
 func TestScore_GenreMultiplierAveraged(t *testing.T) {
 	// story: action=0.8, drama=1.4 → average = (0.8+1.4)/2 = 1.1
 	eng := testEngine()
-	result, err := eng.Score(allTen([]string{"Action", "Drama"}))
+	result, err := eng.Score(sampleEntry([]string{"Action", "Drama"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -160,7 +154,7 @@ func TestScore_NoMatchedGenres_Multiplier1(t *testing.T) {
 	// "romance" is not in the test engine's genre config at all, so no genres
 	// match. All dimension multipliers must be 1.0 (contributing-only averaging: no opinions → neutral).
 	eng := testEngine()
-	result, err := eng.Score(allTen([]string{"Romance"}))
+	result, err := eng.Score(sampleEntry([]string{"Romance"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -181,7 +175,7 @@ func TestScore_ContributingOnly_DimensionlessGenreExcluded(t *testing.T) {
 	// Old behavior: characters = (drama.characters + action.neutral_1.0) / 2 = (1.3+1.0)/2 = 1.15
 	// contributing-only averaging:     characters = drama.characters / 1 = 1.3 (action excluded for this dimension)
 	eng := testEngine()
-	result, err := eng.Score(allTen([]string{"Action", "Drama"}))
+	result, err := eng.Score(sampleEntry([]string{"Action", "Drama"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -203,7 +197,7 @@ func TestScore_PartialGenreMatch(t *testing.T) {
 	// average. Unmatched genres are excluded from the pool per FR-03b.
 	// story average = 1.5/1 = 1.5 (only mystery contributes).
 	eng := testEngine()
-	result, err := eng.Score(allTen([]string{"Mystery", "Romance"}))
+	result, err := eng.Score(sampleEntry([]string{"Mystery", "Romance"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -222,7 +216,7 @@ func TestScore_PartialGenreMatch(t *testing.T) {
 func TestScore_WeightsRenormaliseAfterGenre(t *testing.T) {
 	// After genre adjustment, final weights must sum to 1.0.
 	eng := testEngine()
-	result, err := eng.Score(allTen([]string{"Action", "Drama", "Mystery"}))
+	result, err := eng.Score(sampleEntry([]string{"Action", "Drama", "Mystery"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -354,7 +348,7 @@ func TestScore_WeightOverrideAndSkip_Error(t *testing.T) {
 
 func TestScore_BreakdownAlwaysPopulated(t *testing.T) {
 	eng := testEngine()
-	result, err := eng.Score(allTen(nil))
+	result, err := eng.Score(sampleEntry(nil))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -374,7 +368,7 @@ func TestScore_BreakdownAlwaysPopulated(t *testing.T) {
 func TestScore_BreakdownOrderMatchesConfig(t *testing.T) {
 	// Breakdown rows must appear in the same order as the engine's dimension slice.
 	eng := testEngine()
-	result, err := eng.Score(allTen(nil))
+	result, err := eng.Score(sampleEntry(nil))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -390,7 +384,7 @@ func TestScore_BreakdownOrderMatchesConfig(t *testing.T) {
 
 func TestScore_UnknownDimensionInScores_Error(t *testing.T) {
 	eng := testEngine()
-	entry := allTen(nil)
+	entry := sampleEntry(nil)
 	entry.Scores["nonexistent"] = 5
 	_, err := eng.Score(entry)
 	if err == nil {
@@ -399,27 +393,27 @@ func TestScore_UnknownDimensionInScores_Error(t *testing.T) {
 }
 
 func TestScore_GenreCaseInsensitive(t *testing.T) {
-	// "ACTION", "action", and "Action" should all match the same genre block.
+	// "ACTION", "action", and "Action" must all match the same genre block.
+	// Each variant must actually apply it (production 1.4), otherwise a
+	// case-sensitive matcher would make all three equal to the no-genre score.
 	eng := testEngine()
-	r1, err := eng.Score(allTen([]string{"action"}))
+	base, err := eng.Score(sampleEntry(nil))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	r2, err := eng.Score(allTen([]string{"ACTION"}))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	r3, err := eng.Score(allTen([]string{"Action"}))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if r1.FinalScore != r2.FinalScore || r2.FinalScore != r3.FinalScore {
-		t.Errorf(
-			"genre case sensitivity: scores differ: %v %v %v",
-			r1.FinalScore,
-			r2.FinalScore,
-			r3.FinalScore,
-		)
+	for _, g := range []string{"action", "ACTION", "Action"} {
+		r, err := eng.Score(sampleEntry([]string{g}))
+		if err != nil {
+			t.Fatalf("%s: unexpected error: %v", g, err)
+		}
+		if r.FinalScore == base.FinalScore {
+			t.Errorf("%q had no effect on the score (%v): genre not matched", g, r.FinalScore)
+		}
+		for _, row := range r.Breakdown {
+			if row.Key == "production" && row.AppliedMultiplier != 1.4 {
+				t.Errorf("%q: production multiplier %v, want 1.4", g, row.AppliedMultiplier)
+			}
+		}
 	}
 }
 
@@ -427,7 +421,7 @@ func TestScore_MultipleMatchedGenres_MultiplierAveragedNotMultiplied(t *testing.
 	// story: mystery=1.5, slice_of_life=0.8, supernatural=1.1
 	// average = (1.5+0.8+1.1)/3 = 1.133...
 	eng := testEngine()
-	result, err := eng.Score(allTen([]string{"Mystery", "Slice_of_Life", "Supernatural"}))
+	result, err := eng.Score(sampleEntry([]string{"Mystery", "Slice_of_Life", "Supernatural"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -537,7 +531,7 @@ func TestScore_PrimaryGenre_BlendApplied(t *testing.T) {
 	// Mystery (primary, story=1.5) + Action (secondary, story=0.8), blend=0.6.
 	// final = (1.5 × 0.6) + (0.8 × 0.4) = 0.9 + 0.32 = 1.22
 	eng := testEngine()
-	entry := allTen([]string{"Mystery", "Action"})
+	entry := sampleEntry([]string{"Mystery", "Action"})
 	entry.PrimaryGenre = "mystery"
 	result, err := eng.Score(entry)
 	if err != nil {
@@ -567,7 +561,7 @@ func TestScore_PrimaryGenre_NoPrimary_FallsBackToOptionB(t *testing.T) {
 	// Same genres without primary genre flag → plain contributing-only average.
 	// story: mystery=1.5, action=0.8 → (1.5+0.8)/2 = 1.15
 	eng := testEngine()
-	result, err := eng.Score(allTen([]string{"Mystery", "Action"}))
+	result, err := eng.Score(sampleEntry([]string{"Mystery", "Action"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -591,7 +585,7 @@ func TestScore_PrimaryGenre_NoSecondary_DirectMultiplier(t *testing.T) {
 	// directly — no blend against a phantom neutral 1.0.
 	// story: expected 1.5 (direct), NOT (1.5×0.6)+(1.0×0.4)=1.30.
 	eng := testEngine()
-	entry := allTen([]string{"mystery"})
+	entry := sampleEntry([]string{"mystery"})
 	entry.PrimaryGenre = "mystery"
 	result, err := eng.Score(entry)
 	if err != nil {
@@ -615,7 +609,7 @@ func TestScore_PrimaryGenre_SoleActiveViaDeselect_DirectMultiplier(t *testing.T)
 	// ADR-025: primary applied directly, not blended against phantom 1.0.
 	// story (mystery=1.5): expected 1.5, NOT (1.5×0.6)+(1.0×0.4)=1.30.
 	eng := testEngine()
-	entry := allTen([]string{"mystery", "action"})
+	entry := sampleEntry([]string{"mystery", "action"})
 	entry.UserSelectedGenres = []string{"mystery"}
 	entry.PrimaryGenre = "mystery"
 	result, err := eng.Score(entry)
@@ -639,9 +633,9 @@ func TestScore_PrimaryGenre_NoSecondary_NoBetterThanNoBlend(t *testing.T) {
 	// contributing-only averaging with that genre alone (no primary set).
 	// Both should yield the raw genre multiplier — no phantom pull to neutral.
 	eng := testEngine()
-	withPrimary := allTen([]string{"mystery"})
+	withPrimary := sampleEntry([]string{"mystery"})
 	withPrimary.PrimaryGenre = "mystery"
-	withoutPrimary := allTen([]string{"mystery"})
+	withoutPrimary := sampleEntry([]string{"mystery"})
 
 	rWith, err := eng.Score(withPrimary)
 	if err != nil {
@@ -664,7 +658,7 @@ func TestScore_PrimaryGenre_NoDimensionEntry_PrimaryMult1(t *testing.T) {
 	// Drama (secondary) has characters=1.3.
 	// final_characters = (1.0 × 0.6) + (1.3 × 0.4) = 0.6 + 0.52 = 1.12
 	eng := testEngine()
-	entry := allTen([]string{"Mystery", "Drama"})
+	entry := sampleEntry([]string{"Mystery", "Drama"})
 	entry.PrimaryGenre = "mystery"
 	result, err := eng.Score(entry)
 	if err != nil {
@@ -694,7 +688,7 @@ func TestScore_PrimaryGenre_NoDimensionEntry_PrimaryMult1(t *testing.T) {
 func TestScore_PrimaryGenre_WeightsStillSumToOne(t *testing.T) {
 	// After primary genre blending, final weights must still sum to 1.0.
 	eng := testEngine()
-	entry := allTen([]string{"Mystery", "Drama", "Action"})
+	entry := sampleEntry([]string{"Mystery", "Drama", "Action"})
 	entry.PrimaryGenre = "mystery"
 	result, err := eng.Score(entry)
 	if err != nil {
@@ -728,7 +722,7 @@ func TestWeights_MatchesScoreBreakdown_FinalWeights(t *testing.T) {
 	// Weights() and Score() must produce identical FinalWeights for every dimension.
 	eng := testEngine()
 	genres := []string{"Mystery", "Drama"}
-	entry := allTen(genres)
+	entry := sampleEntry(genres)
 
 	result, err := eng.Score(entry)
 	if err != nil {
@@ -808,7 +802,7 @@ func TestScore_UserSelectedGenres_RestrictsActiveSet(t *testing.T) {
 	// Media has Mystery + Action. User selects only Mystery.
 	// story multiplier should be mystery=1.5 (action excluded from active set).
 	eng := testEngine()
-	entry := allTen([]string{"Mystery", "Action"})
+	entry := sampleEntry([]string{"Mystery", "Action"})
 	entry.UserSelectedGenres = []string{"Mystery"}
 
 	result, err := eng.Score(entry)
@@ -834,7 +828,7 @@ func TestScore_UserSelectedGenres_GenreDeselected_FlagSet(t *testing.T) {
 	// Those dimensions should have GenreDeselected=true.
 	// Characters (only drama defines it, drama not in media.Genres) should be false.
 	eng := testEngine()
-	entry := allTen([]string{"Mystery", "Action"})
+	entry := sampleEntry([]string{"Mystery", "Action"})
 	entry.UserSelectedGenres = []string{"Mystery"}
 
 	result, err := eng.Score(entry)
@@ -864,7 +858,7 @@ func TestScore_UserSelectedGenres_GenreDeselected_FlagSet(t *testing.T) {
 func TestScore_UserSelectedGenres_None_NoDeselectedFlag(t *testing.T) {
 	// When UserSelectedGenres is nil, GenreDeselected must always be false.
 	eng := testEngine()
-	result, err := eng.Score(allTen([]string{"Mystery", "Action"}))
+	result, err := eng.Score(sampleEntry([]string{"Mystery", "Action"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -881,7 +875,7 @@ func TestScore_UserSelectedGenres_None_NoDeselectedFlag(t *testing.T) {
 func TestScore_UserSelectedGenres_AllSelected_NoDeselectedFlag(t *testing.T) {
 	// When UserSelectedGenres contains all the same genres, no genre is deselected.
 	eng := testEngine()
-	entry := allTen([]string{"Mystery", "Action"})
+	entry := sampleEntry([]string{"Mystery", "Action"})
 	entry.UserSelectedGenres = []string{"Mystery", "Action"}
 
 	result, err := eng.Score(entry)
@@ -902,7 +896,7 @@ func TestScore_UserSelectedGenres_GenresActiveInMeta(t *testing.T) {
 	// GenresActive in meta should reflect the active (selected) genre set,
 	// not the full AniList genre list.
 	eng := testEngine()
-	entry := allTen([]string{"Mystery", "Action"})
+	entry := sampleEntry([]string{"Mystery", "Action"})
 	entry.UserSelectedGenres = []string{"Mystery"}
 
 	result, err := eng.Score(entry)
@@ -918,7 +912,7 @@ func TestScore_UserSelectedGenres_GenresActiveInMeta(t *testing.T) {
 func TestScore_NoUserSelectedGenres_GenresActiveEqualsMatchedGenres(t *testing.T) {
 	// When UserSelectedGenres is absent, GenresActive = matched genres from full list.
 	eng := testEngine()
-	entry := allTen([]string{"Mystery", "Action", "Romance"}) // Romance not in config.
+	entry := sampleEntry([]string{"Mystery", "Action", "Romance"}) // Romance not in config.
 
 	result, err := eng.Score(entry)
 	if err != nil {
