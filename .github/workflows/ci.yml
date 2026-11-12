@@ -11,6 +11,7 @@ on:
       - 'go.mod'
       - 'go.sum'
       - '.goreleaser.yaml'
+      - '.release-please-manifest.json'
       - '.mise/**'
   pull_request:
     branches: [main]
@@ -19,6 +20,7 @@ on:
       - 'go.mod'
       - 'go.sum'
       - '.goreleaser.yaml'
+      - '.release-please-manifest.json'
       - '.mise/**'
 
 jobs:
