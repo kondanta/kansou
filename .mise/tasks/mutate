@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-#MISE description="Mutation testing (gremlins) on the pure-logic packages; fails below 95% efficacy per package"
+#MISE description="Mutation testing (gremlins) on scoring, config, stats and the stores; fails at or below 95% efficacy or mutant coverage per package"
 #
-# Scope is deliberately narrow (scoring, config, stats). store, cmd, server and
-# web are excluded: revisit when widening.
+# Scope: scoring, config, stats and both stores. cmd, server and web are
+# excluded: revisit when widening. The postgres run needs podman or docker.
 #
 # Gremlins copies the whole module once per worker, so it runs on a trimmed copy
 # (web/, .git, .jj and the built binary excluded) in $TMPDIR. Without that the
@@ -12,19 +12,50 @@ set -euo pipefail
 readonly threshold=95
 pkgs=("$@")
 if [ "${#pkgs[@]}" -eq 0 ]; then
-    pkgs=(./internal/scoring ./internal/config ./internal/stats)
+    pkgs=(./internal/scoring ./internal/config ./internal/stats ./internal/store/sqlite ./internal/store/postgres)
 fi
 
 work="$(mktemp -d -t kansou-mutate.XXXXXX)"
-trap 'rm -rf "${work}"' EXIT
-rsync -a --exclude=/web --exclude=/.git --exclude=/.jj --exclude=/kansou ./ "${work}/"
+pg_runtime="" pg_cid=""
+cleanup() {
+    [ -z "${pg_cid}" ] || "${pg_runtime}" stop -t 1 "${pg_cid}" >/dev/null 2>&1 || true
+    rm -rf "${work}"
+}
+trap cleanup EXIT
+
+# The postgres store tests need a server. One plain container (--rm: removed on
+# stop, no daemon socket) serves every gremlins worker: each test process makes
+# and drops its own database there (KANSOU_TEST_POSTGRES_ADDR, see
+# postgres_test.go), so workers never share tables. Works with podman or docker.
+start_postgres() {
+    pg_runtime="$(command -v podman || command -v docker)" \
+        || { echo "mutate: ${pkg} needs podman or docker" >&2; exit 1; }
+    pg_cid="$("${pg_runtime}" run --rm -d -p 127.0.0.1::5432 \
+        -e POSTGRES_USER=kansou -e POSTGRES_PASSWORD=kansou postgres:16-alpine)"
+    # -h 127.0.0.1: during image init postgres only listens on its unix socket.
+    for _ in $(seq 150); do
+        "${pg_runtime}" exec "${pg_cid}" psql -h 127.0.0.1 -U kansou -d postgres -c 'select 1' \
+            >/dev/null 2>&1 && break
+        sleep 0.3
+    done
+    KANSOU_TEST_POSTGRES_ADDR="$("${pg_runtime}" port "${pg_cid}" 5432/tcp | head -n 1)"
+    export KANSOU_TEST_POSTGRES_ADDR
+}
+for pkg in "${pkgs[@]}"; do
+    case "${pkg}" in *postgres*) start_postgres; break ;; esac
+done
+# tar, not rsync: guaranteed on every runner and dev machine.
+tar -c --exclude=./web --exclude=./.git --exclude=./.jj --exclude=./kansou . | tar -x -C "${work}"
 cd "${work}"
 
 # The threshold must come from a config file: in gremlins 0.6.0 the
 # --threshold-efficacy flag (and its env var) is silently ignored and the exit
 # code stays 0 (verified). Note gremlins fails at efficacy <= threshold, so a
-# package must be strictly above ${threshold}%.
-printf 'unleash:\n  threshold:\n    efficacy: %s\n' "${threshold}" > .gremlins.yaml
+# package must be strictly above ${threshold}% (same for mutant-coverage).
+# mutant-coverage guards the other blind spot: code no test executes is "not
+# covered" and does not lower efficacy, so it needs its own floor.
+printf 'unleash:\n  threshold:\n    efficacy: %s\n    mutant-coverage: %s\n' \
+    "${threshold}" "${threshold}" > .gremlins.yaml
 
 # Run every package even if one fails, so a single run reports all of them.
 status=0
