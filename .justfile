@@ -77,21 +77,10 @@ vet:
 swagger:
     mise x -- swag init -g main.go --output {{swag_out}}
 
-# Mutation testing (gremlins) on the pure-logic packages. *Scope is deliberately
-# narrow: store/cmd/server/web are excluded; revisit when widening.* Gremlins
-# copies the whole module once per worker, so run it on a trimmed copy in $TMPDIR
-# (web/, .git, .jj and the built binary excluded) to keep that copy tiny.
-mutate *pkgs="./internal/scoring ./internal/config ./internal/stats":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    export PATH="$(dirname "$(mise which gremlins)"):$(dirname "$(mise which go)"):${PATH}"
-    work="$(mktemp -d -t kansou-mutate.XXXXXX)"
-    trap 'rm -rf "${work}"' EXIT
-    rsync -a --exclude=/web --exclude=/.git --exclude=/.jj --exclude=/{{binary}} ./ "${work}/"
-    cd "${work}"
-    for pkg in {{pkgs}}; do
-        gremlins unleash --workers 6 "${pkg}"
-    done
+# Mutation testing (gremlins), 95% efficacy per package. The logic lives in the
+# mise task .mise/tasks/mutate so CI and local runs are identical.
+mutate *pkgs:
+    mise run mutate {{pkgs}}
 
 # Run the linter
 lint:

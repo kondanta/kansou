@@ -54,6 +54,11 @@ jobs:
       - name: Lint
         run: mise run lint
 
+      # Fails if mutation efficacy drops below 95% for scoring, config or stats
+      # (a surviving mutant means a change no test notices). See README.
+      - name: Mutation test
+        run: mise run mutate
+
   goreleaser-snapshot:
     name: GoReleaser (snapshot)
     runs-on: ubuntu-latest

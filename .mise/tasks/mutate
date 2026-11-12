@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+#MISE description="Mutation testing (gremlins) on the pure-logic packages; fails below 95% efficacy per package"
+#
+# Scope is deliberately narrow (scoring, config, stats). store, cmd, server and
+# web are excluded: revisit when widening.
+#
+# Gremlins copies the whole module once per worker, so it runs on a trimmed copy
+# (web/, .git, .jj and the built binary excluded) in $TMPDIR. Without that the
+# web/ node_modules alone filled a 16G tmpfs. Usage: mise run mutate [pkg...]
+set -euo pipefail
+
+readonly threshold=95
+pkgs=("$@")
+if [ "${#pkgs[@]}" -eq 0 ]; then
+    pkgs=(./internal/scoring ./internal/config ./internal/stats)
+fi
+
+work="$(mktemp -d -t kansou-mutate.XXXXXX)"
+trap 'rm -rf "${work}"' EXIT
+rsync -a --exclude=/web --exclude=/.git --exclude=/.jj --exclude=/kansou ./ "${work}/"
+cd "${work}"
+
+# The threshold must come from a config file: in gremlins 0.6.0 the
+# --threshold-efficacy flag (and its env var) is silently ignored and the exit
+# code stays 0 (verified). Note gremlins fails at efficacy <= threshold, so a
+# package must be strictly above ${threshold}%.
+printf 'unleash:\n  threshold:\n    efficacy: %s\n' "${threshold}" > .gremlins.yaml
+
+# Run every package even if one fails, so a single run reports all of them.
+status=0
+for pkg in "${pkgs[@]}"; do
+    gremlins unleash --workers 6 "${pkg}" || status=1
+done
+exit "${status}"
