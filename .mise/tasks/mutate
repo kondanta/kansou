@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-#MISE description="Mutation testing (gremlins) on scoring, config, stats and the stores; fails at or below 95% efficacy or mutant coverage per package"
+#MISE description="Mutation testing (gremlins) on scoring, config, stats, anilist and the stores; fails at or below 95% efficacy or mutant coverage per package"
 #
-# Scope: scoring, config, stats and both stores. cmd, server and web are
+# Scope: scoring, config, stats, anilist and both stores. cmd, server and web are
 # excluded: revisit when widening. The postgres run needs podman or docker.
 #
 # Gremlins copies the whole module once per worker, so it runs on a trimmed copy
@@ -12,7 +12,7 @@ set -euo pipefail
 readonly threshold=95
 pkgs=("$@")
 if [ "${#pkgs[@]}" -eq 0 ]; then
-    pkgs=(./internal/scoring ./internal/config ./internal/stats ./internal/store/sqlite ./internal/store/postgres)
+    pkgs=(./internal/scoring ./internal/config ./internal/stats ./internal/anilist ./internal/store/sqlite ./internal/store/postgres)
 fi
 
 work="$(mktemp -d -t kansou-mutate.XXXXXX)"
