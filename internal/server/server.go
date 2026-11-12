@@ -121,9 +121,10 @@ func (s *Server) buildRouter() *chi.Mux {
 		r.Use(middleware.ClientIPFromRemoteAddr)
 	}
 
-	// Health check stays at root — outside /api/v1 — for load balancer/orchestrator
+	// Probes stay at root — outside /api/v1 — for load balancer/orchestrator
 	// probes that expect a fixed, unprefixed path.
 	r.Get("/health", s.handleHealth)
+	r.Get("/ready", s.handleReady)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/db-info", s.handleDBInfo)

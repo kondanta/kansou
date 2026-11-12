@@ -132,10 +132,14 @@ spec:
             periodSeconds: 10
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: http
             initialDelaySeconds: 3
             periodSeconds: 5
+            # Must exceed the handler's 2s DB-ping deadline (readyTimeout in
+            # internal/server/handlers.go); the k8s default of 1s would fail
+            # the probe before the handler can answer.
+            timeoutSeconds: 3
           {{- if or .Values.config (eq .Values.db.type "sqlite") }}
           volumeMounts:
             {{- if .Values.config }}

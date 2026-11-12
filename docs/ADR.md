@@ -1843,3 +1843,38 @@ Level conventions:
   write/delete/migration paths now log via `logger.FromContext(ctx)`.
 - CLI product output (`fmt.Print*` to stdout) is unaffected — logging goes to
   stderr exclusively, per existing `internal/logger.Setup` behavior.
+
+## ADR-039 — Separate liveness (`/health`) and readiness (`/ready`) probes
+
+**Context:**
+`/health` was the only probe, and the Helm chart pointed both `livenessProbe`
+and `readinessProbe` at it. `/health` always returns 200, so with
+`KANSOU_DB_TYPE` set a lost database left the pod "ready" while history, stats
+and export requests failed. Deployments cover Kubernetes and plain Docker
+Compose, across stateless, SQLite and Postgres modes.
+
+**Decision:**
+- `/health` is liveness: the process is up and serving HTTP. It checks no
+  dependency, so a failure means "restart me" and nothing else. Unchanged:
+  `200`, empty body.
+- `/ready` is readiness: should this instance receive traffic. Stateless mode
+  is always ready. When a `Store` is configured it calls the new
+  `Store.Ping(ctx)` with a 2s timeout. It returns `200`/`503` and a JSON body
+  `{"status","checks":{"database":"ok|fail"}}`. Failure detail is logged
+  server-side and never returned, so the unauthenticated endpoint leaks no
+  connection or driver errors.
+- AniList is checked by neither: an outage can't be fixed by a restart or by
+  unrouting, and would take the whole UI offline.
+- `Store` gains `Ping(ctx context.Context) error` (SQLite `PingContext`,
+  Postgres `pool.Ping`).
+- Helm: `readinessProbe` -> `/ready`, `livenessProbe` stays on `/health`. No
+  `startupProbe`: migrations run before the listener opens, so readiness
+  already fails until startup completes.
+- No `kansou healthcheck` subcommand: images are Alpine, so Compose users use
+  BusyBox `wget` (example in `README.md`).
+
+**Consequences:**
+- A database outage removes the pod from Service endpoints without restarting
+  it, and it recovers on its own when the database returns.
+- Any new `Store` implementation or test fake must implement `Ping`.
+- Orchestrators read only the status code; the JSON body is for humans.

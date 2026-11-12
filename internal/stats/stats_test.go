@@ -94,7 +94,8 @@ func (f *fakeStore) Outliers(
 func (f *fakeStore) ConfigImpact(context.Context) ([]store.ConfigImpactStat, error) {
 	return f.configImpact, nil
 }
-func (f *fakeStore) Close() error { return nil }
+func (f *fakeStore) Ping(context.Context) error { return nil }
+func (f *fakeStore) Close() error               { return nil }
 
 func TestTopGenreScore(t *testing.T) {
 	tests := []struct {

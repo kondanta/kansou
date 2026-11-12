@@ -1413,6 +1413,11 @@ func (s *SQLiteStore) ConfigImpact(ctx context.Context) ([]store.ConfigImpactSta
 	return result, nil
 }
 
+// Ping reports whether the SQLite database is reachable.
+func (s *SQLiteStore) Ping(ctx context.Context) error {
+	return s.db.PingContext(ctx)
+}
+
 // Close closes the underlying database connection.
 func (s *SQLiteStore) Close() error {
 	return s.db.Close()

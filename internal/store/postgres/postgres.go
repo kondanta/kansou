@@ -1369,6 +1369,11 @@ func (s *PostgresStore) ConfigImpact(ctx context.Context) ([]store.ConfigImpactS
 	return result, nil
 }
 
+// Ping reports whether Postgres is reachable.
+func (s *PostgresStore) Ping(ctx context.Context) error {
+	return s.pool.Ping(ctx)
+}
+
 // Close closes the underlying pool and database connection.
 // closeTimeout bounds how long Close waits for pgxpool to release and
 // destroy every connection. pgxpool.Pool.Close blocks until all connections

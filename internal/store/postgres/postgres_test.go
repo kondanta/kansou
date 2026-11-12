@@ -1011,3 +1011,25 @@ func TestSearchMediaByTitle(t *testing.T) {
 		})
 	}
 }
+
+func TestPing(t *testing.T) {
+	s := requireStore(t)
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	tests := []struct {
+		name    string
+		ctx     context.Context
+		wantErr bool
+	}{
+		{"reachable database", context.Background(), false},
+		{"canceled context", canceled, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := s.Ping(tc.ctx); (err != nil) != tc.wantErr {
+				t.Fatalf("Ping() error = %v, wantErr %v", err, tc.wantErr)
+			}
+		})
+	}
+}

@@ -243,7 +243,8 @@ kansou serve --live-config          # enables the /api/v1/config* endpoints (dis
 
 | Method   | Path                             | Description                                                     |
 | -------- | -------------------------------- | --------------------------------------------------------------- |
-| `GET`    | `/health`                        | Liveness check                                                  |
+| `GET`    | `/health`                        | Liveness: process is up and serving HTTP. No dependencies checked |
+| `GET`    | `/ready`                         | Readiness: `200`, or `503` if the configured database is unreachable |
 | `GET`    | `/api/v1/dimensions`             | List configured scoring dimensions                              |
 | `GET`    | `/api/v1/genres`                 | List configured genre multiplier blocks                         |
 | `GET`    | `/api/v1/media/search?q={query}` | Search AniList by name                                          |
@@ -268,6 +269,41 @@ kansou serve --live-config          # enables the /api/v1/config* endpoints (dis
 
 † Only available when `KANSOU_DB_TYPE` is set **or** `--live-config` is passed. The disk-backed path (no DB) requires a writable config file. See [`docs/CONFIG.md`](docs/CONFIG.md#runtime-config-editing---live-config).
 ‡ Requires `KANSOU_DB_TYPE` to be set — returns HTTP 503 otherwise. See [Scoring History (optional)](#scoring-history-optional).
+
+### Health and readiness probes
+
+| Endpoint | Answers | On failure | Checks |
+| -------- | ------- | ---------- | ------ |
+| `/health` | Is the process alive and serving HTTP? | Restart the container | Nothing external — never the database or AniList |
+| `/ready`  | Should this instance receive traffic? | Stop routing traffic, do **not** restart | Stateless: always ready. SQLite/Postgres: database ping (2s timeout) |
+
+`/ready` returns `{"status":"ready","checks":{"database":"ok"}}` (`200`) or
+`{"status":"not ready","checks":{"database":"fail"}}` (`503`). The cause is
+logged server-side, never returned. AniList is deliberately not checked: an
+outage there can't be fixed by restarting or unrouting kansou. Orchestrators
+only look at the status code, not the body.
+
+The Helm chart wires `/health` to the liveness probe and `/ready` to the
+readiness probe. For plain Docker Compose, the image is Alpine so BusyBox
+`wget` is available:
+
+```yaml
+services:
+  kansou:
+    image: ghcr.io/kondanta/kansou:<version>
+    command: ["serve"]
+    ports: ["8080:8080"]
+    environment:
+      ANILIST_TOKEN: ${ANILIST_TOKEN}
+    healthcheck:
+      # Readiness semantics: unhealthy while the database is unreachable.
+      # Use /health instead for a pure "is the process alive" check.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+```
 
 Swagger UI: `http://localhost:8080/swagger/index.html`
 

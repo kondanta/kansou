@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kondanta/kansou/internal/anilist"
@@ -26,14 +27,59 @@ type errorResponse struct {
 
 // handleHealth is the liveness check endpoint.
 //
-//	@Summary		Health check
-//	@Description	Returns 200 OK if the server is running.
+//	@Summary		Liveness check
+//	@Description	Returns 200 OK if the process is up and serving HTTP. It checks no
+//	@Description	dependency (database, AniList), so a failure means "restart me" and
+//	@Description	nothing else. Use /ready for traffic-routing decisions.
 //	@Tags			system
 //	@Produce		plain
 //	@Success		200
 //	@Router			/health [get]
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
+}
+
+// readyTimeout bounds the database ping so a hung database fails the probe
+// (typically 1s+ probe timeout) instead of stalling the handler.
+const readyTimeout = 2 * time.Second
+
+// readyResponse is the body of GET /ready. Check values are "ok" or "fail";
+// failure detail is logged server-side, never returned.
+// swagger:model readyResponse
+type readyResponse struct {
+	// Status is "ready" or "not ready".
+	Status string `json:"status" example:"ready"`
+	// Checks maps each check name to "ok" or "fail". Empty when no
+	// dependency is configured (stateless mode).
+	Checks map[string]string `json:"checks"`
+}
+
+// handleReady is the readiness check endpoint.
+//
+//	@Summary		Readiness check
+//	@Description	Returns 200 when this instance should receive traffic, 503 otherwise.
+//	@Description	When KANSOU_DB_TYPE is set, pings the database; stateless mode is always
+//	@Description	ready once serving. AniList is deliberately not checked. Failure detail
+//	@Description	is logged, not returned.
+//	@Tags			system
+//	@Produce		json
+//	@Success		200	{object}	readyResponse
+//	@Failure		503	{object}	readyResponse
+//	@Router			/ready [get]
+func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
+	resp := readyResponse{Status: "ready", Checks: map[string]string{}}
+	code := http.StatusOK
+	if s.store != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), readyTimeout)
+		defer cancel()
+		if err := s.store.Ping(ctx); err != nil {
+			slog.Error("readiness: database ping failed", "db", s.dbType, "err", err)
+			resp.Status, resp.Checks["database"], code = "not ready", "fail", http.StatusServiceUnavailable
+		} else {
+			resp.Checks["database"] = "ok"
+		}
+	}
+	writeJSON(w, code, resp)
 }
 
 // mediaResponse is the JSON representation of an AniList media entry.
