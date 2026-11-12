@@ -502,7 +502,7 @@ func TestApplyOverrides_SumsToOne(t *testing.T) {
 }
 
 func TestCombinedMultiplier_NoGenres(t *testing.T) {
-	m, _ := combinedMultiplier("story", nil, nil)
+	m := combinedMultiplier("story", nil, nil)
 	if m != 1.0 {
 		t.Errorf("expected 1.0 for no genres, got %v", m)
 	}
@@ -512,12 +512,9 @@ func TestCombinedMultiplier_SingleGenre(t *testing.T) {
 	genres := map[string]map[DimensionKey]float64{
 		"action": {"story": 0.8},
 	}
-	m, contributions := combinedMultiplier("story", []string{"action"}, genres)
+	m := combinedMultiplier("story", []string{"action"}, genres)
 	if !approxEqual(m, 0.8, 0.001) {
 		t.Errorf("expected 0.8, got %v", m)
-	}
-	if contributions["action"] != 0.8 {
-		t.Errorf("expected contribution action=0.8, got %v", contributions["action"])
 	}
 }
 
@@ -527,15 +524,12 @@ func TestCombinedMultiplier_ContributingOnly_NoDimensionEntry(t *testing.T) {
 	genres := map[string]map[DimensionKey]float64{
 		"action": {"story": 0.8},
 	}
-	m, contrib := combinedMultiplier("characters", []string{"action"}, genres)
+	m := combinedMultiplier("characters", []string{"action"}, genres)
 	if m != 1.0 {
 		t.Errorf(
 			"contributing-only averaging: expected 1.0 when no genre has opinion on dimension, got %v",
 			m,
 		)
-	}
-	if len(contrib) != 0 {
-		t.Errorf("expected empty contributions, got %v", contrib)
 	}
 }
 
@@ -950,5 +944,165 @@ func TestWeights_OrderMatchesEngineConfig(t *testing.T) {
 		if wr.Key != expected[i] {
 			t.Errorf("rows[%d]: expected %q, got %q", i, expected[i], wr.Key)
 		}
+	}
+}
+
+// TestScore_GoldenWeights pins the whole weight pipeline to numbers worked out
+// by hand from the formula (genre multiplier -> effective weight ->
+// renormalisation -> overrides -> contribution), so a change to any step shows
+// up as a failing number, not just as "weights still sum to 1".
+//
+// Scores are deliberately non-uniform: with all-equal scores the final score is
+// independent of the weights and would hide weight bugs.
+//
+// Base weights: story .25, enjoyment .20 (bias-resistant), characters .15,
+// production .15, pacing .10, world_building .10, value .05 (bias-resistant).
+func TestScore_GoldenWeights(t *testing.T) {
+	scores := map[DimensionKey]float64{
+		"story": 9, "enjoyment": 10, "characters": 8,
+		"production": 9, "pacing": 8, "world_building": 9, "value": 7,
+	}
+	tests := []struct {
+		name          string
+		genres        []string
+		primary       string
+		overrides     map[DimensionKey]float64
+		wantMult      map[DimensionKey]float64
+		wantEffective map[DimensionKey]float64
+		wantFinal     map[DimensionKey]float64
+		wantEffSum    float64
+		wantScore     float64
+	}{
+		{
+			// Action: story .8, production 1.4, pacing 1.3, world_building .9;
+			// characters has no entry (contributing-only -> 1.0).
+			// Effective sum = .20+.20+.15+.21+.13+.09+.05 = 1.03.
+			// Score = (9*.20+10*.20+8*.15+9*.21+8*.13+9*.09+7*.05)/1.03 = 9.09/1.03.
+			name:   "single genre, no primary",
+			genres: []string{"Action"},
+			wantMult: map[DimensionKey]float64{
+				"story": 0.8, "enjoyment": 1, "characters": 1, "production": 1.4,
+				"pacing": 1.3, "world_building": 0.9, "value": 1,
+			},
+			wantEffective: map[DimensionKey]float64{
+				"story": 0.20, "enjoyment": 0.20, "characters": 0.15, "production": 0.21,
+				"pacing": 0.13, "world_building": 0.09, "value": 0.05,
+			},
+			wantFinal: map[DimensionKey]float64{
+				"story": 0.20 / 1.03, "enjoyment": 0.20 / 1.03, "characters": 0.15 / 1.03,
+				"production": 0.21 / 1.03, "pacing": 0.13 / 1.03,
+				"world_building": 0.09 / 1.03, "value": 0.05 / 1.03,
+			},
+			wantEffSum: 1.03,
+			wantScore:  8.83, // 9.09/1.03 = 8.8252...
+		},
+		{
+			// Primary mystery (story 1.5, pacing 1.3, world_building 1.2), secondary
+			// action, blend .6: m = primary*.6 + secondary*.4, where a primary with no
+			// entry counts as 1.0 and a secondary with no entry is left out.
+			//   story      1.5*.6 + .8*.4  = 1.22
+			//   characters 1.0*.6 + 1.0*.4 = 1.00
+			//   production 1.0*.6 + 1.4*.4 = 1.16
+			//   pacing     1.3*.6 + 1.3*.4 = 1.30
+			//   world_b.   1.2*.6 + .9*.4  = 1.08
+			// Effective sum = .305+.20+.15+.174+.13+.108+.05 = 1.117.
+			// Score = (9*.305+10*.20+8*.15+9*.174+8*.13+9*.108+7*.05)/1.117 = 9.873/1.117.
+			name:    "primary genre blend",
+			genres:  []string{"Mystery", "Action"},
+			primary: "mystery",
+			wantMult: map[DimensionKey]float64{
+				"story": 1.22, "enjoyment": 1, "characters": 1, "production": 1.16,
+				"pacing": 1.3, "world_building": 1.08, "value": 1,
+			},
+			wantEffective: map[DimensionKey]float64{
+				"story": 0.305, "enjoyment": 0.20, "characters": 0.15, "production": 0.174,
+				"pacing": 0.13, "world_building": 0.108, "value": 0.05,
+			},
+			wantFinal: map[DimensionKey]float64{
+				"story": 0.305 / 1.117, "enjoyment": 0.20 / 1.117, "characters": 0.15 / 1.117,
+				"production": 0.174 / 1.117, "pacing": 0.13 / 1.117,
+				"world_building": 0.108 / 1.117, "value": 0.05 / 1.117,
+			},
+			wantEffSum: 1.117,
+			wantScore:  8.84, // 9.873/1.117 = 8.8388...
+		},
+		{
+			// Same Action weights as case 1, with story fixed at .40. The remaining
+			// .60 is shared by the other dimensions in proportion to their
+			// renormalised weights: eff/(1.03-.20)*.60 = eff*.60/.83.
+			// Score = 9*.40 + .60/.83*(2.0+1.2+1.89+1.04+.81+.35) = 3.6 + 4.374/.83.
+			name:      "weight override on top of genre",
+			genres:    []string{"Action"},
+			overrides: map[DimensionKey]float64{"story": 0.40},
+			wantMult: map[DimensionKey]float64{
+				"story": 0.8, "enjoyment": 1, "characters": 1, "production": 1.4,
+				"pacing": 1.3, "world_building": 0.9, "value": 1,
+			},
+			wantEffective: map[DimensionKey]float64{
+				"story": 0.20, "enjoyment": 0.20, "characters": 0.15, "production": 0.21,
+				"pacing": 0.13, "world_building": 0.09, "value": 0.05,
+			},
+			wantFinal: map[DimensionKey]float64{
+				"story": 0.40, "enjoyment": 0.20 * 0.60 / 0.83, "characters": 0.15 * 0.60 / 0.83,
+				"production": 0.21 * 0.60 / 0.83, "pacing": 0.13 * 0.60 / 0.83,
+				"world_building": 0.09 * 0.60 / 0.83, "value": 0.05 * 0.60 / 0.83,
+			},
+			wantEffSum: 1.03,
+			wantScore:  8.87, // 3.6 + 5.2698... = 8.8698...
+		},
+	}
+
+	const tol = 1e-9
+	eng := testEngine()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := Entry{
+				Scores:            scores,
+				SkippedDimensions: map[DimensionKey]bool{},
+				WeightOverrides:   tc.overrides,
+				Genres:            tc.genres,
+				PrimaryGenre:      tc.primary,
+			}
+			result, err := eng.Score(entry)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !approxEqual(result.FinalScore, tc.wantScore, tol) {
+				t.Errorf("FinalScore = %v, want %v", result.FinalScore, tc.wantScore)
+			}
+			if !approxEqual(result.Meta.EffectiveWeightSum, tc.wantEffSum, tol) {
+				t.Errorf(
+					"EffectiveWeightSum = %v, want %v",
+					result.Meta.EffectiveWeightSum,
+					tc.wantEffSum,
+				)
+			}
+			for _, row := range result.Breakdown {
+				k := row.Key
+				if !approxEqual(row.AppliedMultiplier, tc.wantMult[k], tol) {
+					t.Errorf(
+						"%s AppliedMultiplier = %v, want %v",
+						k,
+						row.AppliedMultiplier,
+						tc.wantMult[k],
+					)
+				}
+				if !approxEqual(row.EffectiveWeight, tc.wantEffective[k], tol) {
+					t.Errorf(
+						"%s EffectiveWeight = %v, want %v",
+						k,
+						row.EffectiveWeight,
+						tc.wantEffective[k],
+					)
+				}
+				if !approxEqual(row.FinalWeight, tc.wantFinal[k], tol) {
+					t.Errorf("%s FinalWeight = %v, want %v", k, row.FinalWeight, tc.wantFinal[k])
+				}
+				wantContribution := scores[k] * tc.wantFinal[k]
+				if !approxEqual(row.Contribution, wantContribution, tol) {
+					t.Errorf("%s Contribution = %v, want %v", k, row.Contribution, wantContribution)
+				}
+			}
+		})
 	}
 }

@@ -1878,3 +1878,35 @@ Compose, across stateless, SQLite and Postgres modes.
   it, and it recovers on its own when the database returns.
 - Any new `Store` implementation or test fake must implement `Ping`.
 - Orchestrators read only the status code; the JSON body is for humans.
+
+## ADR-040 — Remove the unused per-genre contributions map from the scoring engine
+
+**Date:** 2026-11-12
+**Status:** Accepted (completes ADR-024)
+
+**Context:**
+ADR-024 removed `BreakdownRow.GenreMultipliers` but left the map that fed it:
+`combinedMultiplier` still built a per-genre contributions map, and
+`blendedMultiplier` still returned it as a fourth value, which its only caller
+(`Engine.Weights`) discarded with `_`. Mutation testing (gremlins) flagged the
+primary-genre branch that populated this map as untestable through any public
+behaviour: nothing could observe it.
+
+**Decision:**
+`combinedMultiplier` returns only the averaged multiplier, and
+`blendedMultiplier` returns `(multiplier, primaryMult, secondaryMult)`. The
+contributions map and the primary-genre provenance branch are deleted. No
+scoring behaviour changes: the formula, averaging, blend (ADR-022) and
+renormalisation are untouched, and the existing blend tests still pass.
+
+**Alternatives considered:**
+- Test the discarded map directly: pins behaviour nothing consumes.
+- Leave it and accept the surviving mutant: keeps dead code and a permanent
+  mutation-testing exception.
+
+**Consequences:**
+- Smaller engine, no unused allocation per dimension per request.
+- Both functions are internal (unexported); no API or config change.
+- Weight/blend behaviour is now pinned by `TestScore_GoldenWeights`, which
+  asserts hand-computed multipliers, effective and final weights, contributions
+  and the final score.

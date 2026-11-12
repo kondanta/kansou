@@ -3,6 +3,7 @@ package scoring
 import (
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -96,7 +97,7 @@ func (e *Engine) Score(entry Entry) (Result, error) {
 	// GenreDeselected post-pass: mark dimensions where a deselected genre
 	// had a configured multiplier. Only runs when the caller supplied a
 	// restricted genre set.
-	if len(entry.UserSelectedGenres) > 0 {
+	if len(entry.UserSelectedGenres) != 0 {
 		activeSet := make(map[string]bool, len(activeMatched))
 		for _, g := range activeMatched {
 			activeSet[g] = true
@@ -190,7 +191,7 @@ func (e *Engine) Weights(
 		multiplier := 1.0
 		if !def.BiasResistant {
 			var primaryMult, secondaryGenresMult float64
-			multiplier, primaryMult, secondaryGenresMult, _ = e.blendedMultiplier(
+			multiplier, primaryMult, secondaryGenresMult = e.blendedMultiplier(
 				key,
 				primaryGenreLower,
 				matchedGenres,
@@ -225,13 +226,10 @@ func (e *Engine) Weights(
 // validateEntry checks that the entry is consistent before calculation.
 func (e *Engine) validateEntry(entry Entry) error {
 	// All dimensions skipped?
-	active := 0
-	for _, key := range e.dimensions {
-		if !entry.SkippedDimensions[key] {
-			active++
-		}
-	}
-	if active == 0 {
+	anyActive := slices.ContainsFunc(e.dimensions, func(key DimensionKey) bool {
+		return !entry.SkippedDimensions[key]
+	})
+	if !anyActive {
 		return fmt.Errorf("all dimensions were skipped — at least one dimension must be scored")
 	}
 
@@ -260,17 +258,15 @@ func (e *Engine) validateEntry(entry Entry) error {
 // Genres in matchedGenres that have no configured entry for this dimension are
 // excluded from the denominator — they do not contribute a neutral 1.0.
 // Returns 1.0 when no matched genre has an opinion on this dimension.
-// Returns the averaged multiplier and the per-genre contributions for provenance.
 func combinedMultiplier(
 	key DimensionKey,
 	matchedGenres []string,
 	genres map[string]map[DimensionKey]float64,
-) (float64, map[string]float64) {
+) float64 {
 	if len(matchedGenres) == 0 {
-		return 1.0, nil
+		return 1.0
 	}
 
-	contributions := make(map[string]float64)
 	sum := 0.0
 	count := 0
 	for _, genre := range matchedGenres {
@@ -278,14 +274,13 @@ func combinedMultiplier(
 			if v, ok := gm[key]; ok {
 				sum += v
 				count++
-				contributions[genre] = v
 			}
 		}
 	}
 	if count == 0 {
-		return 1.0, nil
+		return 1.0
 	}
-	return sum / float64(count), contributions
+	return sum / float64(count)
 }
 
 // blendedMultiplier calculates the effective multiplier for a dimension, applying
@@ -298,10 +293,9 @@ func (e *Engine) blendedMultiplier(
 	key DimensionKey,
 	primaryGenre string, // already lowercased; empty if not set
 	matchedGenres []string,
-) (float64, float64, float64, map[string]float64) {
+) (float64, float64, float64) {
 	if primaryGenre == "" || e.primaryGenreWeight == 0 {
-		m, contrib := combinedMultiplier(key, matchedGenres, e.genres)
-		return m, 0, 0, contrib
+		return combinedMultiplier(key, matchedGenres, e.genres), 0, 0
 	}
 
 	// Primary multiplier: what the primary genre says for this dimension.
@@ -329,24 +323,15 @@ func (e *Engine) blendedMultiplier(
 	// a counterintuitive inversion where designating a primary genre hurts it.
 	// See ADR-025.
 	if len(secondary) == 0 {
-		return effectivePrimaryMult, configuredPrimaryMult, 0, nil
+		return effectivePrimaryMult, configuredPrimaryMult, 0
 	}
 
-	secondaryMult, contrib := combinedMultiplier(key, secondary, e.genres)
+	secondaryMult := combinedMultiplier(key, secondary, e.genres)
 
 	blend := e.primaryGenreWeight
 	final := (effectivePrimaryMult * blend) + (secondaryMult * (1 - blend))
 
-	// Include primary genre's contribution in the map for provenance, if it
-	// defines a multiplier for this dimension.
-	if configuredPrimaryMult != 0 {
-		if contrib == nil {
-			contrib = make(map[string]float64)
-		}
-		contrib[primaryGenre] = configuredPrimaryMult
-	}
-
-	return final, configuredPrimaryMult, secondaryMult, contrib
+	return final, configuredPrimaryMult, secondaryMult
 }
 
 // renormalise returns a new weight map scaled so values sum to 1.0.
