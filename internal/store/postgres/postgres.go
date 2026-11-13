@@ -662,8 +662,8 @@ func (s *PostgresStore) fetchMatchedGenres(
 }
 
 // ScoreHistory returns all non-deleted scores for a given AniList media ID.
-// The active score (is_latest) comes first, then the rest newest first
-// (scored_at DESC, id DESC). See ADR-041.
+// The active score (is_latest), if any, comes first, then the rest newest
+// first (scored_at DESC, id DESC). See ADR-041.
 func (s *PostgresStore) ScoreHistory(ctx context.Context, anilistID int) ([]Score, error) {
 	const q = `SELECT s.id, s.media_id, m.title_romaji, m.title_english, m.media_type, m.format,
 	                  m.cover_image, s.final_score, s.primary_genre, s.primary_genre_weight, s.config_hash,

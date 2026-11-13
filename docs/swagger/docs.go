@@ -310,7 +310,7 @@ const docTemplate = `{
         },
         "/api/v1/history/{anilist_id}": {
             "get": {
-                "description": "Returns all non-deleted scores for one AniList media ID with full breakdown. The active score (is_latest) is first, the rest newest first. Requires a database.",
+                "description": "Returns all non-deleted scores for one AniList media ID with full breakdown. The active score (is_latest), if there is one, is first; the rest are newest first. Check is_latest on the first element. Requires a database.",
                 "produces": [
                     "application/json"
                 ],

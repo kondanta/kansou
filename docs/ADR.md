@@ -1930,9 +1930,12 @@ displayed the wrong breakdown. Review (PR #193) also found that equal
 
 **Decision:**
 Both stores order `ScoreHistory` by `is_latest DESC, scored_at DESC, id DESC`:
-the active score first, the rest newest first, ties broken by id. Element 0 is
-the current score by contract. `LatestScore`, `ListLatest` and the stats queries
-already select on `is_latest` and are unchanged.
+the active score first, the rest newest first, ties broken by id. When an
+active score exists, element 0 is the current score. There may be none: after
+`SoftDeleteScore` removes the latest score no row is `is_latest`, and element 0
+is then only the newest remaining score, so callers must check `IsLatest`
+before treating it as current. `LatestScore`, `ListLatest` and the stats
+queries already select on `is_latest` and are unchanged.
 
 **Alternatives considered:**
 - Make only the CLI pick the `is_latest` row: leaves the REST response (and the
@@ -1941,7 +1944,7 @@ already select on `is_latest` and are unchanged.
   burden on each consumer for a case that is easy to get wrong.
 
 **Consequences:**
-- `GET /api/v1/history/{anilist_id}` changes order only after a promote (or when
-  no row is active, in which case it is pure time order). The response shape is
+- `GET /api/v1/history/{anilist_id}` changes order only after a promote (when no
+  row is active it is pure time order). The response shape is
   unchanged; Swagger text updated.
 - Regression tests: `TestScoreHistory_ActiveScoreFirst` in both stores.
