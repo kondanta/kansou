@@ -143,9 +143,7 @@ func (st *Stats) Summary(ctx context.Context) (*Summary, error) {
 	if err != nil {
 		return nil, fmt.Errorf("score by genre: %w", err)
 	}
-	if top := topGenreScore(byGenre); top != nil {
-		sum.TopScoringGenre = top
-	}
+	sum.TopScoringGenre = topGenreScore(byGenre)
 
 	variance, err := st.store.DimensionVariance(ctx)
 	if err != nil {
@@ -192,7 +190,8 @@ func topGenreScore(scores []store.GenreScore) *store.GenreScore {
 }
 
 // variancExtremes returns pointers to the lowest- and highest-std-dev
-// dimensions, or nil, nil if variance is empty.
+// dimensions, or nil, nil if variance is empty. On equal standard deviations the
+// dimension that appears first in variance wins.
 func variancExtremes(
 	variance []store.DimensionVarianceStat,
 ) (mostConsistent, leastConsistent *store.DimensionVarianceStat) {

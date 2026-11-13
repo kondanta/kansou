@@ -77,6 +77,11 @@ vet:
 swagger:
     mise x -- swag init -g main.go --output {{swag_out}}
 
+# Mutation testing (gremlins), 95% efficacy per package. The logic lives in the
+# mise task .mise/tasks/mutate so CI and local runs are identical.
+mutate *pkgs:
+    mise run mutate {{pkgs}}
+
 # Run the linter
 lint:
     mise x -- golangci-lint run ./...

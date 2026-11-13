@@ -1878,3 +1878,73 @@ Compose, across stateless, SQLite and Postgres modes.
   it, and it recovers on its own when the database returns.
 - Any new `Store` implementation or test fake must implement `Ping`.
 - Orchestrators read only the status code; the JSON body is for humans.
+
+## ADR-040 — Remove the unused per-genre contributions map from the scoring engine
+
+**Date:** 2026-11-12
+**Status:** Accepted (completes ADR-024)
+
+**Context:**
+ADR-024 removed `BreakdownRow.GenreMultipliers` but left the map that fed it:
+`combinedMultiplier` still built a per-genre contributions map, and
+`blendedMultiplier` still returned it as a fourth value, which its only caller
+(`Engine.Weights`) discarded with `_`. Mutation testing (gremlins) flagged the
+primary-genre branch that populated this map as untestable through any public
+behaviour: nothing could observe it.
+
+**Decision:**
+`combinedMultiplier` returns only the averaged multiplier, and
+`blendedMultiplier` returns `(multiplier, primaryMult, secondaryMult)`. The
+contributions map and the primary-genre provenance branch are deleted. No
+scoring behaviour changes: the formula, averaging, blend (ADR-022) and
+renormalisation are untouched, and the existing blend tests still pass.
+
+**Alternatives considered:**
+- Test the discarded map directly: pins behaviour nothing consumes.
+- Leave it and accept the surviving mutant: keeps dead code and a permanent
+  mutation-testing exception.
+
+**Consequences:**
+- Smaller engine, no unused allocation per dimension per request.
+- Both functions are internal (unexported); no API or config change.
+- Weight/blend behaviour is now pinned by `TestScore_GoldenWeights`, which
+  asserts hand-computed multipliers, effective and final weights, contributions
+  and the final score.
+
+---
+
+## ADR-041 — `ScoreHistory` lists the active score first
+
+**Date:** 2026-11-13
+**Status:** Accepted (refines ADR-032; supersedes the "newest first" ordering of `GET /api/v1/history/{anilist_id}`)
+
+**Context:**
+"Latest" means the score the user considers valid for an entry (`is_latest`).
+By default that is the most recent one, but `PromoteScore` (exposed in the UI)
+lets the user make an older score the valid one; the other scores stay in the
+history for stats until hard-deleted. `ScoreHistory` ordered purely by
+`scored_at DESC`, so after a promote the newest non-active score came first.
+`kansou history show` (and any client) treats element 0 as the current score and
+displayed the wrong breakdown. Review (PR #193) also found that equal
+`scored_at` values (one-second resolution in SQLite) left the order arbitrary.
+
+**Decision:**
+Both stores order `ScoreHistory` by `is_latest DESC, scored_at DESC, id DESC`:
+the active score first, the rest newest first, ties broken by id. When an
+active score exists, element 0 is the current score. There may be none: after
+`SoftDeleteScore` removes the latest score no row is `is_latest`, and element 0
+is then only the newest remaining score, so callers must check `IsLatest`
+before treating it as current. `LatestScore`, `ListLatest` and the stats
+queries already select on `is_latest` and are unchanged.
+
+**Alternatives considered:**
+- Make only the CLI pick the `is_latest` row: leaves the REST response (and the
+  UI) with the same ambiguity, and every new consumer would repeat the lookup.
+- Keep time order and rely on the per-row `is_latest` flag everywhere: puts the
+  burden on each consumer for a case that is easy to get wrong.
+
+**Consequences:**
+- `GET /api/v1/history/{anilist_id}` changes order only after a promote (when no
+  row is active it is pure time order). The response shape is
+  unchanged; Swagger text updated.
+- Regression tests: `TestScoreHistory_ActiveScoreFirst` in both stores.

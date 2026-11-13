@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kondanta/kansou/internal/store"
 	tcpg "github.com/testcontainers/testcontainers-go/modules/postgres"
 )
@@ -28,16 +30,66 @@ var sharedStore *PostgresStore
 // CI runs without Docker available.
 var setupErr error
 
+// sharedCfg is the connection config of the shared store, for tests that need
+// to open (and close) their own store on the same database.
+var sharedCfg PostgresConfig
+
 func TestMain(m *testing.M) {
 	os.Exit(runTests(m))
 }
 
-// runTests owns the container lifecycle so `defer` cleanup actually runs —
+// testAddrEnv, when set to host:port, points the suite at an already-running
+// Postgres (user and password "kansou") instead of starting a testcontainers
+// container. Each test process creates and drops its own database there, so
+// many processes (e.g. gremlins mutation workers) can share one server
+// without TRUNCATE-ing each other's tables. See .mise/tasks/mutate.
+const testAddrEnv = "KANSOU_TEST_POSTGRES_ADDR"
+
+// runTests owns the database lifecycle so `defer` cleanup actually runs —
 // TestMain itself must not defer before calling os.Exit, since os.Exit skips
 // any pending deferred calls in the calling function.
 func runTests(m *testing.M) int {
 	ctx := context.Background()
 
+	host, port, dbName, cleanup, err := testDatabase(ctx)
+	if err != nil {
+		return setupFailed(err, m)
+	}
+	defer cleanup()
+
+	sharedCfg = PostgresConfig{
+		Host: host, Port: port, User: "kansou", Password: "kansou", DBName: dbName,
+	}
+	st, err := New(ctx, sharedCfg)
+	if err != nil {
+		return setupFailed(fmt.Errorf("connecting store to test database: %w", err), m)
+	}
+	defer func() { _ = st.Close() }()
+	sharedStore = st
+
+	return m.Run()
+}
+
+// setupFailed handles a setup error. Normally the suite skips (no container
+// runtime on a dev machine is fine). With testAddrEnv set the caller demanded
+// a real run, so fail instead: a skip counts as a pass, which would let a
+// mutation that breaks New() survive in gremlins.
+func setupFailed(err error, m *testing.M) int {
+	if os.Getenv(testAddrEnv) != "" {
+		fmt.Fprintf(os.Stderr, "postgres test setup failed (%s is set): %v\n", testAddrEnv, err)
+		return 1
+	}
+	setupErr = err
+	return m.Run()
+}
+
+// testDatabase returns a database for this test process: a private database
+// on the server named by testAddrEnv, or else a fresh testcontainers
+// container. cleanup removes whatever was created.
+func testDatabase(ctx context.Context) (host, port, dbName string, cleanup func(), err error) {
+	if addr := os.Getenv(testAddrEnv); addr != "" {
+		return externalDatabase(ctx, addr)
+	}
 	container, err := tcpg.Run(ctx, "postgres:16-alpine",
 		tcpg.WithDatabase("kansou_test"),
 		tcpg.WithUsername("kansou"),
@@ -45,33 +97,54 @@ func runTests(m *testing.M) int {
 		tcpg.BasicWaitStrategies(),
 	)
 	if err != nil {
-		setupErr = fmt.Errorf("starting postgres container (is Docker running?): %w", err)
-		return m.Run()
+		return "", "", "", nil, fmt.Errorf(
+			"starting postgres container (is Docker running?): %w",
+			err,
+		)
 	}
-	defer func() { _ = container.Terminate(ctx) }()
-
-	host, err := container.Host(ctx)
-	if err != nil {
-		setupErr = fmt.Errorf("getting container host: %w", err)
-		return m.Run()
+	cleanup = func() { _ = container.Terminate(ctx) }
+	if host, err = container.Host(ctx); err != nil {
+		cleanup()
+		return "", "", "", nil, fmt.Errorf("getting container host: %w", err)
 	}
 	mapped, err := container.MappedPort(ctx, "5432/tcp")
 	if err != nil {
-		setupErr = fmt.Errorf("getting mapped port: %w", err)
-		return m.Run()
+		cleanup()
+		return "", "", "", nil, fmt.Errorf("getting mapped port: %w", err)
 	}
+	return host, mapped.Port(), "kansou_test", cleanup, nil
+}
 
-	st, err := New(ctx, PostgresConfig{
-		Host: host, Port: mapped.Port(), User: "kansou", Password: "kansou", DBName: "kansou_test",
+// externalDatabase creates a uniquely named database on the server at addr.
+func externalDatabase(
+	ctx context.Context, addr string,
+) (host, port, dbName string, cleanup func(), err error) {
+	host, port, err = net.SplitHostPort(addr)
+	if err != nil {
+		return "", "", "", nil, fmt.Errorf("parsing %s=%q: %w", testAddrEnv, addr, err)
+	}
+	poolCfg, err := buildPoolConfig(PostgresConfig{
+		Host: host, Port: port, User: "kansou", Password: "kansou", DBName: "postgres",
 	})
 	if err != nil {
-		setupErr = fmt.Errorf("connecting store to test container: %w", err)
-		return m.Run()
+		return "", "", "", nil, err
 	}
-	defer func() { _ = st.Close() }()
-	sharedStore = st
-
-	return m.Run()
+	admin, err := pgxpool.NewWithConfig(ctx, poolCfg)
+	if err != nil {
+		return "", "", "", nil, fmt.Errorf("connecting to %s: %w", addr, err)
+	}
+	// The name is generated here (never user input), so formatting it into
+	// the statement is safe; CREATE DATABASE cannot take bind parameters.
+	dbName = fmt.Sprintf("kansou_test_%d_%d", os.Getpid(), time.Now().UnixNano())
+	if _, err := admin.Exec(ctx, "CREATE DATABASE "+dbName); err != nil {
+		admin.Close()
+		return "", "", "", nil, fmt.Errorf("creating database %s: %w", dbName, err)
+	}
+	cleanup = func() {
+		_, _ = admin.Exec(ctx, "DROP DATABASE IF EXISTS "+dbName+" WITH (FORCE)")
+		admin.Close()
+	}
+	return host, port, dbName, cleanup, nil
 }
 
 // requireStore skips the test when the container/store failed to start, and

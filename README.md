@@ -374,11 +374,42 @@ just vet            # go vet
 just lint           # golangci-lint
 just ci             # build + test (race) + vet + lint — full definition-of-done gate
 just ci-local       # same as ci, but forces a fresh, uncached test run
+just mutate         # mutation tests (gremlins) on scoring/config/stats/stores; fails at or below 95% efficacy and mutant coverage
 just swagger        # regenerate Swagger docs after handler changes
 just run -- <args>  # run via go run
 just serve          # start server via go run
 just clean          # remove built binary
 ```
+
+### Mutation testing
+
+`just mutate` (or `mise run mutate [pkg...]`) mutates the code in
+`internal/scoring`, `internal/config`, `internal/stats` and both stores with
+[gremlins](https://github.com/go-gremlins/gremlins) and fails if the tests do not
+catch enough of the changes. CI runs the same task on every PR that touches Go
+files, `go.mod`/`go.sum` or `.mise/`. A surviving mutant
+means a code change that no test notices; fix it with a test that asserts the real
+number or behaviour, not just "does not error".
+
+- **Gate:** each package must be strictly above 95% efficacy and 95% mutant
+  coverage (gremlins fails at ≤ threshold). Efficacy is killed / (killed + lived);
+  mutant coverage is the share of mutants in code that tests execute, so untested
+  code cannot hide behind a high efficacy number.
+- **Scope:** scoring, config, stats and both stores (about 4 minutes, almost all of
+  it Postgres). `cmd`, `server` and `web` are excluded.
+- **Postgres:** the task starts one throwaway `podman|docker run --rm` Postgres and
+  exports `KANSOU_TEST_POSTGRES_ADDR`; every test process creates and drops its own
+  database on it, so parallel workers never share tables. With that variable set a
+  setup failure fails the run instead of skipping (a skip counts as a pass).
+- **Known equivalent mutant:** `config.go` `math.Abs(sum-1.0) > weightSumTolerance`
+  has a `>` → `>=` mutant no input can distinguish (1±0.001 is not representable in
+  binary floating point), so `config` tops out at 97.5%.
+- **Why a trimmed copy:** gremlins copies the whole module once per worker. The task
+  runs it on a copy without `web/`, `.git` and `.jj` in `$TMPDIR`; running it on the
+  full tree filled a 16 GB tmpfs.
+- **Threshold via config file:** gremlins 0.6.0 ignores `--threshold-efficacy`, so the
+  task writes a `.gremlins.yaml` into the copy instead. Re-check this when upgrading
+  gremlins.
 
 `internal/store/postgres` tests use a real, ephemeral Postgres container via
 [testcontainers-go](https://golang.testcontainers.org/) — they skip cleanly

@@ -11,6 +11,8 @@ on:
       - 'go.mod'
       - 'go.sum'
       - '.goreleaser.yaml'
+      - '.release-please-manifest.json'
+      - '.mise/**'
   pull_request:
     branches: [main]
     paths:
@@ -18,6 +20,8 @@ on:
       - 'go.mod'
       - 'go.sum'
       - '.goreleaser.yaml'
+      - '.release-please-manifest.json'
+      - '.mise/**'
 
 jobs:
   check:
@@ -53,6 +57,12 @@ jobs:
 
       - name: Lint
         run: mise run lint
+
+      # Fails if mutation efficacy or mutant coverage is not above 95% for
+      # scoring, config, stats or the stores (a surviving mutant means a change
+      # no test notices). Starts a throwaway Postgres container. See README.
+      - name: Mutation test
+        run: mise run mutate
 
   goreleaser-snapshot:
     name: GoReleaser (snapshot)
