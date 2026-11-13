@@ -59,7 +59,7 @@ jobs:
         run: mise run lint
 
       # Fails if mutation efficacy or mutant coverage is not above 95% for
-      # scoring, config, stats or the stores (a surviving mutant means a change
+      # scoring, config, stats, anilist or the stores (a surviving mutant means a change
       # no test notices). Starts a throwaway Postgres container. See README.
       - name: Mutation test
         run: mise run mutate

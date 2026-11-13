@@ -374,7 +374,7 @@ just vet            # go vet
 just lint           # golangci-lint
 just ci             # build + test (race) + vet + lint — full definition-of-done gate
 just ci-local       # same as ci, but forces a fresh, uncached test run
-just mutate         # mutation tests (gremlins) on scoring/config/stats/stores; fails at or below 95% efficacy and mutant coverage
+just mutate         # mutation tests (gremlins) on scoring/config/stats/anilist/stores; fails at or below 95% efficacy and mutant coverage
 just swagger        # regenerate Swagger docs after handler changes
 just run -- <args>  # run via go run
 just serve          # start server via go run
@@ -384,10 +384,10 @@ just clean          # remove built binary
 ### Mutation testing
 
 `just mutate` (or `mise run mutate [pkg...]`) mutates the code in
-`internal/scoring`, `internal/config`, `internal/stats` and both stores with
+`internal/scoring`, `internal/config`, `internal/stats`, `internal/anilist` and both stores with
 [gremlins](https://github.com/go-gremlins/gremlins) and fails if the tests do not
 catch enough of the changes. CI runs the same task on every PR that touches Go
-files, `go.mod`/`go.sum` or `.mise/`. A surviving mutant
+files, `go.mod`/`go.sum`, `.goreleaser.yaml`, `.release-please-manifest.json` or `.mise/`. A surviving mutant
 means a code change that no test notices; fix it with a test that asserts the real
 number or behaviour, not just "does not error".
 
@@ -395,7 +395,7 @@ number or behaviour, not just "does not error".
   coverage (gremlins fails at ≤ threshold). Efficacy is killed / (killed + lived);
   mutant coverage is the share of mutants in code that tests execute, so untested
   code cannot hide behind a high efficacy number.
-- **Scope:** scoring, config, stats and both stores (about 4 minutes, almost all of
+- **Scope:** scoring, config, stats, anilist and both stores (about 4 minutes, almost all of
   it Postgres). `cmd`, `server` and `web` are excluded.
 - **Postgres:** the task starts one throwaway `podman|docker run --rm` Postgres and
   exports `KANSOU_TEST_POSTGRES_ADDR`; every test process creates and drops its own

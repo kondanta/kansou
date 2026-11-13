@@ -133,7 +133,7 @@ func ParseMediaURL(rawURL string) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("parsing URL: %w", err)
 	}
-	if !strings.Contains(u.Host, "anilist.co") {
+	if host := u.Hostname(); host != "anilist.co" && host != "www.anilist.co" {
 		return 0, fmt.Errorf("URL does not point to anilist.co: %q", rawURL)
 	}
 	// Path: /{type}/{id} or /{type}/{id}/{slug}
