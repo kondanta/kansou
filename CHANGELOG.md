@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.12.0](https://github.com/kondanta/kansou/compare/v1.11.0...v1.12.0) (2026-11-13)
+
+
+### Features
+
+* add mutation tests ([#193](https://github.com/kondanta/kansou/issues/193)) ([be12320](https://github.com/kondanta/kansou/commit/be123200c53006013fd0f38e07260517a73bf480))
+* add proper readiness check ([#192](https://github.com/kondanta/kansou/issues/192)) ([874359e](https://github.com/kondanta/kansou/commit/874359edc83260ceba12b5e2c1e3b9ea7ce5f2d0))
+* **deps:** update dependency zizmor ( 1.31.1 → 1.32.0 ) ([#185](https://github.com/kondanta/kansou/issues/185)) ([d388ea7](https://github.com/kondanta/kansou/commit/d388ea79b443270f67cf8dd44b021e0830bab565))
+* **deps:** update module github.com/jackc/pgx/v5 ( v5.12.0 → v5.13.0 ) ([120d326](https://github.com/kondanta/kansou/commit/120d32615f85957ad00f33dd2b776dec5035d844))
+* **deps:** update module github.com/testcontainers/testcontainers-go/modules/postgres ( v0.44.0 → v0.45.0 ) ([#187](https://github.com/kondanta/kansou/issues/187)) ([d51d3ba](https://github.com/kondanta/kansou/commit/d51d3ba12dce9dd89e0ba528d6c6940865c2a229))
+
+
+### Bug Fixes
+
+* **container:** update image golang ( 1.27.3 → 1.27.4 ) ([#188](https://github.com/kondanta/kansou/issues/188)) ([a193428](https://github.com/kondanta/kansou/commit/a1934283786e10f01f45d0b93f4473e38835f9ac))
+* **deps:** update dependency go ( 1.27.3 → 1.27.4 ) ([#189](https://github.com/kondanta/kansou/issues/189)) ([58719f6](https://github.com/kondanta/kansou/commit/58719f637dcf5de31082a33937ce49797317d07e))
+
+
+### Miscellaneous Chores
+
+* **config:** migrate config .renovaterc.json5 ([#190](https://github.com/kondanta/kansou/issues/190)) ([98b5400](https://github.com/kondanta/kansou/commit/98b54000c6af49d801a84bb927b7ba8c78d408bd))
+* go mod tidy ([69e2b9c](https://github.com/kondanta/kansou/commit/69e2b9ce3efff4a9aabd36f8313e92a82edeec72))
+
 ## [1.11.0](https://github.com/kondanta/kansou/compare/v1.10.2...v1.11.0) (2026-10-31)
 
 
