@@ -149,10 +149,23 @@ func TestCLIHandler_WithAttrsAndGroups(t *testing.T) {
 		"m",
 		"k",
 		"v",
-	); got != " INFO m g.h.a=1 g.h.k=v\n" {
+	); got != " INFO m a=1 g.h.k=v\n" {
 		t.Fatalf("group prefix wrong: %q", got)
 	}
-	if got := emit(t, &buf, withA.WithGroup("g"), slog.LevelInfo, "m"); got != " INFO m g.a=1\n" {
+	// Attributes added after a group are qualified by it.
+	afterGroup := withA.WithGroup("g").WithAttrs([]slog.Attr{slog.String("b", "2")})
+	if got := emit(
+		t,
+		&buf,
+		afterGroup,
+		slog.LevelInfo,
+		"m",
+		"k",
+		"v",
+	); got != " INFO m a=1 g.b=2 g.k=v\n" {
+		t.Fatalf("attr added after WithGroup must be qualified: %q", got)
+	}
+	if got := emit(t, &buf, withA.WithGroup("g"), slog.LevelInfo, "m"); got != " INFO m a=1\n" {
 		t.Fatalf("single group wrong: %q", got)
 	}
 }

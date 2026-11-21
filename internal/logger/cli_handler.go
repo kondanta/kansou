@@ -82,16 +82,18 @@ func (h *cliHandler) Handle(_ context.Context, r slog.Record) error {
 		buf.WriteString(ansiReset)
 	}
 
-	// Attributes from WithAttrs.
+	// Attributes from WithAttrs: already qualified with the groups that were
+	// active when they were added.
 	for _, a := range h.attrs {
 		buf.WriteByte(' ')
-		h.writeAttr(&buf, a)
+		h.writeAttr(&buf, a, "")
 	}
 
-	// Attributes from the record itself.
+	// Attributes from the record itself take the full current group prefix.
+	prefix := h.groupPrefix()
 	r.Attrs(func(a slog.Attr) bool {
 		buf.WriteByte(' ')
-		h.writeAttr(&buf, a)
+		h.writeAttr(&buf, a, prefix)
 		return true
 	})
 
@@ -104,10 +106,16 @@ func (h *cliHandler) Handle(_ context.Context, r slog.Record) error {
 }
 
 // WithAttrs returns a new handler with the given attributes pre-attached.
+// Per the slog.Handler contract, each attribute is qualified by the groups
+// open at this point, not by groups opened later.
 func (h *cliHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	merged := make([]slog.Attr, len(h.attrs)+len(attrs))
+	prefix := h.groupPrefix()
+	merged := make([]slog.Attr, len(h.attrs), len(h.attrs)+len(attrs))
 	copy(merged, h.attrs)
-	copy(merged[len(h.attrs):], attrs)
+	for _, a := range attrs {
+		a.Key = prefix + a.Key
+		merged = append(merged, a)
+	}
 	return &cliHandler{
 		w:      h.w,
 		level:  h.level,
@@ -150,12 +158,17 @@ func (h *cliHandler) levelBadge(level slog.Level) string {
 	return label
 }
 
-// writeAttr formats a single slog.Attr as key=value, applying group prefixes.
-func (h *cliHandler) writeAttr(buf *bytes.Buffer, a slog.Attr) {
-	key := a.Key
-	if len(h.groups) > 0 {
-		key = strings.Join(h.groups, ".") + "." + key
+// groupPrefix returns the open groups joined as "g.h.", or "" if none.
+func (h *cliHandler) groupPrefix() string {
+	if len(h.groups) == 0 {
+		return ""
 	}
+	return strings.Join(h.groups, ".") + "."
+}
+
+// writeAttr formats a single slog.Attr as prefix+key=value.
+func (h *cliHandler) writeAttr(buf *bytes.Buffer, a slog.Attr, prefix string) {
+	key := prefix + a.Key
 
 	val := a.Value.Resolve()
 

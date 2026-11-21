@@ -253,6 +253,13 @@ Validation errors for `--primary-genre`:
 - Unknown dimension key → exits before fetching media
 - Value ≤ 0.0 or > 1.0 → exits before fetching media
 - Sum of override values ≥ 1.0 → exits before fetching media
+- Overrides cover every dimension → exits before fetching media; at least one
+  scored dimension must have no override to take the remaining weight (ADR-042):
+  ```
+  error: weight overrides leave no other scored dimension to take the remaining weight — leave at least one scored dimension without an override
+  ```
+- The same error is raised after the session if the dimensions you skipped leave
+  every scored dimension overridden. Nothing is saved or published.
 - Key also appears in a skip during the session → session is aborted with error:
   ```
   error: dimension "pacing" was both weight-overridden and skipped — these are mutually exclusive

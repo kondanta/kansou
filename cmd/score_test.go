@@ -624,6 +624,34 @@ func TestScoreAdd_Failures(t *testing.T) {
 			t.Errorf("got %v with %d calls", err, len(*calls))
 		}
 	})
+	t.Run("overrides covering every dimension fail before any request", func(t *testing.T) {
+		_, err := runAdd(t, a, "", false, "story=0.2,fun=0.3", "", false)
+		if err == nil || !strings.Contains(err.Error(), "no other scored dimension") ||
+			len(*calls) != 0 {
+			t.Errorf("got %v with %d calls", err, len(*calls))
+		}
+	})
+	t.Run(
+		"skipping the only un-overridden dimension is rejected, nothing saved",
+		func(t *testing.T) {
+			// fun is pinned at 0.25; skipping story leaves fun as the sole scored
+			// dimension, so the remaining 0.75 would have nowhere to go (ADR-042).
+			before := len(*calls)
+			// The leading blank line declines the primary-genre prompt.
+			_, err := runAdd(t, a, "\ns\n7.5\nn\n", false, "fun=0.25", "", false)
+			if err == nil || !strings.Contains(err.Error(), "no other scored dimension") {
+				t.Fatalf("got %v", err)
+			}
+			if latest, _ := st.LatestScore(context.Background(), 154587); latest != nil {
+				t.Errorf("a rejected session saved %+v", latest)
+			}
+			for _, c := range (*calls)[before:] {
+				if strings.Contains(c.Query, "SaveMediaListEntry") {
+					t.Error("a rejected session published to AniList")
+				}
+			}
+		},
+	)
 	t.Run("no query and no url", func(t *testing.T) {
 		var err error
 		withStdin(t, "", func() {

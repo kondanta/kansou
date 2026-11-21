@@ -1948,3 +1948,64 @@ queries already select on `is_latest` and are unchanged.
   row is active it is pure time order). The response shape is
   unchanged; Swagger text updated.
 - Regression tests: `TestScoreHistory_ActiveScoreFirst` in both stores.
+
+---
+
+## ADR-042 — Reject weight overrides that leave no dimension to take the remaining weight
+
+**Date:** 2026-11-21
+**Status:** Accepted (refines the per-session override rule in FR-03f; does not change the scoring formula)
+
+**Context:**
+A per-session weight override pins a dimension to a fixed weight, and the rest
+of the budget (1 − the sum of the pinned weights) is shared among the
+dimensions that are neither skipped nor overridden, in proportion to their
+pre-override weights. When *no* such dimension exists, the remainder has
+nowhere to go. `applyOverrides` silently dropped it, so the final weights
+summed to less than 1.0 and the score was scaled down. Example: only `story`
+scored (every other dimension skipped) with `story` pinned to 0.25 gave
+weights summing to 0.25 and a score of 9 × 0.25 = 2.25, while the same entry
+without the override scored 9.0. The same happens when the overrides cover
+every configured dimension. This was found in review of PR #196. Existing
+validation did not catch it: the sum of the overrides is below 1.0, and the
+override is not on a skipped dimension. Both CLI and REST were affected.
+
+**Decision:**
+Reject the request instead of scoring it. `Engine.CheckOverrides(skipped,
+overrides)` returns an error when overrides are present and every dimension is
+either skipped or overridden. It is called from:
+- `Engine.Score` (via `validateEntry`), so every scoring path is covered,
+  including the CLI session once the user's skips are known;
+- `POST /score` before the AniList fetch (a dimension absent from `scores` is
+  skipped), returning 400;
+- `POST /weights` before the AniList fetch (uses `skipped_dimensions`), returning 400;
+- `kansou score add` before any prompt, for the case already visible from
+  `--weight` alone (overrides cover every dimension).
+
+The message is: "weight overrides leave no other scored dimension to take the
+remaining weight — leave at least one scored dimension without an override".
+The formula, `applyOverrides` and all valid inputs are unchanged.
+
+**Alternatives considered:**
+- **B. Renormalise the pinned weights so they sum to 1.0** (the lone `story`
+  would get 1.0 and score 9.0). Produces a number, but silently ignores the
+  value the user asked for, and gives overrides a second meaning ("a ratio
+  among pinned dimensions" when no one else is left, "an absolute weight"
+  otherwise). Not chosen now; it remains a compatible future change: it would
+  only replace this error with a rule, because no valid input changes behaviour.
+  If adopted it needs a new ADR superseding this one, a change in
+  `applyOverrides`, and the CheckOverrides call sites reduced to the key and
+  value validation.
+- **C. Leave it and document it.** Keeps a silently wrong score reachable from
+  both the CLI and the API.
+
+**Consequences:**
+- A `--weight` / `weight_overrides` request that previously returned a wrong
+  score now fails with a clear error; nothing is saved or published.
+- In the CLI, a skip made during the session can trigger the error after the
+  prompts have been answered (the skip is not known earlier). The error is
+  returned before anything is saved or published.
+- Regression tests: `TestCheckOverrides`, `TestScore_OverrideOnSoleScoredDimension_Error`
+  (scoring), `TestScore_RejectsOverrideOnSoleScoredDimension`,
+  `TestWeights_RejectsOverrideOnSoleActiveDimension` (server), and two
+  `TestScoreAdd_Failures` cases (CLI).

@@ -184,7 +184,7 @@ This is the most important logic in the codebase. Treat it with extra care.
 - Genre multipliers are averaged across all matched genres per dimension (not multiplied, not summed — averaged).
 - Dimensions with `BiasResistant: true` always receive a multiplier of exactly 1.0. Never apply genre multipliers to them regardless of config.
 - After applying multipliers, weights are renormalized so they sum to 1.0 before the final score is calculated.
-- Per-session `WeightOverrides` are applied after renormalization. Overridden dimensions are fixed; remaining dimensions are rescaled proportionally so the total remains 1.0.
+- Per-session `WeightOverrides` are applied after renormalization. Overridden dimensions are fixed; remaining dimensions are rescaled proportionally so the total remains 1.0. At least one non-skipped dimension must be left without an override to take the remainder; otherwise the engine rejects the entry (ADR-042).
 - Media-type awareness: the Production dimension uses different internal criteria for Anime vs Manga, but the weight and position in the formula do not change. The engine does not need to know about this distinction — it is a scoring concern for the user, not a calculation concern for the engine.
 - The final score is: `Σ (section_score × final_weight)` where `final_weight` is the renormalized genre-adjusted weight.
 

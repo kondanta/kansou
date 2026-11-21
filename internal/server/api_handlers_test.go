@@ -827,6 +827,51 @@ func TestScore_RejectsInvalidWeightOverrides(t *testing.T) {
 	}
 }
 
+// Pinning the only scored dimension (every other one is absent from scores,
+// i.e. skipped) leaves nowhere for the remaining weight: 400, before AniList.
+func TestScore_RejectsOverrideOnSoleScoredDimension(t *testing.T) {
+	al, calls := fakeAniList(t, "", mediaHandler)
+	rec := send(t, apiServer(t, al, nil), "POST", "/api/v1/score", scoreRequest{
+		MediaID: 1, Scores: map[string]float64{"story": 9},
+		WeightOverrides: map[string]float64{"story": 0.25},
+	})
+	msg := decode[errorResponse](t, rec).Error
+	if rec.Code != 400 || !strings.Contains(msg, "no other scored dimension") {
+		t.Fatalf("got %d %q, want 400 about the remaining weight", rec.Code, msg)
+	}
+	if len(*calls) != 0 {
+		t.Errorf("rejected request reached AniList %d times, want 0", len(*calls))
+	}
+}
+
+// /weights applies the same rule using its skipped_dimensions field.
+func TestWeights_RejectsOverrideOnSoleActiveDimension(t *testing.T) {
+	al, calls := fakeAniList(t, "", mediaHandler)
+	s := apiServer(t, al, nil)
+	rec := send(t, s, "POST", "/api/v1/weights", weightsRequest{
+		MediaID:           1,
+		SkippedDimensions: map[string]bool{"fun": true, "art": true},
+		WeightOverrides:   map[string]float64{"story": 0.25},
+	})
+	if msg := decode[errorResponse](t, rec).Error; rec.Code != 400 ||
+		!strings.Contains(msg, "no other scored dimension") {
+		t.Fatalf("got %d %q", rec.Code, msg)
+	}
+	if len(*calls) != 0 {
+		t.Errorf("rejected request reached AniList %d times, want 0", len(*calls))
+	}
+
+	// Pinning one of two active dimensions is fine.
+	rec = send(t, s, "POST", "/api/v1/weights", weightsRequest{
+		MediaID:           1,
+		SkippedDimensions: map[string]bool{"art": true},
+		WeightOverrides:   map[string]float64{"story": 0.25},
+	})
+	if rec.Code != 200 {
+		t.Fatalf("valid override rejected: %d %s", rec.Code, rec.Body)
+	}
+}
+
 // A valid override is applied: the overridden weight is fixed and flagged, and
 // the remaining dimensions share what is left.
 func TestScore_AppliesValidWeightOverride(t *testing.T) {

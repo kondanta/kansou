@@ -2,6 +2,7 @@ package scoring
 
 import (
 	"math"
+	"strings"
 	"testing"
 )
 
@@ -1098,5 +1099,88 @@ func TestScore_GoldenWeights(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCheckOverrides(t *testing.T) {
+	eng := testEngine()
+	allKeys := []DimensionKey{
+		"story", "enjoyment", "characters", "production", "pacing", "world_building", "value",
+	}
+	pin := func(keys ...DimensionKey) map[DimensionKey]float64 {
+		m := map[DimensionKey]float64{}
+		for _, k := range keys {
+			m[k] = 0.05
+		}
+		return m
+	}
+	skipAllBut := func(keep ...DimensionKey) map[DimensionKey]bool {
+		m := map[DimensionKey]bool{}
+		for _, k := range allKeys {
+			m[k] = true
+		}
+		for _, k := range keep {
+			delete(m, k)
+		}
+		return m
+	}
+
+	tests := []struct {
+		name      string
+		skipped   map[DimensionKey]bool
+		overrides map[DimensionKey]float64
+		wantErr   bool
+	}{
+		{"no overrides", nil, nil, false},
+		{"no overrides, only one dimension active", skipAllBut("story"), nil, false},
+		{"one pinned, others active", nil, pin("story"), false},
+		{"all but one pinned", nil, pin(allKeys[1:]...), false},
+		{"every dimension pinned", nil, pin(allKeys...), true},
+		{"sole active dimension pinned", skipAllBut("story"), pin("story"), true},
+		{"two active, both pinned", skipAllBut("story", "pacing"), pin("story", "pacing"), true},
+		{"two active, one pinned", skipAllBut("story", "pacing"), pin("story"), false},
+		{
+			// A pin on a skipped dimension is rejected elsewhere (validateEntry);
+			// for the remainder question it must not count as a taker.
+			"remainder taker is skipped", skipAllBut("story"), pin("story", "pacing"), true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := eng.CheckOverrides(tt.skipped, tt.overrides)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("CheckOverrides() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// Regression (CodeRabbit, PR #196): pinning the only scored dimension used to
+// drop the remainder, giving weights that summed to 0.25 and a score of 2.25
+// for a single 9. It must be an error instead (ADR-042).
+func TestScore_OverrideOnSoleScoredDimension_Error(t *testing.T) {
+	eng := testEngine()
+	skipped := map[DimensionKey]bool{}
+	for _, k := range []DimensionKey{
+		"enjoyment", "characters", "production", "pacing", "world_building", "value",
+	} {
+		skipped[k] = true
+	}
+	_, err := eng.Score(Entry{
+		Scores:            map[DimensionKey]float64{"story": 9},
+		SkippedDimensions: skipped,
+		WeightOverrides:   map[DimensionKey]float64{"story": 0.25},
+	})
+	if err == nil || !strings.Contains(err.Error(), "no other scored dimension") {
+		t.Fatalf("err = %v, want the no-remainder-taker error", err)
+	}
+
+	// Without the override the same entry scores normally (story gets 1.0).
+	res, err := eng.Score(Entry{
+		Scores:            map[DimensionKey]float64{"story": 9},
+		SkippedDimensions: skipped,
+	})
+	if err != nil || !approxEqual(res.FinalScore, 9, 0.001) {
+		t.Fatalf("no-override baseline = %v, %v; want 9", res.FinalScore, err)
 	}
 }

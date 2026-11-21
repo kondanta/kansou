@@ -363,6 +363,11 @@ func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, msg)
 		return
 	}
+	skipped := skippedFromScores(snap.cfg, req.Scores)
+	if err := snap.engine.CheckOverrides(skipped, req.WeightOverrides); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	// Fetch media to get genres and title for provenance.
 	media, err := s.al.FetchByID(r.Context(), req.MediaID)
@@ -422,6 +427,18 @@ func validateScoreRequest(w http.ResponseWriter, req scoreRequest) bool {
 	return true
 }
 
+// skippedFromScores returns the configured dimensions that have no entry in
+// scores; POST /score treats those as skipped.
+func skippedFromScores(cfg *config.Config, scores map[string]float64) map[string]bool {
+	skipped := make(map[string]bool)
+	for _, key := range cfg.DimensionOrder {
+		if _, ok := scores[key]; !ok {
+			skipped[key] = true
+		}
+	}
+	return skipped
+}
+
 // validateWeightOverrides returns a client-facing message describing the first
 // problem with overrides, or "" when they are acceptable: every key must be a
 // configured dimension, every value in (0, 1], and the sum strictly below 1.0 so
@@ -448,12 +465,7 @@ func validateWeightOverrides(cfg *config.Config, overrides map[string]float64) s
 // fetched media, marking any configured dimension absent from the request's
 // scores as implicitly skipped.
 func buildScoreEntry(req scoreRequest, media *anilist.Media, cfg *config.Config) scoring.Entry {
-	skipped := make(map[string]bool)
-	for _, key := range cfg.DimensionOrder {
-		if _, ok := req.Scores[key]; !ok {
-			skipped[key] = true
-		}
-	}
+	skipped := skippedFromScores(cfg, req.Scores)
 	overrides := req.WeightOverrides
 	if overrides == nil {
 		overrides = map[string]float64{}
@@ -588,6 +600,11 @@ func (s *Server) handleWeights(w http.ResponseWriter, r *http.Request) {
 
 	if msg := validateWeightOverrides(snap.cfg, req.WeightOverrides); msg != "" {
 		writeError(w, http.StatusBadRequest, msg)
+		return
+	}
+
+	if err := snap.engine.CheckOverrides(req.SkippedDimensions, req.WeightOverrides); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 

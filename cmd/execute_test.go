@@ -20,7 +20,10 @@ import (
 // helperEnv makes the test binary act as the kansou CLI: TestExecuteHelper
 // sets os.Args from KANSOU_TEST_ARGS and calls Execute, which exits the
 // process like the real binary does.
-const helperEnv = "KANSOU_TEST_ARGS"
+const (
+	helperEnv = "KANSOU_TEST_ARGS"
+	argSep    = "\x1f"
+)
 
 // TestExecuteHelper is not a test: it is the child-process entry point.
 func TestExecuteHelper(t *testing.T) {
@@ -28,18 +31,27 @@ func TestExecuteHelper(t *testing.T) {
 	if !ok {
 		t.Skip("child-process helper")
 	}
-	os.Args = append([]string{"kansou"}, strings.Fields(args)...)
+	// Arguments are joined with the ASCII unit separator (a NUL cannot live in
+	// an environment variable) so paths containing spaces survive.
+	os.Args = []string{"kansou"}
+	if args != "" {
+		os.Args = append(os.Args, strings.Split(args, argSep)...)
+	}
 	Execute()
 }
 
 // kansouCmd prepares a child process running Execute with args. HOME and
 // XDG_CONFIG_HOME point into a temp dir so the real user config is never read.
-func kansouCmd(t *testing.T, args string, env ...string) (*exec.Cmd, *bytes.Buffer, *bytes.Buffer) {
+func kansouCmd(
+	t *testing.T,
+	args []string,
+	env ...string,
+) (*exec.Cmd, *bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
 	home := t.TempDir()
 	c := exec.Command(os.Args[0], "-test.run=^TestExecuteHelper$")
 	c.Env = append(os.Environ(),
-		helperEnv+"="+args,
+		helperEnv+"="+strings.Join(args, argSep),
 		"HOME="+home,
 		"XDG_CONFIG_HOME="+filepath.Join(home, "xdg"),
 		"KANSOU_DB_TYPE=",
@@ -52,7 +64,7 @@ func kansouCmd(t *testing.T, args string, env ...string) (*exec.Cmd, *bytes.Buff
 }
 
 // runKansou runs the CLI to completion and returns stdout, stderr, exit code.
-func runKansou(t *testing.T, args string, env ...string) (string, string, int) {
+func runKansou(t *testing.T, args []string, env ...string) (string, string, int) {
 	t.Helper()
 	c, stdout, stderr := kansouCmd(t, args, env...)
 	err := c.Run()
@@ -87,31 +99,60 @@ func TestExecute(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		args       string
+		args       []string
 		env        []string
 		wantCode   int
 		wantStdout string
 		wantStderr string
 	}{
-		{"version flag", "--version", nil, 0, "kansou dev", ""},
-		{"no args prints help", "", nil, 0, "Usage:", ""},
-		{"config show reads --config", "--config " + good + " config show", nil, 0, "story", ""},
+		{"version flag", []string{"--version"}, nil, 0, "kansou dev", ""},
+		{"no args prints help", nil, nil, 0, "Usage:", ""},
+		{
+			"config show reads --config",
+			[]string{"--config", good, "config", "show"},
+			nil,
+			0,
+			"story",
+			"",
+		},
 		{
 			"unknown command fails",
-			"--config " + good + " nope",
+			[]string{"--config", good, "nope"},
 			nil,
 			1,
 			"",
 			"error: unknown command",
 		},
-		{"invalid config fails", "--config " + badPath + " config show", nil, 1, "", "error:"},
 		{
-			"unknown db type fails", "--config " + good + " config show",
+			"invalid config fails",
+			[]string{"--config", badPath, "config", "show"},
+			nil,
+			1,
+			"",
+			"error:",
+		},
+		{
+			"unknown db type fails",
+			[]string{"--config", good, "config", "show"},
 			[]string{"KANSOU_DB_TYPE=mongo"},
 			1, "", "error:",
 		},
-		{"db command requires a database", "--config " + good + " db prune", nil, 1, "", "error:"},
-		{"history requires a database", "--config " + good + " history", nil, 1, "", "error:"},
+		{
+			"db command requires a database",
+			[]string{"--config", good, "db", "prune"},
+			nil,
+			1,
+			"",
+			"error:",
+		},
+		{
+			"history requires a database",
+			[]string{"--config", good, "history"},
+			nil,
+			1,
+			"",
+			"error:",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -142,7 +183,10 @@ func TestExecute_SQLiteStore(t *testing.T) {
 	db := filepath.Join(t.TempDir(), "k.db")
 	env := []string{"KANSOU_DB_TYPE=sqlite", "KANSOU_DB_PATH=" + db}
 
-	stdout, stderr, code := runKansou(t, "--config "+good+" config dimension list", env...)
+	stdout, stderr, code := runKansou(
+		t,
+		[]string{"--config", good, "config", "dimension", "list"},
+		env...)
 	if code != 0 {
 		t.Fatalf("exit %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
@@ -168,7 +212,7 @@ func TestServe_LiveConfigRejectsUnwritableLocation(t *testing.T) {
 	cfg := filepath.Join(t.TempDir(), "missing-dir", "config.toml")
 	_, stderr, code := runKansou(
 		t,
-		"--config "+cfg+" serve --live-config --port "+fmt.Sprint(freePort(t)),
+		[]string{"--config", cfg, "serve", "--live-config", "--port", fmt.Sprint(freePort(t))},
 	)
 	if code != 1 || !strings.Contains(stderr, "--live-config") {
 		t.Fatalf("exit %d, stderr %q; want exit 1 mentioning --live-config", code, stderr)
@@ -185,7 +229,7 @@ func TestServe_PortInUseExitsNonZero(t *testing.T) {
 
 	_, stderr, code := runKansou(
 		t,
-		fmt.Sprintf("--config %s serve --port %d", writeConfig(t, 0), port),
+		[]string{"--config", writeConfig(t, 0), "serve", "--port", fmt.Sprint(port)},
 	)
 	if code != 1 || !strings.Contains(stderr, "server error") {
 		t.Fatalf("exit %d, stderr %q; want exit 1 with a server error", code, stderr)
@@ -198,7 +242,7 @@ func TestServe_PortInUseExitsNonZero(t *testing.T) {
 func TestServe_StartsServesAndShutsDownOnSIGTERM(t *testing.T) {
 	port := freePort(t)
 	cfg := writeConfig(t, 1234)
-	c, _, stderr := kansouCmd(t, fmt.Sprintf("--config %s serve --port %d", cfg, port),
+	c, _, stderr := kansouCmd(t, []string{"--config", cfg, "serve", "--port", fmt.Sprint(port)},
 		"KANSOU_CORS_ORIGINS=https://example.test")
 	if err := c.Start(); err != nil {
 		t.Fatal(err)

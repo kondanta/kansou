@@ -232,6 +232,9 @@ kansou score add "Mushishi" --weight pacing=0.05,world_building=0.20
 
 Overridden dimensions are fixed at the provided value. The remaining
 dimensions are rescaled proportionally so all weights still sum to 1.0.
+At least one scored (non-skipped) dimension must be left without an override
+to take the remaining weight; otherwise the request is rejected (ADR-042)
+rather than producing weights that sum to less than 1.0.
 Overrides are never persisted. They apply to one scoring session only.
 Overriding a bias-resistant dimension is permitted — the user is explicitly
 overriding their own default.

@@ -95,6 +95,11 @@ func (a *App) runScoreAdd(
 	if err != nil {
 		return err
 	}
+	// Fail before any prompt when the overrides already cover every dimension.
+	// Skips made during the session are re-checked by the engine in Score.
+	if err := a.Engine.CheckOverrides(nil, overrides); err != nil {
+		return err
+	}
 
 	media, err := fetchMedia(ctx, args, urlFlag, mediaType, a.AniList)
 	if errors.Is(err, errUserCancelled) {

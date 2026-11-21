@@ -420,14 +420,29 @@ func TestRunConfigImport_ErrorPaths(t *testing.T) {
 		t.Errorf("unwritable target: %v", err)
 	}
 
-	// DB mode saves to the store instead of the file.
-	dbApp, _, reload := newConfigApp(t)
+	// DB mode saves to the store instead of the file. Seed the database with a
+	// story weight that differs from the import file's 0.6, so a skipped write
+	// is detected.
+	dbApp, dbCtx, reload := newConfigApp(t)
+	seeded := seedTestConfig()
+	for k, w := range map[string]float64{"story": 0.3, "fun": 0.7} {
+		d := seeded.Dimensions[k]
+		d.Weight = w
+		seeded.Dimensions[k] = d
+	}
+	if err := dbApp.Store.SaveScoringConfig(dbCtx, seeded); err != nil {
+		t.Fatal(err)
+	}
+	reload()
+	if dbApp.Config.Dimensions["story"].Weight != 0.3 {
+		t.Fatal("precondition: database should start with story=0.3")
+	}
 	if err := runConfigImport(ctx, dbApp, good); err != nil {
 		t.Fatal(err)
 	}
 	reload()
-	if dbApp.Config.Dimensions["story"].Weight != 0.6 {
-		t.Error("imported config not stored in the database")
+	if got := dbApp.Config.Dimensions["story"].Weight; got != 0.6 {
+		t.Errorf("imported config not stored in the database: story weight = %v, want 0.6", got)
 	}
 }
 

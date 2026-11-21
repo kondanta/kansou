@@ -3,6 +3,7 @@ package logger
 import (
 	"bytes"
 	"context"
+	"log"
 	"log/slog"
 	"os"
 	"strings"
@@ -78,11 +79,16 @@ func captureSetup(t *testing.T, isServer bool, level, appEnv string) string {
 	}
 	defer func() { _ = f.Close() }()
 
+	// slog.SetDefault also redirects the standard log package, and restoring
+	// the old slog logger does not undo that, so save and restore it too.
 	origErr, origLogger := os.Stderr, slog.Default()
+	origLogWriter, origLogFlags := log.Writer(), log.Flags()
 	os.Stderr = f
 	defer func() {
 		os.Stderr = origErr
 		slog.SetDefault(origLogger)
+		log.SetOutput(origLogWriter)
+		log.SetFlags(origLogFlags)
 	}()
 
 	Setup(isServer)
