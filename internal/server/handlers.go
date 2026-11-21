@@ -359,6 +359,15 @@ func (s *Server) handleScore(w http.ResponseWriter, r *http.Request) {
 	if !validateScoreRequest(w, req) {
 		return
 	}
+	if msg := validateWeightOverrides(snap.cfg, req.WeightOverrides); msg != "" {
+		writeError(w, http.StatusBadRequest, msg)
+		return
+	}
+	skipped := skippedFromScores(snap.cfg, req.Scores)
+	if err := snap.engine.CheckOverrides(skipped, req.WeightOverrides); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	// Fetch media to get genres and title for provenance.
 	media, err := s.al.FetchByID(r.Context(), req.MediaID)
@@ -418,16 +427,45 @@ func validateScoreRequest(w http.ResponseWriter, req scoreRequest) bool {
 	return true
 }
 
+// skippedFromScores returns the configured dimensions that have no entry in
+// scores; POST /score treats those as skipped.
+func skippedFromScores(cfg *config.Config, scores map[string]float64) map[string]bool {
+	skipped := make(map[string]bool)
+	for _, key := range cfg.DimensionOrder {
+		if _, ok := scores[key]; !ok {
+			skipped[key] = true
+		}
+	}
+	return skipped
+}
+
+// validateWeightOverrides returns a client-facing message describing the first
+// problem with overrides, or "" when they are acceptable: every key must be a
+// configured dimension, every value in (0, 1], and the sum strictly below 1.0 so
+// the remaining dimensions keep a positive share. The scoring engine trusts its
+// input, so both /score and /weights must call this before using overrides.
+func validateWeightOverrides(cfg *config.Config, overrides map[string]float64) string {
+	sum := 0.0
+	for key, v := range overrides {
+		if _, ok := cfg.Dimensions[key]; !ok {
+			return "unknown dimension in weight_overrides: " + key
+		}
+		if v <= 0 || v > 1 {
+			return "weight_overrides value for " + key + " must be > 0 and ≤ 1"
+		}
+		sum += v
+	}
+	if sum >= 1.0 {
+		return "sum of weight_overrides must be < 1.0"
+	}
+	return ""
+}
+
 // buildScoreEntry assembles a scoring.Entry from the score request and the
 // fetched media, marking any configured dimension absent from the request's
 // scores as implicitly skipped.
 func buildScoreEntry(req scoreRequest, media *anilist.Media, cfg *config.Config) scoring.Entry {
-	skipped := make(map[string]bool)
-	for _, key := range cfg.DimensionOrder {
-		if _, ok := req.Scores[key]; !ok {
-			skipped[key] = true
-		}
-	}
+	skipped := skippedFromScores(cfg, req.Scores)
 	overrides := req.WeightOverrides
 	if overrides == nil {
 		overrides = map[string]float64{}
@@ -560,25 +598,13 @@ func (s *Server) handleWeights(w http.ResponseWriter, r *http.Request) {
 
 	snap := s.getSnapshot()
 
-	// Validate weight overrides.
-	overrideSum := 0.0
-	for key, v := range req.WeightOverrides {
-		if _, ok := snap.cfg.Dimensions[key]; !ok {
-			writeError(w, http.StatusBadRequest, "unknown dimension in weight_overrides: "+key)
-			return
-		}
-		if v <= 0 || v > 1 {
-			writeError(
-				w,
-				http.StatusBadRequest,
-				"weight_overrides value for "+key+" must be > 0 and ≤ 1",
-			)
-			return
-		}
-		overrideSum += v
+	if msg := validateWeightOverrides(snap.cfg, req.WeightOverrides); msg != "" {
+		writeError(w, http.StatusBadRequest, msg)
+		return
 	}
-	if overrideSum >= 1.0 {
-		writeError(w, http.StatusBadRequest, "sum of weight_overrides must be < 1.0")
+
+	if err := snap.engine.CheckOverrides(req.SkippedDimensions, req.WeightOverrides); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 

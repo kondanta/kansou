@@ -492,6 +492,9 @@ a live weight preview as the user adjusts genre selection or skips dimensions.
 - Unknown key in `weight_overrides` → 400
 - `weight_overrides` value ≤ 0 or > 1 → 400
 - Sum of `weight_overrides` ≥ 1.0 → 400
+- `weight_overrides` cover every scored dimension (every other dimension is
+  skipped, or absent from `scores` on `POST /score`) → 400, because the
+  remaining weight would have no dimension to go to (ADR-042)
 - `primary_genre` not in the active genre set → 400
 
 ---

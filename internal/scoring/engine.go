@@ -47,6 +47,7 @@ func NewEngine(
 //   - all dimensions are skipped
 //   - a dimension in Entry.Scores is not present in the engine's config
 //   - a --weight override targets a skipped dimension
+//   - the overrides cover every non-skipped dimension (see CheckOverrides)
 func (e *Engine) Score(entry Entry) (Result, error) {
 	if err := e.validateEntry(entry); err != nil {
 		return Result{}, fmt.Errorf("validating entry: %w", err)
@@ -223,6 +224,32 @@ func (e *Engine) Weights(
 	return rows
 }
 
+// CheckOverrides reports whether weightOverrides can be applied given the
+// skipped dimensions. Overridden dimensions are pinned to their value and the
+// rest of the weight (1 − the pinned sum) is shared among the dimensions that
+// are neither skipped nor overridden. If there are none, that remainder has
+// nowhere to go and the weights would sum to less than 1.0, so CheckOverrides
+// returns an error instead (ADR-042). It returns nil when there are no
+// overrides. It does not validate keys or values; callers do that.
+func (e *Engine) CheckOverrides(
+	skipped map[DimensionKey]bool,
+	weightOverrides map[DimensionKey]float64,
+) error {
+	if len(weightOverrides) == 0 {
+		return nil
+	}
+	for _, key := range e.dimensions {
+		_, overridden := weightOverrides[key]
+		if !skipped[key] && !overridden {
+			return nil
+		}
+	}
+	return fmt.Errorf(
+		"weight overrides leave no other scored dimension to take the remaining weight — " +
+			"leave at least one scored dimension without an override",
+	)
+}
+
 // validateEntry checks that the entry is consistent before calculation.
 func (e *Engine) validateEntry(entry Entry) error {
 	// All dimensions skipped?
@@ -241,6 +268,11 @@ func (e *Engine) validateEntry(entry Entry) error {
 				key,
 			)
 		}
+	}
+
+	// Every scored dimension overridden: the remaining weight has no taker.
+	if err := e.CheckOverrides(entry.SkippedDimensions, entry.WeightOverrides); err != nil {
+		return err
 	}
 
 	// All scored dimensions exist in config?
